@@ -408,6 +408,7 @@ void TCPClient::initiatePortSwitch(uint16_t port)
         else
         {
             Log::error(header(), "Failed to connect to switched port: ", port);
+            updateProtocolStatus(ProtocolStatus::error);
         } });
 }
 

@@ -30,10 +30,14 @@ std::thread startClient(client::ClientAPI& client_api, TCPClient& tcp_client, st
     return std::thread ([&client_api, &tcp_client, &rooms, &ready, &mtx]()
     {
         tcp_client.start();
+        if (tcp_client.getProtocolStatus() == client::ProtocolStatus::error)
+            return;
 
         tcp_client.sendMessage(client::Packet::Get::General::clientId(client_api));
         while (!client_api.isInitialized())
         {
+            if (tcp_client.getProtocolStatus() == client::ProtocolStatus::error)
+                return;
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
@@ -43,7 +47,9 @@ std::thread startClient(client::ClientAPI& client_api, TCPClient& tcp_client, st
         auto roomsFuture = roomsPromise.get_future();
         auto waitFn = client_api.waitUntilRoomsCreated(roomsPromise);
         waitFn();
-        roomsFuture.wait();
+        while (roomsFuture.wait_for(std::chrono::milliseconds(100)) != std::future_status::ready)
+            if (tcp_client.getProtocolStatus() == client::ProtocolStatus::error)
+                return;
 
         {
             std::lock_guard<std::mutex> lock(mtx);

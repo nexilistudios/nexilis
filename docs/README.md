@@ -23,3 +23,5 @@ The CI workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) sho
 
 See [weekly releases](releases.md) for automated patch versioning and Doxygen
 website publishing.
+
+The Boost TCP client resolves server hostnames for its authentication and session connections. The Boost UDP client also resolves IPv4 hostnames before sending gameplay packets. A failed TCP session-port connection changes the client protocol status to `error` so callers can report the failure.

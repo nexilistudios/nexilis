@@ -19,7 +19,7 @@
 #include <nexilis/nexilis_constants.hh>
 #include <nexilis/ports.hh>
 
-#include <boost/asio/ip/address.hpp>
+#include <boost/asio/ip/udp.hpp>
 
 #include <mutex>
 
@@ -107,14 +107,13 @@ void UDPClient::start()
         port = Ports::getBoostUDPPort();
     }
 
-    m_remoteEndpoint = boost::asio::ip::udp::endpoint(
-            boost::asio::ip::make_address(getClientAPI()->getBoostUDPServerAddress()),
-            port);
-
-    m_sendEndpoint = m_remoteEndpoint;
-
     try
     {
+        boost::asio::ip::udp::resolver resolver(*m_ioContext);
+        auto endpoints = resolver.resolve(boost::asio::ip::udp::v4(),
+                                          getClientAPI()->getBoostUDPServerAddress(),
+                                          std::to_string(port));
+        m_sendEndpoint = *endpoints.begin();
         m_ioContextThread = std::thread([this]()
                                         { m_ioContext->run(); });
         m_socket.open(boost::asio::ip::udp::v4());
