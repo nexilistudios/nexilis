@@ -113,7 +113,9 @@ void UDPClient::start()
         auto endpoints = resolver.resolve(boost::asio::ip::udp::v4(),
                                           getClientAPI()->getBoostUDPServerAddress(),
                                           std::to_string(port));
-        m_sendEndpoint = *endpoints.begin();
+        m_remoteEndpoint = *endpoints.begin();
+
+        m_sendEndpoint = m_remoteEndpoint;
         m_ioContextThread = std::thread([this]()
                                         { m_ioContext->run(); });
         m_socket.open(boost::asio::ip::udp::v4());
