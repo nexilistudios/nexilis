@@ -183,6 +183,21 @@ TEST_F(RoomSpecTest, JoinAfterInfoRoomsDoesNotDuplicateSession)
     EXPECT_FLOAT_EQ(players[0].x, 100.0f);
     EXPECT_FLOAT_EQ(players[0].y, 200.0f);
     EXPECT_FLOAT_EQ(players[0].z, 300.0f);
+
+    auto facing = roomPlayer3DMessage("position", CLIENT_A, 100.0f, 200.0f, 300.0f);
+    facing["yaw"] = 1.25;
+    ASSERT_EQ(readMessage(facing), client::ReadResult::success);
+    players = api->getRemotePlayersSnapshot(ROOM_ID, CLIENT_B);
+    ASSERT_EQ(players.size(), 1);
+    EXPECT_FLOAT_EQ(players[0].yaw, 1.25f);
+
+    auto movement = roomPlayer3DMessage("movement", CLIENT_A, 110.0f, 200.0f, 300.0f);
+    movement["yaw"] = -0.75;
+    ASSERT_EQ(readMessage(movement), client::ReadResult::success);
+    players = api->getRemotePlayersSnapshot(ROOM_ID, CLIENT_B);
+    ASSERT_EQ(players.size(), 1);
+    EXPECT_FLOAT_EQ(players[0].x, 110.0f);
+    EXPECT_FLOAT_EQ(players[0].yaw, -0.75f);
 }
 
 TEST_F(RoomSpecTest, JoinBroadcastCreatesOwnSession)

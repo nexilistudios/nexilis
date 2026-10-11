@@ -1061,6 +1061,20 @@ TEST_F(GameplaySpecTest, Player3DPositionUpdatesServerAndBroadcasts)
     EXPECT_DOUBLE_EQ(msg.at("z").as_double(), position.z);
 }
 
+TEST_F(GameplaySpecTest, Player3DPositionWithYawUpdatesServerAndBroadcasts)
+{
+    setUpRoom();
+    auto targetMessages = receivedMessages(*m_target);
+
+    auto bytes = player3DPositionBytes({10.0f, 20.0f, 30.0f});
+    auto yawBytes = Util::convertToByteVector(1.25f);
+    bytes.insert(bytes.end(), yawBytes.begin(), yawBytes.end());
+    ASSERT_EQ(read(bytes, *m_sender), server::CommandResult::success);
+    EXPECT_FLOAT_EQ(m_sender->getObject3D().getYaw(), 1.25f);
+    ASSERT_EQ(targetMessages.size(), 1);
+    EXPECT_DOUBLE_EQ(targetMessages[0].at("yaw").as_double(), 1.25);
+}
+
 TEST_F(GameplaySpecTest, Player3DDimensionUpdatesServerAndBroadcasts)
 {
     setUpRoom();
@@ -1104,6 +1118,21 @@ TEST_F(GameplaySpecTest, Player3DMovementAppliesDisplacementAndBroadcasts)
     EXPECT_EQ(msg.at("action").as_string(), "movement");
     EXPECT_EQ(Util::toUint64(msg.at("callback")), MESSAGE_ID);
     EXPECT_NEAR(msg.at("x").as_double(), 10.0f * 0.1f, 0.01);
+}
+
+TEST_F(GameplaySpecTest, Player3DMovementWithYawUpdatesServerAndBroadcasts)
+{
+    setUpRoom();
+    auto targetMessages = receivedMessages(*m_target);
+
+    auto bytes = player3DMovementBytes({10.0f, 0.0f, 0.0f}, 0.1f);
+    auto yawBytes = Util::convertToByteVector(-0.75f);
+    bytes.insert(bytes.end(), yawBytes.begin(), yawBytes.end());
+    ASSERT_EQ(read(bytes, *m_sender), server::CommandResult::success);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    EXPECT_FLOAT_EQ(m_sender->getObject3D().getYaw(), -0.75f);
+    ASSERT_EQ(targetMessages.size(), 1);
+    EXPECT_DOUBLE_EQ(targetMessages[0].at("yaw").as_double(), -0.75);
 }
 
 TEST_F(GameplaySpecTest, Player2DPositionNotInRoomFails)
@@ -1969,11 +1998,22 @@ TEST(GameplayPacketWireFormatTest, Player3DPositionAndDimension)
     EXPECT_FLOAT_EQ(parsed.y, vector.y);
     EXPECT_FLOAT_EQ(parsed.z, vector.z);
 
+    auto positionWithYaw = client::Packet::Room::Player3D::position(api, vector, 1.25f);
+    ASSERT_EQ(positionWithYaw.size(), 16 + 3 + 16);
+    nx_data yawBytes(positionWithYaw.begin() + 16 + 3 + 12, positionWithYaw.end());
+    EXPECT_FLOAT_EQ(Util::floatFromFront(yawBytes), 1.25f);
+
     auto dimension = client::Packet::Room::Player3D::dimension(api, vector);
     ASSERT_EQ(dimension.size(), 16 + 3 + 12);
     EXPECT_EQ(dimension[16], static_cast<uint8_t>(CommandType::room));
     EXPECT_EQ(dimension[17], static_cast<uint8_t>(RoomCommandType::Root::player_3D));
     EXPECT_EQ(dimension[18], static_cast<uint8_t>(RoomCommandType::PlayerType::dimension));
+
+    auto movementWithYaw = client::Packet::Room::Player3D::movement(api, vector, 0.02f, -0.75f);
+    ASSERT_EQ(movementWithYaw.size(), 16 + 3 + 20);
+    nx_data movementYawBytes(movementWithYaw.begin() + 16 + 3 + 16,
+                             movementWithYaw.end());
+    EXPECT_FLOAT_EQ(Util::floatFromFront(movementYawBytes), -0.75f);
 }
 
 TEST(GameplayPacketWireFormatTest, Player2DPositionAndDimension)

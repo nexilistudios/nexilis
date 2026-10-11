@@ -237,7 +237,8 @@ std::unique_ptr<BaseAPICommand> CommandParser::parseRoomCommand(const boost::jso
                 action, client_id,
                 getFloat(json, "x"), getFloat(json, "y"), getFloat(json, "z"),
                 getUint64(json, "target_id"),
-                getFloat(json, "damage"), getFloat(json, "new_health"));
+                getFloat(json, "damage"), getFloat(json, "new_health"),
+                getFloat(json, "yaw"));
     }
     else if (type == "object_2D")
     {

@@ -18,6 +18,8 @@
 #include <nexilis/server/command/commands.hh>
 #include <nexilis/server/room_storage.hh>
 
+#include <cmath>
+
 namespace nexilis::server
 {
 
@@ -33,8 +35,15 @@ CommandResult ServerImpl::room_player3d_position(const DefaultArgs& args)
 
     auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 3);
     Log::debug("Payload size: ", payload.size());
-    assert(payload.size() == 12);
+    if (payload.size() != 12 && payload.size() != 16)
+        return CommandResult::invalid_input;
     auto vector = Util::convertToVector3(payload);
+    const float yaw = payload.size() == 16
+                              ? Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 12))
+                              : 0.0f;
+    if (!std::isfinite(vector.x) || !std::isfinite(vector.y) ||
+        !std::isfinite(vector.z) || !std::isfinite(yaw))
+        return CommandResult::invalid_input;
     Log::debug("Position x:", vector.x, " y:", vector.y, " z:", vector.z);
 
     auto currentRoom = RoomStorage::getRoomById(user.getRoomId());
@@ -46,11 +55,13 @@ CommandResult ServerImpl::room_player3d_position(const DefaultArgs& args)
     }
 
     user.getObject3D().setPosition(vector);
+    user.getObject3D().setYaw(yaw);
 
     std::map<std::string, boost::json::value> params{
             {"x", boost::json::value(vector.x)},
             {"y", boost::json::value(vector.y)},
-            {"z", boost::json::value(vector.z)}};
+            {"z", boost::json::value(vector.z)},
+            {"yaw", boost::json::value(yaw)}};
 
     auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, args.getData(), params, args.getMessageId());
     if (Command::sendRoomCommand(roomCommand, user, args.getProtocol()))

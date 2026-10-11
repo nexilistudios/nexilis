@@ -41,6 +41,17 @@ Parameters passed to `Packet` vary in size by command. Strings are written as ra
 
 ### Application match extension
 
+The `room/player_3D/position` request carries three floats (`x`, `y`, `z`) and
+may append one float yaw in radians. The server accepts both 12-byte legacy
+positions and 16-byte positions with yaw, then relays `yaw` in its JSON position
+message. Legacy packets use yaw zero. Yaw is measured about the vertical Y axis;
+zero faces world -Z. The C, C#, and Lua position helpers keep sending the legacy
+12-byte form.
+
+The `room/player_3D/movement` request similarly accepts its legacy three-float
+velocity plus float delta time, or one additional float yaw. Movement responses
+relay that yaw, and the legacy form uses zero.
+
 `Packet::Room::Player3D::matchAction(api, action)` sends room/player_3D action byte `8` followed by exactly one byte: `0` cancels, `1` begins planting, and `2` begins defusing. The room's application-installed action handler validates the request; rooms without a handler reject it. The server's combat callback can also deny hits by participants who are outside an active round. These callbacks are optional and do not change normal rooms.
 
 An application can send a server-authored JSON room response with `type: "match"` and `action: "state"`. Nexilis exposes the parsed events through `consumeMatchEvents()` as owning pointers to the polymorphic `ClientAPI::MatchEvent` base. The `game_mode` field selects a derived event: `"bomb"` creates `BombMatchEvent`, while `"deathmatch"` creates `DeathmatchMatchEvent`. The base holds `room_id` and a virtual `kind()` discriminator. A missing `game_mode` is treated as bomb for compatibility with older messages; unknown modes are rejected.

@@ -546,6 +546,7 @@ public:
         uint64_t id = 0;
         float x = 0.0f, y = 0.0f, z = 0.0f;
         float w = 0.0f, h = 0.0f, d = 0.0f;
+        float yaw = 0.0f;
     };
 
     struct RemoteObject3DSnapshot

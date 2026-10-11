@@ -20,6 +20,8 @@
 #include <nexilis/object/object.hh>
 #include <nexilis/types/vector3.hh>
 
+#include <atomic>
+
 namespace nexilis
 {
 
@@ -34,7 +36,7 @@ public:
 
     /// Copy constructor.
     Object3D(const Object3D& other)
-        : Object(other)
+        : Object(other), m_yaw(other.getYaw())
     {
     }
 
@@ -44,6 +46,7 @@ public:
         if (this != &other)
         {
             Object::operator=(other);
+            m_yaw.store(other.getYaw());
         }
         return *this;
     }
@@ -58,6 +61,19 @@ public:
     {
         return baseData();
     }
+
+    void setYaw(float yaw)
+    {
+        m_yaw.store(yaw);
+    }
+
+    float getYaw() const
+    {
+        return m_yaw.load();
+    }
+
+private:
+    std::atomic<float> m_yaw{0.0f};
 };
 
 } // namespace nexilis

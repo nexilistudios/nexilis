@@ -73,10 +73,12 @@ struct ClientImpl
 
     // Room::Player3D
     static nx_data room_player3d_position(ClientAPI& api, Vector3f position);
+    static nx_data room_player3d_position(ClientAPI& api, Vector3f position, float yaw);
 
     static nx_data room_player3d_dimension(ClientAPI& api, Vector3f dimensions);
 
     static nx_data room_player3d_movement(ClientAPI& api, Vector3f movement, float deltatime);
+    static nx_data room_player3d_movement(ClientAPI& api, Vector3f movement, float deltatime, float yaw);
 
     static nx_data room_player3d_shoot(ClientAPI& api, uint64_t targetId, float damage);
 

@@ -27,9 +27,10 @@ class RoomPlayer3DCommand : public BaseAPICommand
 {
 public:
     RoomPlayer3DCommand(std::string action, uint64_t client_id, float x, float y, float z,
-                        uint64_t target_id = 0, float damage = 0.0f, float new_health = 0.0f)
+                        uint64_t target_id = 0, float damage = 0.0f, float new_health = 0.0f,
+                        float yaw = 0.0f)
         : m_action(action), m_client_id(client_id), m_x(x), m_y(y), m_z(z),
-          m_target_id(target_id), m_damage(damage), m_new_health(new_health)
+          m_target_id(target_id), m_damage(damage), m_new_health(new_health), m_yaw(yaw)
     {
     }
 
@@ -49,6 +50,7 @@ public:
                     if (client.getId() == m_client_id)
                     {
                         client.getObject3D().setPosition(Vector3(m_x, m_y, m_z));
+                        client.getObject3D().setYaw(m_yaw);
                         return ReadResult::success;
                     }
                 }
@@ -79,6 +81,7 @@ public:
                     if (client.getId() == m_client_id)
                     {
                         client.getObject3D().setPosition(Vector3(m_x, m_y, m_z));
+                        client.getObject3D().setYaw(m_yaw);
                         return ReadResult::success;
                     }
                 }
@@ -114,6 +117,7 @@ private:
     uint64_t m_target_id;
     float m_damage;
     float m_new_health;
+    float m_yaw;
 };
 
 /// Handles server-relayed positional audio events. The server acts as a relay:

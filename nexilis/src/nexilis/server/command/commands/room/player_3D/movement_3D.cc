@@ -20,6 +20,8 @@
 #include <nexilis/server/movement.hh>
 #include <nexilis/server/room_storage.hh>
 
+#include <cmath>
+
 namespace nexilis::server
 {
 
@@ -31,15 +33,23 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
     auto data = args.getData();
 
     auto payload = Util::removeAmountOfBytesFromVector(data, 3);
+    if (payload.size() != 16 && payload.size() != 20)
+        return CommandResult::invalid_input;
     auto vec_x = Util::floatFromFront(payload);
     auto vec_y = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 4));
     auto vec_z = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 8));
     auto delta = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 12));
+    const float yaw = payload.size() == 20
+                              ? Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 16))
+                              : 0.0f;
+    if (!std::isfinite(vec_x) || !std::isfinite(vec_y) || !std::isfinite(vec_z) ||
+        !std::isfinite(delta) || !std::isfinite(yaw))
+        return CommandResult::invalid_input;
     auto movement_vector = Vector3f(vec_x, vec_y, vec_z);
     auto mtx = std::make_shared<std::mutex>();
 
     // clang-format off
-    std::thread([mtx, movement_vector, &user, data, &protocol, messageId, delta]()
+    std::thread([mtx, movement_vector, &user, data, &protocol, messageId, delta, yaw]()
     {
         try
         {
@@ -102,11 +112,13 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
             {
                 std::lock_guard<std::mutex> lock(*mtx);
                 user.getObject3D().setPosition(new_pos);
+                user.getObject3D().setYaw(yaw);
                 std::map<std::string, boost::json::value> params
                 {
                     {"x", boost::json::value(new_pos.x)},
                     {"y", boost::json::value(new_pos.y)},
                     {"z", boost::json::value(new_pos.z)},
+                    {"yaw", boost::json::value(yaw)},
                 };
                 auto room_command = Command::createRoomCommand(user.getRoomId(), user, data, params, messageId);
                 Command::sendRoomCommand(room_command, user, protocol);

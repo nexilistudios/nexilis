@@ -347,6 +347,13 @@ nx_data ClientImpl::room_player3d_position(ClientAPI& api, Vector3f position)
     return id;
 }
 
+nx_data ClientImpl::room_player3d_position(ClientAPI& api, Vector3f position, float yaw)
+{
+    auto id = room_player3d_position(api, position);
+    nx_emplace(id, yaw);
+    return id;
+}
+
 nx_data ClientImpl::room_player3d_dimension(ClientAPI& api, Vector3f dimensions)
 {
     auto id = _Packet::clientIdentification(api);
@@ -364,6 +371,13 @@ nx_data ClientImpl::room_player3d_movement(ClientAPI& api, Vector3f movement, fl
     id.emplace_back(static_cast<uint8_t>(RoomCommandType::Root::player_3D));
     id.emplace_back(static_cast<uint8_t>(RoomCommandType::PlayerType::movement));
     emplaceAll(id, movement, deltatime);
+    return id;
+}
+
+nx_data ClientImpl::room_player3d_movement(ClientAPI& api, Vector3f movement, float deltatime, float yaw)
+{
+    auto id = room_player3d_movement(api, movement, deltatime);
+    emplaceAll(id, yaw);
     return id;
 }
 

@@ -20,7 +20,7 @@ namespace nexilis
 {
 
 Object3D::Object3D(Object3D&& other) noexcept
-    : Object(std::move(other))
+    : Object(std::move(other)), m_yaw(other.getYaw())
 {
 }
 
@@ -29,6 +29,7 @@ Object3D& Object3D::operator=(Object3D&& other) noexcept
     if (this != &other)
     {
         Object::operator=(std::move(other));
+        m_yaw.store(other.getYaw());
     }
     return *this;
 }
