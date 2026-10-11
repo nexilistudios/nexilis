@@ -18,6 +18,7 @@
 
 #include <nexilis/logger/log.hh>
 #include <nexilis/nexilis_constants.hh>
+#include <nexilis/ports.hh>
 #include <nexilis/server/command/command_result.hh>
 #include <nexilis/server/message/auth_message.hh>
 #include <nexilis/server/message/message.hh>
@@ -36,7 +37,7 @@ namespace nexilis::server::af_inet
 
 UDPServer::UDPServer(const ServerConfig& settings, uint16_t port)
     : ServerProtocol(settings),
-      m_port(port),
+      m_port(port == 0 ? Ports::getInetUDPPort() : port),
       m_mutex(std::make_unique<std::mutex>()),
       m_stopped(std::make_unique<std::atomic<bool>>(false))
 {
@@ -192,21 +193,6 @@ void UDPServer::bindSocket()
         close(m_serverSocket);
         m_serverSocket = -1;
         return;
-    }
-
-    // When an ephemeral port was requested, resolve the actual port that the
-    // kernel assigned so the port file announces the real endpoint.
-    if (m_port == 0)
-    {
-        socklen_t addrLen = sizeof(m_serverAddr);
-        if (getsockname(m_serverSocket, reinterpret_cast<sockaddr*>(&m_serverAddr), &addrLen) == 0)
-        {
-            m_port = ntohs(m_serverAddr.sin_port);
-        }
-        else
-        {
-            Log::error("UDPServer: Error resolving ephemeral port: ", strerror(errno));
-        }
     }
 }
 

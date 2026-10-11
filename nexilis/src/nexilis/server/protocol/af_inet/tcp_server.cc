@@ -18,6 +18,7 @@
 
 #include <nexilis/logger/log.hh>
 #include <nexilis/nexilis_constants.hh>
+#include <nexilis/ports.hh>
 #include <nexilis/server/command/command_result.hh>
 #include <nexilis/server/message/auth_message.hh>
 #include <nexilis/server/message/message.hh>
@@ -34,7 +35,7 @@ namespace nexilis::server::af_inet
 TCPServer::TCPServer(const ServerConfig& settings, uint16_t port)
     : Protocol(),
       ServerProtocol(settings),
-      m_port(port),
+      m_port(port == 0 ? Ports::getInetTCPPort() : port),
       m_stopped(std::make_unique<std::atomic<bool>>(false)),
       m_mutex(std::make_unique<std::mutex>())
 {

@@ -46,7 +46,7 @@ TCPServer::TCPServer(const ServerConfig& settings) noexcept
 {
     // Enable SO_REUSEADDR to allow port reuse.
     m_acceptor.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
-    // m_switchedAcceptor will be configured later in switchToRandomPort().
+    // m_switchedAcceptor will be configured later in switchToSessionPort().
 }
 
 TCPServer::TCPServer(TCPServer&& other) noexcept
@@ -415,7 +415,7 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
                             if (!m_firstClientConnected->load())
                             {
                                 Log::info(header(), "First client! Opening second port");
-                                if (switchToRandomPort() == 0)
+                                if (switchToSessionPort() == 0)
                                 {
                                     Log::error(header(), "Failed to open the second port");
                                     break;
@@ -733,7 +733,7 @@ bool TCPServer::sendToClient(const nx_data& data, boost::asio::ip::tcp::socket& 
     return false;
 }
 
-uint16_t TCPServer::switchToRandomPort()
+uint16_t TCPServer::switchToSessionPort()
 {
     boost::system::error_code ec;
 
@@ -752,7 +752,14 @@ uint16_t TCPServer::switchToRandomPort()
         return 0;
     }
 
-    ec = m_switchedAcceptor.bind(boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), 0), ec);
+    m_switchedAcceptor.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true), ec);
+    if (ec)
+    {
+        Log::error(header(), "Failed to configure switched acceptor: ", ec.message());
+        return 0;
+    }
+
+    ec = m_switchedAcceptor.bind(boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), Ports::getBoostTCPSessionPort()), ec);
     if (ec)
     {
         Log::error(header(), "Failed to bind switched acceptor: ", ec.message());

@@ -127,18 +127,7 @@ void UDPClient::start()
     uint16_t serverPort = getClientAPI()->getInetUDPServerPortNumber();
     if (serverPort == 0)
     {
-        // No explicit port configured. Try to discover it from the port file
-        // written by the server, mirroring the boost UDP client. As a last
-        // resort fall back to the default af_inet UDP port.
-        auto portFromFile = Util::readPortFromFile(Protocol::Type::AF_INET_UDP_SERVER);
-        if (portFromFile)
-        {
-            serverPort = *portFromFile;
-        }
-        else
-        {
-            serverPort = Ports::getInetUDPPort();
-        }
+        serverPort = Ports::getInetUDPPort();
     }
 
     const auto& serverAddress = getClientAPI()->getInetUDPServerAddress();

@@ -17,6 +17,7 @@
 #include <nexilis/client/protocol/nxboost/udp_client.hh>
 #include <nexilis/logger/log.hh>
 #include <nexilis/nexilis_constants.hh>
+#include <nexilis/ports.hh>
 
 #include <boost/asio/ip/address.hpp>
 
@@ -100,17 +101,15 @@ void UDPClient::start()
         return;
     }
 
-    auto port = Util::readPortFromFile(Protocol::Type::BOOST_UDP_SERVER);
-
-    if (!port)
+    auto port = getClientAPI()->getBoostUDPServerPortNumber();
+    if (port == 0)
     {
-        Log::error("Boost UDP port unspecified");
-        return;
+        port = Ports::getBoostUDPPort();
     }
 
     m_remoteEndpoint = boost::asio::ip::udp::endpoint(
             boost::asio::ip::make_address(getClientAPI()->getBoostUDPServerAddress()),
-            *port);
+            port);
 
     m_sendEndpoint = m_remoteEndpoint;
 

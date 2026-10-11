@@ -22,11 +22,15 @@
 namespace nexilis
 {
 
-/// This class holds the fixed port numbers for initial communication.
+/// Default listening ports for the network transports.
 class Ports
 {
 public:
     static uint16_t getBoostTCPPort();
+
+    static uint16_t getBoostUDPPort();
+
+    static uint16_t getBoostTCPSessionPort();
 
     static uint16_t getInetTCPPort();
 
@@ -34,6 +38,8 @@ public:
 
 private:
     static uint16_t m_boostTCPPort;
+    static uint16_t m_boostUDPPort;
+    static uint16_t m_boostTCPSessionPort;
     static uint16_t m_inetTCPPort;
     static uint16_t m_inetUDPPort;
 };

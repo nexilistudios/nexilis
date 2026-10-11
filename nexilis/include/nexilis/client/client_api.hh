@@ -738,6 +738,11 @@ public:
         return m_serverData.getBoostUDPServerAddress();
     }
 
+    uint16_t getBoostUDPServerPortNumber() const
+    {
+        return m_serverData.getBoostUDPServerPort();
+    }
+
     /// af_unix DGRAM.
     std::string getUnixDgramPath() const
     {

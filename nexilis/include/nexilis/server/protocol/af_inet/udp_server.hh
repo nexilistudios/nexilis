@@ -39,9 +39,7 @@ class UDPServer : public Protocol,
 public:
     /// Constructor.
     /// \param settings The server settings.
-    /// \param port The UDP port to bind to. When zero, an ephemeral port is
-    ///             chosen and resolved after binding; the actual port is
-    ///             announced through the port file so clients can discover it.
+    /// \param port The UDP port to bind to. Zero selects the default port.
     UDPServer(const ServerConfig& settings, uint16_t port);
 
     /// Destructor.

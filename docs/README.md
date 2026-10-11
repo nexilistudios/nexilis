@@ -13,7 +13,7 @@ Nexilis is a C++20 client/server library with C, C#, and LuaJIT interfaces. Star
 | `tests/` | Native, C API, and C# tests |
 | `scripts/` | Build and quality-check scripts |
 
-See [dependencies](dependencies.md), the [message protocol](server_message.md), and the [bindings guide](../bindings/README.md) for details.
+See [dependencies](dependencies.md), [network ports](ports.md), the [message protocol](server_message.md), and the [bindings guide](../bindings/README.md) for details.
 
 ## Testing
 

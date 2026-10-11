@@ -80,7 +80,7 @@ private:
     nx_data receiveMessage(boost::asio::ip::tcp::socket& socket);
     std::string getClientAddress(boost::asio::ip::tcp::socket& socket);
     void startSwitchedAccepting();
-    uint16_t switchToRandomPort();
+    uint16_t switchToSessionPort();
 
 private:
     const uint16_t m_defaultServerPort = Ports::getBoostTCPPort();

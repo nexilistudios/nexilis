@@ -66,7 +66,7 @@ Configuration details:
 - The code configures TLS 1.2 PSK cipher suites (`PSK-AES128-GCM-SHA256` and `PSK-CHACHA20-POLY1305`) and TLS 1.3 cipher suites (`TLS_AES_128_GCM_SHA256` and `TLS_CHACHA20_POLY1305_SHA256`). Verify the negotiated protocol version in each supported OpenSSL environment before making compatibility claims.
 - A passphrase must be set on both server and client or the handshake fails. If the server has TLS enabled but cannot build a context (no passphrase), it refuses incoming connections.
 - If only one side enables TLS, the handshake fails rather than silently downgrading to plaintext.
-- The handshake happens lazily: the server accepts it before the first message is read or written, and the client performs it right after the TCP connect. TLS is applied to both the initial connection and the random "switched" port the server uses for the authenticated session.
+- The handshake happens lazily: the server accepts it before the first message is read or written, and the client performs it right after the TCP connect. TLS is applied to both the initial connection and the fixed "switched" port the server uses for the authenticated session.
 
 ## Security notes
 

@@ -15,6 +15,7 @@
    along with this file.  If not, see <https://gnu.org>. */
 
 #include <nexilis/logger/log.hh>
+#include <nexilis/ports.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/message/auth_message.hh>
 #include <nexilis/server/protocol/nxboost/udp_server.hh>
@@ -31,7 +32,7 @@ UDPServer::UDPServer(const ServerConfig& settings)
       m_stopped(std::make_unique<std::atomic<bool>>(false)),
       m_ioContext(std::make_unique<boost::asio::io_context>()),
       m_mutex(std::make_unique<std::mutex>()),
-      m_remoteEndpoint(boost::asio::ip::udp::v4(), 0),
+      m_remoteEndpoint(boost::asio::ip::udp::v4(), Ports::getBoostUDPPort()),
       m_socket(*m_ioContext, m_remoteEndpoint),
       m_receiveBuffer(NEXILIS_BUFFER)
 {
