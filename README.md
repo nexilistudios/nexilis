@@ -23,6 +23,8 @@ cmake -S nexilis -B nexilis/build -DCMAKE_BUILD_TYPE=Release
 cmake --build nexilis/build --parallel
 ```
 
+On Linux with the MinGW-w64 cross compiler and Windows OpenSSL development libraries installed, run `make build-windows` to build Windows DLLs in `nexilis/build-windows`. It uses `nexilis/cmake/mingw_toolchain.cmake` and leaves native build directories intact.
+
 `make install` builds and installs into `nexilis/build/install` within the checkout. The current install target does **not** install public headers, so it is not yet a complete SDK for downstream projects.
 
 ## Documentation

@@ -168,6 +168,12 @@ file(GLOB_RECURSE NEXILIS_SOURCES
     "src/nexilis/*.cc"
 )
 
+# The native socket backends use POSIX headers and socket calls. Windows uses
+# the Boost.Asio TCP and UDP backends instead.
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    list(FILTER NEXILIS_SOURCES EXCLUDE REGEX "/protocol/af_(inet|unix)/[^/]+\\.cc$")
+endif()
+
 file (GLOB_RECURSE NEXILISC_SOURCES
     CONFIGURE_DEPENDS
     "src/nexilisc/*.cc"
@@ -208,7 +214,7 @@ target_link_libraries(nexilisc PUBLIC
 
 target_link_libraries(nexilisc PUBLIC OpenSSL::SSL)
 
-if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     target_link_libraries(nexilis PRIVATE
         ws2_32
         mswsock

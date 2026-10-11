@@ -18,6 +18,8 @@ On Ubuntu, install the basic build tools and OpenSSL development package:
 sudo apt install cmake g++ libssl-dev
 ```
 
+For a Windows cross build from Linux, install the MinGW-w64 C and C++ compilers, windres, and OpenSSL development libraries for the MinGW target. Run `make build-windows` for DLLs. Set `OPENSSL_ROOT_DIR` to the Windows OpenSSL installation if CMake cannot find it. The host's `libssl-dev` does not provide Windows libraries. Windows builds provide the Boost.Asio TCP and UDP backends; the native `af_inet` and Unix socket backends require POSIX APIs.
+
 CI or another build using system Boost also needs `libboost-json-dev`. On Arch Linux, the corresponding packages include `cmake`, `gcc`, `openssl`, and `boost`.
 
 The C# wrapper targets .NET Standard 2.0 and needs a .NET SDK to build. It calls the native `nexilisc` shared library at runtime; deploying only `Nexilis.dll` is insufficient. Native tests require GoogleTest, and the Premake test requires Premake 5.

@@ -5,6 +5,7 @@ endif
 
 LIB_DIR        := nexilis
 LIB_BUILD      := $(LIB_DIR)/build
+WINDOWS_BUILD  := $(LIB_DIR)/build-windows
 TEST_CPP_DIR   := tests/nexilis
 TEST_C_DIR     := tests/nexilisc
 TEST_CS_DIR    := tests/CSharpBindings.Tests
@@ -15,7 +16,7 @@ PRE_COMMIT_DIR := scripts/pre_commit
 
 CSHARP_OUTPUT ?= $(CURDIR)/dist
 
-.PHONY: all install install-csharp test unit-test test-cpp test-c test-csharp test-premake test-lua test-examples lint-python format cppcheck best_practises check_editorconfig pre-commit pre-commit-all clean clean-tests help
+.PHONY: all install build-windows install-csharp test unit-test test-cpp test-c test-csharp test-premake test-lua test-examples lint-python format cppcheck best_practises check_editorconfig pre-commit pre-commit-all clean clean-tests help
 
 all: install
 
@@ -24,6 +25,11 @@ install:
 	rm -rf $(LIB_BUILD)
 	cd $(LIB_DIR) && cmake -B build -DCMAKE_INSTALL_PREFIX=$(CURDIR)/$(LIB_BUILD)/install
 	MAKEFLAGS= cmake --build $(LIB_BUILD) --target install --parallel $(JOBS)
+
+build-windows:
+	@echo "Cross-building Nexilis for Windows..."
+	cmake -S $(LIB_DIR) -B $(WINDOWS_BUILD) -DCMAKE_TOOLCHAIN_FILE=$(CURDIR)/$(LIB_DIR)/cmake/mingw_toolchain.cmake
+	MAKEFLAGS= cmake --build $(WINDOWS_BUILD) --parallel $(JOBS)
 
 install-csharp:
 	@echo "Building and installing C# bindings..."
@@ -94,6 +100,7 @@ check_editorconfig:
 
 clean: clean-tests
 	rm -rf $(LIB_BUILD)
+	rm -rf $(WINDOWS_BUILD)
 
 clean-tests:
 	rm -rf $(TEST_CPP_DIR)/build
@@ -105,6 +112,7 @@ clean-tests:
 help:
 	@echo "Targets:"
 	@echo "  install          Build and install the library (default)"
+	@echo "  build-windows    Cross-build Windows DLLs with MinGW-w64"
 	@echo "  install-csharp   Build and deploy C# bindings (CSHARP_OUTPUT=./dist)"
 	@echo "  test             Build and run all tests"
 	@echo "  unit-test        Build and run C++/C/C# unit tests only"
