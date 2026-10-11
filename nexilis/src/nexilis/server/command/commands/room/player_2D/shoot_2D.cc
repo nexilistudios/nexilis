@@ -15,13 +15,12 @@
    along with this file.  If not, see <https://gnu.org>. */
 
 #include <nexilis/logger/log.hh>
-#include <nexilis/movement_type.hh>
-#include <nexilis/object/object_2d.hh>
 #include <nexilis/server/client_storage.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
-#include <nexilis/server/movement.hh>
 #include <nexilis/server/room_storage.hh>
+
+#include <cmath>
 
 namespace nexilis::server
 {
@@ -47,51 +46,15 @@ CommandResult ServerImpl::room_player2d_shoot(const DefaultArgs& args)
         direction.y /= length;
     }
 
-    // Get player position and dimensions
-    auto startPosition = user.getObject2D().getPosition();
-    auto dimensions = user.getObject2D().getDimensions();
+    if (length == 0.0f)
+        return CommandResult::failure;
 
-    // Calculate projectile starting position (at player edge in shooting direction)
-    Vector2f projectileStartPos(
-            startPosition.x + direction.x * (dimensions.x / 2.0f + 5.0f),
-            startPosition.y + direction.y * (dimensions.y / 2.0f + 5.0f));
-
-    // Create projectile object
-    Vector2f projectileDimensions(10.0f, 10.0f);
-    auto projectile = nexilis::Object2D(Util::getRandomUint64(), projectileStartPos, projectileDimensions);
-    projectile.setFilepath("assets/circle.png"); // Use circle asset for projectile
-    uint64_t projectileId = projectile.getId();
-    Log::info("Player ", user.getId(), " shot projectile with id: ", projectileId);
-
-    // Add projectile to room
-    auto room = RoomStorage::getRoomById(user.getRoomId());
-    room->addObject(std::move(projectile));
-
-    // Broadcast projectile creation to all clients in room
+    // Clients simulate one visual projectile per shoot event. Broadcast its direction.
     std::map<std::string, boost::json::value> params{
-            {"createMovingType", boost::json::value("create")},
-            {"x", boost::json::value(projectileStartPos.x)},
-            {"y", boost::json::value(projectileStartPos.y)},
-            {"width", boost::json::value(projectileDimensions.x)},
-            {"height", boost::json::value(projectileDimensions.y)},
-            {"filepath", boost::json::value("assets/circle.png")},
-            {"id", boost::json::value(projectileId)}};
+            {"x", boost::json::value(direction.x)},
+            {"y", boost::json::value(direction.y)}};
     auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, data, params, messageId);
     Command::sendRoomCommand(roomCommand, user, protocol);
-
-    // Set up projectile movement
-    // Projectile moves at 500 units per second in the shooting direction
-    float projectileSpeed = 500.0f;
-    Vector2f projectileMovement(direction.x * projectileSpeed, direction.y * projectileSpeed);
-    float deltaTime = 0.1f; // Update interval
-
-    std::function<double(double, double)> movementFunction = [](double progress, double totalDistance) -> double
-    {
-        return Movement::linear(progress, totalDistance);
-    };
-
-    auto base_move = std::make_unique<Movement2D>(MovementData(projectileId, deltaTime, data, messageId), projectileMovement, movementFunction);
-    Movement::object2D(std::move(base_move), user, protocol).detach();
 
     return CommandResult::success;
 }

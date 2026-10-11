@@ -19,8 +19,6 @@
 #include <nexilis/server/room.hh>
 #include <nexilis/util.hh>
 
-#include <sys/types.h>
-
 namespace nexilis::server
 {
 
