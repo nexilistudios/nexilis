@@ -42,7 +42,7 @@ constexpr uint64_t SENDER_ID = 100;
 constexpr uint64_t JOINER_ID = 200;
 
 /// Protocol that routes outbound messages through the User boost TCP callback.
-class BoostTCPServerProtocol : public Protocol
+class BoostTCPServerProtocol : public NXProtocol
 {
 public:
     void start() override
@@ -51,9 +51,9 @@ public:
     void stop() override
     {
     }
-    Type getType() override
+    NXProtocol::Type getType() override
     {
-        return Type::BOOST_TCP_SERVER;
+        return NXProtocol::Type::BOOST_TCP_SERVER;
     }
 };
 

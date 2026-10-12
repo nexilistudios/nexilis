@@ -14,15 +14,15 @@
    You should have received a copy of the GNU Lesser General Public License
    along with this file.  If not, see <https://gnu.org>. */
 
-#ifndef NEXILIS_PROTOCOL_HH
-#define NEXILIS_PROTOCOL_HH
+#ifndef NEXILIS_NX_PROTOCOL_HH
+#define NEXILIS_NX_PROTOCOL_HH
 
 #include <string>
 
 namespace nexilis
 {
 
-class Protocol
+class NXProtocol
 {
 public:
     // These are the types inherited from this class.
@@ -55,22 +55,22 @@ public:
     };
 
     /// Default constructor.
-    Protocol() = default;
+    NXProtocol() = default;
 
     /// Move constructor.
-    Protocol(Protocol&& other) = default;
+    NXProtocol(NXProtocol&& other) = default;
 
     /// Move assignment operator.
-    Protocol& operator=(Protocol&& other) = default;
+    NXProtocol& operator=(NXProtocol&& other) = default;
 
     /// Deleted copy constructor.
-    Protocol(const Protocol& other) = delete;
+    NXProtocol(const NXProtocol& other) = delete;
 
     /// Deleted copy assignment operator.
-    Protocol& operator=(const Protocol& other) = delete;
+    NXProtocol& operator=(const NXProtocol& other) = delete;
 
     /// Virtual destruction.
-    virtual ~Protocol() = default;
+    virtual ~NXProtocol() = default;
 
     /// Start running protocol instance.
     virtual void start() = 0;
@@ -78,8 +78,8 @@ public:
     /// Stop running protocol instance.
     virtual void stop() = 0;
 
-    /// Get the associated Protocol::Type from the protocol.
-    /// \note New types to Protocol::Type.
+    /// Get the associated NXProtocol::Type from the protocol.
+    /// \note New types to NXProtocol::Type.
     virtual Type getType() = 0;
 
     /// Get the mode of a type.

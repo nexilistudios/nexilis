@@ -14,6 +14,7 @@
    You should have received a copy of the GNU Lesser General Public License
    along with this file.  If not, see <https://gnu.org>. */
 
+#include <nexilis/nx_protocol.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/movement.hh>
 #include <nexilis/server/room_storage.hh>
@@ -45,7 +46,7 @@ double Movement::linear(double progress, double totalDistance)
     return totalDistance * progress;
 }
 
-std::thread Movement::object2D(std::unique_ptr<Movement2D> movement, User& user, Protocol& protocol)
+std::thread Movement::object2D(std::unique_ptr<Movement2D> movement, User& user, NXProtocol& protocol)
 {
     // clang-format off
     return std::thread([movement = std::move(movement), &user, &protocol]()
@@ -90,7 +91,7 @@ std::thread Movement::object2D(std::unique_ptr<Movement2D> movement, User& user,
     // clang-format on
 }
 
-std::thread Movement::object3D(std::unique_ptr<Movement3D> movement, User& user, Protocol& protocol)
+std::thread Movement::object3D(std::unique_ptr<Movement3D> movement, User& user, NXProtocol& protocol)
 {
     // clang-format off
     return std::thread([movement = std::move(movement), &user, &protocol]()

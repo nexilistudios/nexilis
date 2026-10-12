@@ -33,7 +33,7 @@ namespace nexilis::server::af_inet
 {
 
 TCPServer::TCPServer(const ServerConfig& settings, uint16_t port)
-    : Protocol(),
+    : NXProtocol(),
       ServerProtocol(settings),
       m_port(port == 0 ? Ports::getInetTCPPort() : port),
       m_stopped(std::make_unique<std::atomic<bool>>(false)),
@@ -63,7 +63,7 @@ TCPServer::~TCPServer()
 }
 
 TCPServer::TCPServer(TCPServer&& other)
-    : Protocol(std::move(other)),
+    : NXProtocol(std::move(other)),
       ServerProtocol(std::move(other)),
       m_port(std::move(other.m_port)),
       m_serverSocket(std::move(other.m_serverSocket)),
@@ -80,7 +80,7 @@ TCPServer& TCPServer::operator=(TCPServer&& other)
 {
     if (this != &other)
     {
-        static_cast<Protocol&>(*this) = static_cast<Protocol&&>(other);
+        static_cast<NXProtocol&>(*this) = static_cast<NXProtocol&&>(other);
         static_cast<ServerProtocol&>(*this) = static_cast<ServerProtocol&&>(other);
 
         m_port = std::move(other.m_port);

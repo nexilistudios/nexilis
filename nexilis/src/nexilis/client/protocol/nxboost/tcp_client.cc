@@ -37,7 +37,7 @@ namespace nexilis::client::nxboost
 
 TCPClient::TCPClient(ClientAPI& api)
     : NxClass("client::nxboost::TCPClient"),
-      Protocol(),
+      NXProtocol(),
       ClientProtocol(&api),
       m_stopped(std::make_unique<std::atomic<bool>>(false)),
       m_ioContext(std::make_shared<boost::asio::io_context>()),
@@ -68,7 +68,7 @@ TCPClient::TCPClient(ClientAPI& api)
 
 TCPClient::TCPClient(TCPClient&& other)
     : NxClass(std::move(other)),
-      Protocol(std::move(other)),
+      NXProtocol(std::move(other)),
       ClientProtocol(std::move(other)),
       m_ioContextThread(std::move(other.m_ioContextThread)),
       m_stopped(std::move(other.m_stopped)),
@@ -103,7 +103,7 @@ TCPClient& TCPClient::operator=(TCPClient&& other)
     if (this != &other)
     {
         static_cast<NxClass&>(*this) = static_cast<NxClass&&>(other);
-        static_cast<Protocol&>(*this) = static_cast<Protocol&&>(other);
+        static_cast<NXProtocol&>(*this) = static_cast<NXProtocol&&>(other);
         static_cast<ClientProtocol&>(*this) = static_cast<ClientProtocol&&>(other);
 
         if (m_ioContextThread.joinable())

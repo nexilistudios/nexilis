@@ -50,7 +50,7 @@ TCPServer::TCPServer(const ServerConfig& settings) noexcept
 }
 
 TCPServer::TCPServer(TCPServer&& other) noexcept
-    : Protocol(std::move(other)),
+    : NXProtocol(std::move(other)),
       ServerProtocol(std::move(other)),
       NxClass(std::move(other)),
       m_firstClientConnected(std::move(other.m_firstClientConnected) ? std::move(other.m_firstClientConnected) : std::make_unique<std::atomic<bool>>(false)),
@@ -72,7 +72,7 @@ TCPServer& TCPServer::operator=(TCPServer&& other) noexcept
 {
     if (this != &other)
     {
-        static_cast<Protocol&>(*this) = static_cast<Protocol&&>(other);
+        static_cast<NXProtocol&>(*this) = static_cast<NXProtocol&&>(other);
         static_cast<ServerProtocol&>(*this) = static_cast<ServerProtocol&&>(other);
         static_cast<NxClass&>(*this) = static_cast<NxClass&&>(other);
 

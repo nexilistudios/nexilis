@@ -18,6 +18,7 @@
 #define NEXILIS_SERVER_COMMANDS_HH
 
 #include <nexilis/command_packet_base.hh>
+#include <nexilis/nx_protocol.hh>
 #include <nexilis/server/command/command_result.hh>
 #include <nexilis/server/user.hh>
 #include <nexilis/util.hh>
@@ -28,13 +29,13 @@ namespace nexilis::server
 class DefaultArgs
 {
 public:
-    DefaultArgs(User& user, Protocol& protocol, const nx_data& data, size_t messageId);
+    DefaultArgs(User& user, NXProtocol& protocol, const nx_data& data, size_t messageId);
 
     User& getUser() const
     {
         return m_user;
     }
-    Protocol& getProtocol() const
+    NXProtocol& getProtocol() const
     {
         return m_protocol;
     }
@@ -64,7 +65,7 @@ public:
 
 private:
     User& m_user;
-    Protocol& m_protocol;
+    NXProtocol& m_protocol;
     nx_data m_data;
     size_t m_messageId;
 };

@@ -18,7 +18,7 @@
 #define NEXILIS_BOOST_UDP_CLIENT_HH
 
 #include <nexilis/client/client_protocol.hh>
-#include <nexilis/protocol.hh>
+#include <nexilis/nx_protocol.hh>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/udp.hpp>
@@ -33,7 +33,7 @@ namespace nexilis::client::nxboost
 {
 
 class UDPClient : public virtual NxClass,
-                  public Protocol,
+                  public NXProtocol,
                   public ClientProtocol
 {
 public:
@@ -55,16 +55,16 @@ public:
     /// Deleted copy assignment operator.
     UDPClient& operator=(const UDPClient&) = delete;
 
-    /// Protocol::start() implementation.
+    /// NXProtocol::start() implementation.
     void start() override;
 
-    /// Protocol::stop() implementation.
+    /// NXProtocol::stop() implementation.
     void stop() override;
 
-    /// Protocol::getType() implementation.
-    Type getType() override
+    /// NXProtocol::getType() implementation.
+    NXProtocol::Type getType() override
     {
-        return Type::BOOST_UDP_CLIENT;
+        return NXProtocol::Type::BOOST_UDP_CLIENT;
     }
 
     /// ClientProtocol::sendMessage(const nx_data& message) implementation.

@@ -20,7 +20,7 @@
 #include <nexilis/client/client_api.hh>
 #include <nexilis/client/client_protocol.hh>
 #include <nexilis/nexilis_constants.hh>
-#include <nexilis/protocol.hh>
+#include <nexilis/nx_protocol.hh>
 
 #include <netinet/in.h>
 
@@ -31,7 +31,7 @@ namespace nexilis::client::af_inet
 {
 
 /// AF_INET TCP client protocol using raw sockets.
-class TCPClient : public Protocol,
+class TCPClient : public NXProtocol,
                   public ClientProtocol
 {
 public:
@@ -53,16 +53,16 @@ public:
     /// Deleted copy assignment operator.
     TCPClient& operator=(const TCPClient& other) = delete;
 
-    /// Protocol::start() implementation.
+    /// NXProtocol::start() implementation.
     void start() override;
 
-    /// Protocol::stop() implementation.
+    /// NXProtocol::stop() implementation.
     void stop() override;
 
-    /// Protocol::getType() implementation.
-    Protocol::Type getType() override
+    /// NXProtocol::getType() implementation.
+    NXProtocol::Type getType() override
     {
-        return Protocol::Type::AF_INET_TCP_CLIENT;
+        return NXProtocol::Type::AF_INET_TCP_CLIENT;
     }
 
     /// ClientProtocol::sendMessage(const nx_data&) implementation.

@@ -30,8 +30,8 @@ namespace nexilis
 class CommandSpec
 {
 public:
-    /// Minimal concrete Protocol for testing.
-    class TestProtocol : public Protocol
+    /// Minimal concrete NXProtocol for testing.
+    class TestProtocol : public NXProtocol
     {
     public:
         void start() override
@@ -40,9 +40,9 @@ public:
         void stop() override
         {
         }
-        Type getType() override
+        NXProtocol::Type getType() override
         {
-            return Type::UNKNOWN;
+            return NXProtocol::Type::UNKNOWN;
         }
     };
 

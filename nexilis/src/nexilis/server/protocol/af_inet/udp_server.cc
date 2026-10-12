@@ -52,7 +52,7 @@ UDPServer::~UDPServer()
 }
 
 UDPServer::UDPServer(UDPServer&& other)
-    : Protocol(std::move(other)),
+    : NXProtocol(std::move(other)),
       ServerProtocol(std::move(other)),
       m_port(std::move(other.m_port)),
       m_serverSocket(std::move(other.m_serverSocket)),
@@ -76,7 +76,7 @@ UDPServer& UDPServer::operator=(UDPServer&& other)
 {
     if (this != &other)
     {
-        static_cast<Protocol&>(*this) = static_cast<Protocol&&>(other);
+        static_cast<NXProtocol&>(*this) = static_cast<NXProtocol&&>(other);
         static_cast<ServerProtocol&>(*this) = static_cast<ServerProtocol&&>(other);
 
         m_port = std::move(other.m_port);

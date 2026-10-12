@@ -17,6 +17,7 @@
 #include <nexilis/json.hh>
 #include <nexilis/logger/log.hh>
 #include <nexilis/movement_type.hh>
+#include <nexilis/nx_protocol.hh>
 #include <nexilis/room_command_type.hh>
 #include <nexilis/server/client_storage.hh>
 #include <nexilis/server/command/command.hh>
@@ -53,12 +54,12 @@ Command& Command::operator=(Command&& other)
     return *this;
 }
 
-CommandResult Command::read(const char* command_data, size_t length, User& client, Protocol& protocol, uint64_t messageId)
+CommandResult Command::read(const char* command_data, size_t length, User& client, NXProtocol& protocol, uint64_t messageId)
 {
     return Command::read(Util::convertToByteVector(command_data, length), client, protocol, messageId);
 }
 
-CommandResult Command::read(const nx_data& command, User& user, Protocol& protocol, uint64_t messageId)
+CommandResult Command::read(const nx_data& command, User& user, NXProtocol& protocol, uint64_t messageId)
 {
     assert(user.getId() != 0);
 
@@ -540,23 +541,23 @@ CommandResult Command::read(const nx_data& command, User& user, Protocol& protoc
     return CommandResult::not_found;
 }
 
-bool Command::sendMessageToClient(nx_data data, User& user, Protocol& protocol)
+bool Command::sendMessageToClient(nx_data data, User& user, NXProtocol& protocol)
 {
-    auto trySend = [&data, &user](Protocol::Type type) -> bool
+    auto trySend = [&data, &user](NXProtocol::Type type) -> bool
     {
         switch (type)
         {
-            case Protocol::Type::BOOST_TCP_SERVER:
+            case NXProtocol::Type::BOOST_TCP_SERVER:
                 return user.boostTCPSend(data);
-            case Protocol::Type::BOOST_UDP_SERVER:
+            case NXProtocol::Type::BOOST_UDP_SERVER:
                 return user.boostUDPSend(data);
-            case Protocol::Type::AF_UNIX_SOCK_STREAM_SERVER:
+            case NXProtocol::Type::AF_UNIX_SOCK_STREAM_SERVER:
                 return user.unixStreamSend(data);
-            case Protocol::Type::AF_UNIX_SOCK_DGRAM_SERVER:
+            case NXProtocol::Type::AF_UNIX_SOCK_DGRAM_SERVER:
                 return user.unixDgramSend(data);
-            case Protocol::Type::AF_INET_TCP_SERVER:
+            case NXProtocol::Type::AF_INET_TCP_SERVER:
                 return user.inetTCPSend(data);
-            case Protocol::Type::AF_INET_UDP_SERVER:
+            case NXProtocol::Type::AF_INET_UDP_SERVER:
                 return user.inetUDPSend(data);
             default:
                 return false;
@@ -568,13 +569,13 @@ bool Command::sendMessageToClient(nx_data data, User& user, Protocol& protocol)
         return true;
     }
 
-    static const Protocol::Type allServerProtocols[] = {
-            Protocol::Type::BOOST_TCP_SERVER,
-            Protocol::Type::BOOST_UDP_SERVER,
-            Protocol::Type::AF_UNIX_SOCK_STREAM_SERVER,
-            Protocol::Type::AF_UNIX_SOCK_DGRAM_SERVER,
-            Protocol::Type::AF_INET_TCP_SERVER,
-            Protocol::Type::AF_INET_UDP_SERVER,
+    static const NXProtocol::Type allServerProtocols[] = {
+            NXProtocol::Type::BOOST_TCP_SERVER,
+            NXProtocol::Type::BOOST_UDP_SERVER,
+            NXProtocol::Type::AF_UNIX_SOCK_STREAM_SERVER,
+            NXProtocol::Type::AF_UNIX_SOCK_DGRAM_SERVER,
+            NXProtocol::Type::AF_INET_TCP_SERVER,
+            NXProtocol::Type::AF_INET_UDP_SERVER,
     };
 
     for (auto fallbackType : allServerProtocols)
@@ -691,7 +692,7 @@ nx_data Command::createRoomLeaderboardCommand(uint64_t roomId, User& user,
     return Command::createRoomCommand(roomId, user, leaderboardData, leaderboardParams, messageId);
 }
 
-bool Command::sendRoomCommand(const nx_data& data, User& user, Protocol& protocol)
+bool Command::sendRoomCommand(const nx_data& data, User& user, NXProtocol& protocol)
 {
     auto& rooms = RoomStorage::getAllRooms();
     for (auto& room : rooms)

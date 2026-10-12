@@ -22,7 +22,7 @@
 namespace nexilis
 {
 
-ProtocolManager::ProtocolData::ProtocolData(Protocol::Type type)
+ProtocolManager::ProtocolData::ProtocolData(NXProtocol::Type type)
     : m_type(type),
       m_id(Util::getRandomUint64())
 {
@@ -68,7 +68,7 @@ bool ProtocolManager::hasProtocol(size_t id) const
                        { return item.getId() == id; });
 }
 
-bool ProtocolManager::hasProtocolType(Protocol::Type type) const
+bool ProtocolManager::hasProtocolType(NXProtocol::Type type) const
 {
     return std::any_of(m_items.begin(), m_items.end(),
                        [type](const ProtocolData& item)
@@ -83,7 +83,7 @@ const ProtocolManager::ProtocolData* ProtocolManager::findById(size_t id) const
     return it != m_items.end() ? &(*it) : nullptr;
 }
 
-std::vector<const ProtocolManager::ProtocolData*> ProtocolManager::findByType(Protocol::Type type) const
+std::vector<const ProtocolManager::ProtocolData*> ProtocolManager::findByType(NXProtocol::Type type) const
 {
     std::vector<const ProtocolData*> result;
     for (const auto& item : m_items)

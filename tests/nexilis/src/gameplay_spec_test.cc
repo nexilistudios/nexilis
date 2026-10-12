@@ -39,7 +39,7 @@ constexpr float DEFAULT_HEALTH = 100.0f;
 
 /// Minimal server protocol that routes outbound traffic through the user's
 /// boost TCP send callback.
-class BoostTCPServerProtocol : public Protocol
+class BoostTCPServerProtocol : public NXProtocol
 {
 public:
     void start() override
@@ -48,9 +48,9 @@ public:
     void stop() override
     {
     }
-    Type getType() override
+    NXProtocol::Type getType() override
     {
-        return Type::BOOST_TCP_SERVER;
+        return NXProtocol::Type::BOOST_TCP_SERVER;
     }
 };
 

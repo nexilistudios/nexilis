@@ -17,7 +17,7 @@
 #ifndef NEXILIS_AF_INET_TCP_SERVER_HH
 #define NEXILIS_AF_INET_TCP_SERVER_HH
 
-#include <nexilis/protocol.hh>
+#include <nexilis/nx_protocol.hh>
 #include <nexilis/server/server_config.hh>
 #include <nexilis/server/server_protocol.hh>
 
@@ -34,7 +34,7 @@ namespace nexilis::server::af_inet
 {
 
 /// AF_INET TCP server protocol using raw sockets.
-class TCPServer : public Protocol,
+class TCPServer : public NXProtocol,
                   public ServerProtocol
 {
 public:
@@ -96,16 +96,16 @@ public:
     /// Deleted copy assignment operator.
     TCPServer& operator=(const TCPServer& other) = delete;
 
-    /// Protocol::start() implementation.
+    /// NXProtocol::start() implementation.
     void start() override;
 
-    /// Protocol::stop() implementation.
+    /// NXProtocol::stop() implementation.
     void stop() override;
 
-    /// Protocol::getType() implementation.
-    Protocol::Type getType() override
+    /// NXProtocol::getType() implementation.
+    NXProtocol::Type getType() override
     {
-        return Protocol::Type::AF_INET_TCP_SERVER;
+        return NXProtocol::Type::AF_INET_TCP_SERVER;
     }
 
     /// Set the port number.

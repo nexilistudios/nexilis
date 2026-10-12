@@ -612,7 +612,7 @@ TEST(UtilFileTest, GetNexilisTempPath)
 
 TEST(UtilPortTest, WriteAndReadPort)
 {
-    auto type = Protocol::Type::BOOST_TCP_CLIENT;
+    auto type = NXProtocol::Type::BOOST_TCP_CLIENT;
     uint16_t port = 12345;
 
     bool written = Util::writePortToFile(port, type);
@@ -627,7 +627,7 @@ TEST(UtilPortTest, WriteAndReadPort)
 
 TEST(UtilPortTest, ReadPortFromNonexistentFile)
 {
-    auto type = Protocol::Type::AF_UNIX_SOCK_STREAM_SERVER;
+    auto type = NXProtocol::Type::AF_UNIX_SOCK_STREAM_SERVER;
     Util::cleanupPortFile(type);
 
     auto result = Util::readPortFromFile(type);

@@ -8,43 +8,43 @@
 
    This file is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU Lesser General Public License for more details.
 
    You should have received a copy of the GNU Lesser General Public License
    along with this file.  If not, see <https://gnu.org>. */
 
-#include <nexilis/protocol.hh>
+#include <nexilis/nx_protocol.hh>
 
 namespace nexilis
 {
 
-Protocol::Mode Protocol::getMode(Protocol::Type type)
+NXProtocol::Mode NXProtocol::getMode(NXProtocol::Type type)
 {
     switch (type)
     {
-        case Protocol::Type::AF_INET_UDP_SERVER:
-        case Protocol::Type::AF_INET_TCP_SERVER:
-        case Protocol::Type::BOOST_UDP_SERVER:
-        case Protocol::Type::BOOST_TCP_SERVER:
-        case Protocol::Type::AF_UNIX_SOCK_DGRAM_SERVER:
-        case Protocol::Type::AF_UNIX_SOCK_STREAM_SERVER:
-            return Protocol::Mode::SERVER;
+        case NXProtocol::Type::AF_INET_UDP_SERVER:
+        case NXProtocol::Type::AF_INET_TCP_SERVER:
+        case NXProtocol::Type::BOOST_UDP_SERVER:
+        case NXProtocol::Type::BOOST_TCP_SERVER:
+        case NXProtocol::Type::AF_UNIX_SOCK_DGRAM_SERVER:
+        case NXProtocol::Type::AF_UNIX_SOCK_STREAM_SERVER:
+            return NXProtocol::Mode::SERVER;
 
-        case Protocol::Type::AF_INET_UDP_CLIENT:
-        case Protocol::Type::AF_INET_TCP_CLIENT:
-        case Protocol::Type::BOOST_UDP_CLIENT:
-        case Protocol::Type::BOOST_TCP_CLIENT:
-        case Protocol::Type::AF_UNIX_SOCK_DGRAM_CLIENT:
-        case Protocol::Type::AF_UNIX_SOCK_STREAM_CLIENT:
-            return Protocol::Mode::CLIENT;
+        case NXProtocol::Type::AF_INET_UDP_CLIENT:
+        case NXProtocol::Type::AF_INET_TCP_CLIENT:
+        case NXProtocol::Type::BOOST_UDP_CLIENT:
+        case NXProtocol::Type::BOOST_TCP_CLIENT:
+        case NXProtocol::Type::AF_UNIX_SOCK_DGRAM_CLIENT:
+        case NXProtocol::Type::AF_UNIX_SOCK_STREAM_CLIENT:
+            return NXProtocol::Mode::CLIENT;
 
         default:
-            return Protocol::Mode::UNKNOWN;
+            return NXProtocol::Mode::UNKNOWN;
     }
 }
 
-std::string Protocol::typeToString(Type type)
+std::string NXProtocol::typeToString(Type type)
 {
     switch (type)
     {

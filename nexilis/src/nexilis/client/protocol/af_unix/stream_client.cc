@@ -56,7 +56,7 @@ StreamClient::~StreamClient()
 
 StreamClient::StreamClient(StreamClient&& other)
     : NxClass(std::move(other)),
-      Protocol(std::move(other)),
+      NXProtocol(std::move(other)),
       ClientProtocol(std::move(other)),
       m_serverSocketPath(std::move(other.m_serverSocketPath)),
       m_clientSocket(std::move(other.m_clientSocket)),
@@ -72,7 +72,7 @@ StreamClient& StreamClient::operator=(StreamClient&& other)
     if (this != &other)
     {
         static_cast<NxClass&>(*this) = static_cast<NxClass&&>(other);
-        static_cast<Protocol&>(*this) = static_cast<Protocol&&>(other);
+        static_cast<NXProtocol&>(*this) = static_cast<NXProtocol&&>(other);
         static_cast<ClientProtocol&>(*this) = static_cast<ClientProtocol&&>(other);
 
         m_serverSocketPath = std::move(other.m_serverSocketPath);

@@ -17,7 +17,7 @@
 #ifndef NEXILIS_BOOST_UDP_SERVER_HH
 #define NEXILIS_BOOST_UDP_SERVER_HH
 
-#include <nexilis/protocol.hh>
+#include <nexilis/nx_protocol.hh>
 #include <nexilis/server/server_config.hh>
 #include <nexilis/server/server_protocol.hh>
 
@@ -29,7 +29,7 @@
 namespace nexilis::server::nxboost
 {
 
-class UDPServer : public Protocol,
+class UDPServer : public NXProtocol,
                   public ServerProtocol,
                   public NxClass
 {
@@ -52,16 +52,16 @@ public:
     /// Deleted copy assignment operator.
     UDPServer& operator=(const UDPServer&) = delete;
 
-    /// Protocol::start() implementation.
+    /// NXProtocol::start() implementation.
     void start() override;
 
-    /// Protocol::stop() implementation.
+    /// NXProtocol::stop() implementation.
     void stop() override;
 
-    /// Protocol::getType() implementation.
-    Type getType() override
+    /// NXProtocol::getType() implementation.
+    NXProtocol::Type getType() override
     {
-        return Type::BOOST_UDP_SERVER;
+        return NXProtocol::Type::BOOST_UDP_SERVER;
     }
 
     /// Get the port where the server is running.

@@ -21,7 +21,7 @@
 #include <nexilis/client/protocol_status.hh>
 #include <nexilis/nexilis_constants.hh>
 #include <nexilis/nx_data.hh>
-#include <nexilis/protocol.hh>
+#include <nexilis/nx_protocol.hh>
 
 namespace nexilis::client
 {
@@ -77,7 +77,7 @@ public:
     static nx_data frame(const nx_data& payload);
 
 protected:
-    void start(Protocol::Type type);
+    void start(NXProtocol::Type type);
     void sendMessageWithCallback(const nx_data& message, const std::function<void()>& callback);
 
 private:

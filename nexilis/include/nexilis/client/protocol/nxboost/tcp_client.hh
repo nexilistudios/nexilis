@@ -19,7 +19,7 @@
 
 #include <nexilis/client/client_protocol.hh>
 #include <nexilis/nx_class.hh>
-#include <nexilis/protocol.hh>
+#include <nexilis/nx_protocol.hh>
 #include <nexilis/tls.hh>
 
 #include <boost/asio/io_context.hpp>
@@ -37,7 +37,7 @@ namespace nexilis::client::nxboost
 {
 
 class TCPClient : public virtual NxClass,
-                  public Protocol,
+                  public NXProtocol,
                   public ClientProtocol
 {
 public:
@@ -71,16 +71,16 @@ public:
     /// ClientProtocol::sendMessageAsync(const nx_data&) implementation.
     std::future<void> sendMessageAsync(const nx_data& message) override;
 
-    /// Protocol::getType() implementation.
-    Type getType() override
+    /// NXProtocol::getType() implementation.
+    NXProtocol::Type getType() override
     {
-        return Type::BOOST_TCP_CLIENT;
+        return NXProtocol::Type::BOOST_TCP_CLIENT;
     }
 
-    /// Protocol::start() implementation.
+    /// NXProtocol::start() implementation.
     void start() override;
 
-    /// Protocol::stop() implementation.
+    /// NXProtocol::stop() implementation.
     void stop() override;
 
 protected:

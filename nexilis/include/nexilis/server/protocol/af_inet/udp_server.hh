@@ -17,7 +17,7 @@
 #ifndef NEXILIS_AF_INET_UDP_SERVER_HH
 #define NEXILIS_AF_INET_UDP_SERVER_HH
 
-#include <nexilis/protocol.hh>
+#include <nexilis/nx_protocol.hh>
 #include <nexilis/server/server_config.hh>
 #include <nexilis/server/server_protocol.hh>
 
@@ -33,7 +33,7 @@ namespace nexilis::server::af_inet
 
 /// AF_INET UDP server protocol using raw sockets.
 /// Works similarly to the boost UDP server but over a plain UDP socket.
-class UDPServer : public Protocol,
+class UDPServer : public NXProtocol,
                   public ServerProtocol
 {
 public:
@@ -57,16 +57,16 @@ public:
     /// Deleted copy assignment operator.
     UDPServer& operator=(const UDPServer& other) = delete;
 
-    /// Protocol::start() implementation.
+    /// NXProtocol::start() implementation.
     void start() override;
 
-    /// Protocol::stop() implementation.
+    /// NXProtocol::stop() implementation.
     void stop() override;
 
-    /// Protocol::getType() implementation.
-    Protocol::Type getType() override
+    /// NXProtocol::getType() implementation.
+    NXProtocol::Type getType() override
     {
-        return Protocol::Type::AF_INET_UDP_SERVER;
+        return NXProtocol::Type::AF_INET_UDP_SERVER;
     }
 
     /// Get the port the server is bound to.

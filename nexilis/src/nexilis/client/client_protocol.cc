@@ -113,29 +113,29 @@ std::pair<uint64_t, std::function<void()>> ClientProtocol::createCallback(const 
     return std::make_pair(messageId, callback);
 }
 
-void ClientProtocol::start(Protocol::Type type)
+void ClientProtocol::start(NXProtocol::Type type)
 {
     if (m_api->isInitialized())
     {
         Log::debug(header(), "Password already sent using another protocol, waiting for ready");
         switch (type)
         {
-            case Protocol::Type::BOOST_TCP_CLIENT:
+            case NXProtocol::Type::BOOST_TCP_CLIENT:
                 getClientAPI()->waitUntilBoostTCPReady();
                 break;
-            case Protocol::Type::BOOST_UDP_CLIENT:
+            case NXProtocol::Type::BOOST_UDP_CLIENT:
                 getClientAPI()->waitUntilBoostUDPReady();
                 break;
-            case Protocol::Type::AF_INET_TCP_CLIENT:
+            case NXProtocol::Type::AF_INET_TCP_CLIENT:
                 getClientAPI()->waitUntilInetTCPReady();
                 break;
-            case Protocol::Type::AF_INET_UDP_CLIENT:
+            case NXProtocol::Type::AF_INET_UDP_CLIENT:
                 getClientAPI()->waitUntilInetUDPReady();
                 break;
-            case Protocol::Type::AF_UNIX_SOCK_STREAM_CLIENT:
+            case NXProtocol::Type::AF_UNIX_SOCK_STREAM_CLIENT:
                 getClientAPI()->waitUntilUnixStreamReady();
                 break;
-            case Protocol::Type::AF_UNIX_SOCK_DGRAM_CLIENT:
+            case NXProtocol::Type::AF_UNIX_SOCK_DGRAM_CLIENT:
                 getClientAPI()->waitUntilUnixDgramReady();
                 break;
             default:
@@ -176,42 +176,42 @@ void ClientProtocol::start(Protocol::Type type)
         }
     }
 
-    Log::debug(header(), "Client protocol type: ", Protocol::typeToString(type));
+    Log::debug(header(), "Client protocol type: ", NXProtocol::typeToString(type));
     switch (type)
     {
-        case Protocol::Type::BOOST_TCP_CLIENT:
+        case NXProtocol::Type::BOOST_TCP_CLIENT:
             Log::debug(header(), "Waiting for Boost TCP to be ready");
             getClientAPI()->waitUntilBoostTCPReady();
             Log::debug(header(), "Boost TCP is ready");
             break;
-        case Protocol::Type::BOOST_UDP_CLIENT:
+        case NXProtocol::Type::BOOST_UDP_CLIENT:
             Log::debug(header(), "Waiting for Boost UDP to be ready");
             getClientAPI()->waitUntilBoostUDPReady();
             Log::debug(header(), "Boost UDP is ready");
             break;
-        case Protocol::Type::AF_INET_TCP_CLIENT:
+        case NXProtocol::Type::AF_INET_TCP_CLIENT:
             getClientAPI()->waitUntilInetTCPReady();
             break;
-        case Protocol::Type::AF_INET_UDP_CLIENT:
+        case NXProtocol::Type::AF_INET_UDP_CLIENT:
             getClientAPI()->waitUntilInetUDPReady();
             break;
-        case Protocol::Type::AF_UNIX_SOCK_STREAM_CLIENT:
+        case NXProtocol::Type::AF_UNIX_SOCK_STREAM_CLIENT:
             getClientAPI()->waitUntilUnixStreamReady();
             break;
-        case Protocol::Type::AF_UNIX_SOCK_DGRAM_CLIENT:
+        case NXProtocol::Type::AF_UNIX_SOCK_DGRAM_CLIENT:
             getClientAPI()->waitUntilUnixDgramReady();
             break;
 
-        case Protocol::Type::AF_INET_TCP_SERVER:
-        case Protocol::Type::AF_INET_UDP_SERVER:
-        case Protocol::Type::AF_UNIX_SOCK_DGRAM_SERVER:
-        case Protocol::Type::AF_UNIX_SOCK_STREAM_SERVER:
-        case Protocol::Type::BOOST_TCP_SERVER:
-        case Protocol::Type::BOOST_UDP_SERVER:
+        case NXProtocol::Type::AF_INET_TCP_SERVER:
+        case NXProtocol::Type::AF_INET_UDP_SERVER:
+        case NXProtocol::Type::AF_UNIX_SOCK_DGRAM_SERVER:
+        case NXProtocol::Type::AF_UNIX_SOCK_STREAM_SERVER:
+        case NXProtocol::Type::BOOST_TCP_SERVER:
+        case NXProtocol::Type::BOOST_UDP_SERVER:
             Log::error(header(), "This function cannot be called via server protocol");
             return;
 
-        case Protocol::Type::UNKNOWN:
+        case NXProtocol::Type::UNKNOWN:
             Log::error(header(), "This function called via unknown protocol");
             return;
     }

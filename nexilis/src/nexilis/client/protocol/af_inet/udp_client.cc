@@ -49,7 +49,7 @@ UDPClient::~UDPClient()
 
 UDPClient::UDPClient(UDPClient&& other)
     : NxClass(std::move(other)),
-      Protocol(std::move(other)),
+      NXProtocol(std::move(other)),
       ClientProtocol(std::move(other)),
       m_clientSocket(std::move(other.m_clientSocket)),
       m_serverAddr(std::move(other.m_serverAddr)),
@@ -73,7 +73,7 @@ UDPClient& UDPClient::operator=(UDPClient&& other)
     if (this != &other)
     {
         static_cast<NxClass&>(*this) = static_cast<NxClass&&>(other);
-        static_cast<Protocol&>(*this) = static_cast<Protocol&&>(other);
+        static_cast<NXProtocol&>(*this) = static_cast<NXProtocol&&>(other);
         static_cast<ClientProtocol&>(*this) = static_cast<ClientProtocol&&>(other);
 
         m_clientSocket = std::move(other.m_clientSocket);

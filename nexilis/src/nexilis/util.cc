@@ -530,15 +530,15 @@ void Util::deleteIfExists(const std::filesystem::path& filePath)
     }
 }
 
-std::string Util::getPortFilePath(Protocol::Type protocol_type)
+std::string Util::getPortFilePath(NXProtocol::Type protocol_type)
 {
     std::filesystem::path port_file = getNexilisTempPath() /
-                                      (Protocol::typeToString(protocol_type) + "_port.txt");
+                                      (NXProtocol::typeToString(protocol_type) + "_port.txt");
 
     return port_file.string();
 }
 
-bool Util::writePortToFile(uint16_t port, Protocol::Type protocol_type)
+bool Util::writePortToFile(uint16_t port, NXProtocol::Type protocol_type)
 {
     std::string file_path = getPortFilePath(protocol_type);
 
@@ -565,7 +565,7 @@ bool Util::writePortToFile(uint16_t port, Protocol::Type protocol_type)
     }
 }
 
-std::optional<uint16_t> Util::readPortFromFile(Protocol::Type protocol_type)
+std::optional<uint16_t> Util::readPortFromFile(NXProtocol::Type protocol_type)
 {
     std::string file_path = getPortFilePath(protocol_type);
 
@@ -601,7 +601,7 @@ std::optional<uint16_t> Util::readPortFromFile(Protocol::Type protocol_type)
     }
 }
 
-void Util::cleanupPortFile(Protocol::Type protocol_type)
+void Util::cleanupPortFile(NXProtocol::Type protocol_type)
 {
     std::string file_path = getPortFilePath(protocol_type);
     deleteIfExists(file_path);

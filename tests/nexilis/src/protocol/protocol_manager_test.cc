@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include <nexilis/protocol.hh>
+#include <nexilis/nx_protocol.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/server_config.hh>
 #include <nexilis/tcp_client.hh>
@@ -45,7 +45,7 @@ TEST_F(ProtocolManagerTest, CreateProtocol_UnixStreamServer)
 
     auto unix_stream_server = manager.createProtocol<nexilis::server::af_unix::StreamServer>(settings, "/tmp/nexilis/stream");
 
-    EXPECT_EQ(unix_stream_server.getType(), nexilis::Protocol::Type::AF_UNIX_SOCK_STREAM_SERVER);
+    EXPECT_EQ(unix_stream_server.getType(), nexilis::NXProtocol::Type::AF_UNIX_SOCK_STREAM_SERVER);
     EXPECT_EQ(unix_stream_server.getSettings().getMode(), nexilis::server::AuthenticationMode::password_protected);
     EXPECT_EQ(unix_stream_server.getSettings().getPassphrase(), "salasana");
     EXPECT_EQ(unix_stream_server.getSettings().getRootPassword(), "root");
@@ -60,7 +60,7 @@ TEST_F(ProtocolManagerTest, CreateProtocol_UnixDgramServer)
 
     auto unix_dgram_server = manager.createProtocol<nexilis::server::af_unix::DgramServer>(settings, "/tmp/nexilis/dgram");
 
-    EXPECT_EQ(unix_dgram_server.getType(), nexilis::Protocol::Type::AF_UNIX_SOCK_DGRAM_SERVER);
+    EXPECT_EQ(unix_dgram_server.getType(), nexilis::NXProtocol::Type::AF_UNIX_SOCK_DGRAM_SERVER);
     EXPECT_EQ(unix_dgram_server.getSettings().getMode(), nexilis::server::AuthenticationMode::password_protected);
     EXPECT_EQ(unix_dgram_server.getSettings().getPassphrase(), "salasana");
     EXPECT_EQ(unix_dgram_server.getSettings().getRootPassword(), "root");
@@ -75,7 +75,7 @@ TEST_F(ProtocolManagerTest, CreateProtocol_AFInetUDPServer)
 
     auto inet_udp_server = manager.createProtocol<nexilis::server::af_inet::UDPServer>(settings, 54301);
 
-    EXPECT_EQ(inet_udp_server.getType(), nexilis::Protocol::Type::AF_INET_UDP_SERVER);
+    EXPECT_EQ(inet_udp_server.getType(), nexilis::NXProtocol::Type::AF_INET_UDP_SERVER);
     EXPECT_EQ(inet_udp_server.getPort(), 54301);
     EXPECT_EQ(inet_udp_server.getSettings().getMode(), nexilis::server::AuthenticationMode::password_protected);
     EXPECT_EQ(inet_udp_server.getSettings().getPassphrase(), "salasana");
@@ -91,7 +91,7 @@ TEST_F(ProtocolManagerTest, CreateProtocol_BoostTCPServer)
 
     auto boost_tcp_server = manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
 
-    EXPECT_EQ(boost_tcp_server.getType(), nexilis::Protocol::Type::BOOST_TCP_SERVER);
+    EXPECT_EQ(boost_tcp_server.getType(), nexilis::NXProtocol::Type::BOOST_TCP_SERVER);
     EXPECT_EQ(boost_tcp_server.getSettings().getMode(), nexilis::server::AuthenticationMode::password_protected);
     EXPECT_EQ(boost_tcp_server.getSettings().getPassphrase(), "salasana");
     EXPECT_EQ(boost_tcp_server.getSettings().getRootPassword(), "root");
@@ -107,7 +107,7 @@ TEST_F(ProtocolManagerTest, CreateProtocol_RootTCPClient)
     nexilis::client::ClientAPI client_api(config);
     auto tcp_client = manager.createProtocol<nexilis::TCPClient>(client_api);
 
-    EXPECT_EQ(tcp_client.getType(), nexilis::Protocol::Type::BOOST_TCP_CLIENT);
+    EXPECT_EQ(tcp_client.getType(), nexilis::NXProtocol::Type::BOOST_TCP_CLIENT);
 }
 
 TEST_F(ProtocolManagerTest, CreateProtocol_RootUDPClient)
@@ -120,7 +120,7 @@ TEST_F(ProtocolManagerTest, CreateProtocol_RootUDPClient)
     nexilis::client::ClientAPI client_api(config);
     auto udp_client = manager.createProtocol<nexilis::UDPClient>(client_api);
 
-    EXPECT_EQ(udp_client.getType(), nexilis::Protocol::Type::BOOST_UDP_CLIENT);
+    EXPECT_EQ(udp_client.getType(), nexilis::NXProtocol::Type::BOOST_UDP_CLIENT);
 }
 
 TEST_F(ProtocolManagerTest, CreateProtocol_AFInetUDPClient)
@@ -134,7 +134,7 @@ TEST_F(ProtocolManagerTest, CreateProtocol_AFInetUDPClient)
     nexilis::client::ClientAPI client_api(config);
     auto udp_client = manager.createProtocol<nexilis::client::af_inet::UDPClient>(client_api);
 
-    EXPECT_EQ(udp_client.getType(), nexilis::Protocol::Type::AF_INET_UDP_CLIENT);
+    EXPECT_EQ(udp_client.getType(), nexilis::NXProtocol::Type::AF_INET_UDP_CLIENT);
 }
 
 TEST_F(ProtocolManagerTest, GetProtocolCount_Empty)
@@ -183,12 +183,12 @@ TEST_F(ProtocolManagerTest, HasProtocolType_Found)
     settings.setRootPassword("root");
 
     manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
-    EXPECT_TRUE(manager.hasProtocolType(nexilis::Protocol::Type::BOOST_TCP_SERVER));
+    EXPECT_TRUE(manager.hasProtocolType(nexilis::NXProtocol::Type::BOOST_TCP_SERVER));
 }
 
 TEST_F(ProtocolManagerTest, HasProtocolType_NotFound)
 {
-    EXPECT_FALSE(manager.hasProtocolType(nexilis::Protocol::Type::BOOST_UDP_SERVER));
+    EXPECT_FALSE(manager.hasProtocolType(nexilis::NXProtocol::Type::BOOST_UDP_SERVER));
 }
 
 TEST_F(ProtocolManagerTest, FindById_Found)
@@ -204,11 +204,11 @@ TEST_F(ProtocolManagerTest, FindById_Found)
     bool found = false;
     for (const auto& item : manager)
     {
-        if (item.getType() == nexilis::Protocol::Type::BOOST_TCP_SERVER)
+        if (item.getType() == nexilis::NXProtocol::Type::BOOST_TCP_SERVER)
         {
             const auto* data = manager.findById(item.getId());
             ASSERT_NE(data, nullptr);
-            EXPECT_EQ(data->getType(), nexilis::Protocol::Type::BOOST_TCP_SERVER);
+            EXPECT_EQ(data->getType(), nexilis::NXProtocol::Type::BOOST_TCP_SERVER);
             found = true;
         }
     }
@@ -228,15 +228,15 @@ TEST_F(ProtocolManagerTest, FindByType_Found)
     settings.setRootPassword("root");
 
     manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
-    auto results = manager.findByType(nexilis::Protocol::Type::BOOST_TCP_SERVER);
+    auto results = manager.findByType(nexilis::NXProtocol::Type::BOOST_TCP_SERVER);
 
     ASSERT_EQ(results.size(), 1u);
-    EXPECT_EQ(results[0]->getType(), nexilis::Protocol::Type::BOOST_TCP_SERVER);
+    EXPECT_EQ(results[0]->getType(), nexilis::NXProtocol::Type::BOOST_TCP_SERVER);
 }
 
 TEST_F(ProtocolManagerTest, FindByType_NotFound)
 {
-    auto results = manager.findByType(nexilis::Protocol::Type::BOOST_UDP_SERVER);
+    auto results = manager.findByType(nexilis::NXProtocol::Type::BOOST_UDP_SERVER);
     EXPECT_TRUE(results.empty());
 }
 
@@ -251,10 +251,10 @@ TEST_F(ProtocolManagerTest, FindByType_Multiple)
     manager.createProtocol<nexilis::server::af_unix::StreamServer>(settings, "/tmp/nexilis/stream");
     manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
 
-    auto tcp_results = manager.findByType(nexilis::Protocol::Type::BOOST_TCP_SERVER);
+    auto tcp_results = manager.findByType(nexilis::NXProtocol::Type::BOOST_TCP_SERVER);
     EXPECT_EQ(tcp_results.size(), 2u);
 
-    auto unix_results = manager.findByType(nexilis::Protocol::Type::AF_UNIX_SOCK_STREAM_SERVER);
+    auto unix_results = manager.findByType(nexilis::NXProtocol::Type::AF_UNIX_SOCK_STREAM_SERVER);
     EXPECT_EQ(unix_results.size(), 1u);
 }
 
@@ -276,7 +276,7 @@ TEST_F(ProtocolManagerTest, Iterator_NonEmpty)
     size_t count = 0;
     for (const auto& item : manager)
     {
-        EXPECT_NE(item.getType(), nexilis::Protocol::Type::UNKNOWN);
+        EXPECT_NE(item.getType(), nexilis::NXProtocol::Type::UNKNOWN);
         ++count;
     }
     EXPECT_EQ(count, 2u);

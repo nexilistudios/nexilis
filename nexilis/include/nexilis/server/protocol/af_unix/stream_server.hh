@@ -19,7 +19,7 @@
 #ifndef NEXILIS_AF_UNIX_SOCK_STREAM_SERVER_HH
 #define NEXILIS_AF_UNIX_SOCK_STREAM_SERVER_HH
 
-#include <nexilis/protocol.hh>
+#include <nexilis/nx_protocol.hh>
 #include <nexilis/server/server_config.hh>
 #include <nexilis/server/server_protocol.hh>
 
@@ -28,7 +28,7 @@
 namespace nexilis::server::af_unix
 {
 
-class StreamServer : public Protocol,
+class StreamServer : public NXProtocol,
                      public ServerProtocol
 {
 public:
@@ -50,16 +50,16 @@ public:
     /// Deleted copy assignment.
     StreamServer& operator=(const StreamServer& other) = delete;
 
-    /// Protocol start() implementation.
+    /// NXProtocol start() implementation.
     void start() override;
 
     void stop() override
     {
     }
 
-    Type getType() override
+    NXProtocol::Type getType() override
     {
-        return Type::AF_UNIX_SOCK_STREAM_SERVER;
+        return NXProtocol::Type::AF_UNIX_SOCK_STREAM_SERVER;
     }
 
 private:

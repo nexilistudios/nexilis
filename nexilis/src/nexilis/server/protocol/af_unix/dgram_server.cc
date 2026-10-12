@@ -51,7 +51,7 @@ DgramServer::~DgramServer()
 }
 
 DgramServer::DgramServer(DgramServer&& other)
-    : Protocol(std::move(other)),
+    : NXProtocol(std::move(other)),
       ServerProtocol(std::move(other)),
       m_socketPath(std::move(other.m_socketPath)),
       m_serverSocket(std::move(other.m_serverSocket)),
@@ -74,7 +74,7 @@ DgramServer& DgramServer::operator=(DgramServer&& other)
 {
     if (this != &other)
     {
-        static_cast<Protocol&>(*this) = static_cast<Protocol&&>(other);
+        static_cast<NXProtocol&>(*this) = static_cast<NXProtocol&&>(other);
         static_cast<ServerProtocol&>(*this) = static_cast<ServerProtocol&&>(other);
 
         m_socketPath = std::move(other.m_socketPath);

@@ -20,7 +20,7 @@
 #include <nexilis/logger/log_level.hh>
 #include <nexilis/nexilis_constants.hh>
 #include <nexilis/nx_data.hh>
-#include <nexilis/protocol.hh>
+#include <nexilis/nx_protocol.hh>
 #include <nexilis/server/config.hh>
 #include <nexilis/types/vector2.hh>
 #include <nexilis/types/vector3.hh>
@@ -211,16 +211,16 @@ public:
     /// \defgroup PortHandling
 
     /// \ingroup PortHandling
-    static std::string getPortFilePath(Protocol::Type protocol_type);
+    static std::string getPortFilePath(NXProtocol::Type protocol_type);
 
     /// \ingroup PortHandling
-    static bool writePortToFile(uint16_t port, Protocol::Type protocol_type);
+    static bool writePortToFile(uint16_t port, NXProtocol::Type protocol_type);
 
     /// \ingroup PortHandling
-    static std::optional<uint16_t> readPortFromFile(Protocol::Type protocol_type);
+    static std::optional<uint16_t> readPortFromFile(NXProtocol::Type protocol_type);
 
     /// \ingroup PortHandling
-    static void cleanupPortFile(Protocol::Type protocol_type);
+    static void cleanupPortFile(NXProtocol::Type protocol_type);
 };
 
 } // namespace nexilis

@@ -17,7 +17,7 @@
 #ifndef NEXILIS_CONNECTION_MANAGER_HH
 #define NEXILIS_CONNECTION_MANAGER_HH
 
-#include <nexilis/protocol.hh>
+#include <nexilis/nx_protocol.hh>
 
 #include <type_traits>
 #include <vector>
@@ -35,7 +35,7 @@ struct has_get_type : std::false_type
 
 template <typename T>
 struct has_get_type<T, std::void_t<decltype(std::declval<T>().getType())>>
-    : std::is_same<decltype(std::declval<T>().getType()), Protocol::Type>
+    : std::is_same<decltype(std::declval<T>().getType()), NXProtocol::Type>
 {
 };
 
@@ -48,7 +48,7 @@ public:
     {
     public:
         /// Constructor.
-        explicit ProtocolData(Protocol::Type type);
+        explicit ProtocolData(NXProtocol::Type type);
 
         /// Copy constructor.
         ProtocolData(const ProtocolData& other);
@@ -62,8 +62,8 @@ public:
         /// Move assignment operator.
         ProtocolData& operator=(ProtocolData&& other);
 
-        /// Get the Protocol::Type.
-        Protocol::Type getType() const
+        /// Get the NXProtocol::Type.
+        NXProtocol::Type getType() const
         {
             return m_type;
         }
@@ -75,19 +75,19 @@ public:
         }
 
     private:
-        Protocol::Type m_type;
+        NXProtocol::Type m_type;
         size_t m_id;
     };
 
     /// Create a new protocol and register it.
-    /// The type T must either derive from Protocol or have a getType() method
-    /// that returns Protocol::Type.
+    /// The type T must either derive from NXProtocol or have a getType() method
+    /// that returns NXProtocol::Type.
     template <typename T, typename... Args>
     T createProtocol(Args&&... args)
     {
         static_assert(detail::has_get_type<T>::value,
-                      "Type must derive from nexilis::Protocol or have a "
-                      "getType() method returning Protocol::Type");
+                      "Type must derive from nexilis::NXProtocol or have a "
+                      "getType() method returning NXProtocol::Type");
 
         // This is little hacky. I'd much rather prefer if this was std::move call.
         // However this would require that the parameters cannot be references.
@@ -111,13 +111,13 @@ public:
     bool hasProtocol(size_t id) const;
 
     /// Check if a protocol with the given type exists.
-    bool hasProtocolType(Protocol::Type type) const;
+    bool hasProtocolType(NXProtocol::Type type) const;
 
     /// Find a protocol data by id. Returns nullptr if not found.
     const ProtocolData* findById(size_t id) const;
 
     /// Find all protocol data entries matching the given type.
-    std::vector<const ProtocolData*> findByType(Protocol::Type type) const;
+    std::vector<const ProtocolData*> findByType(NXProtocol::Type type) const;
 
     std::vector<ProtocolData>::const_iterator begin() const
     {

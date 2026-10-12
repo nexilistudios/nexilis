@@ -45,7 +45,7 @@ UDPClient::~UDPClient()
 
 UDPClient::UDPClient(UDPClient&& other)
     : NxClass(std::move(other)),
-      Protocol(std::move(other)),
+      NXProtocol(std::move(other)),
       ClientProtocol(std::move(other)),
       m_stopped(std::move(other.m_stopped) ? std::move(other.m_stopped) : std::make_unique<std::atomic<bool>>(false)),
       m_ioContext(std::move(other.m_ioContext)),
@@ -69,7 +69,7 @@ UDPClient& UDPClient::operator=(UDPClient&& other)
     {
         static_cast<NxClass&>(*this) = static_cast<NxClass&&>(other);
         static_cast<ClientProtocol&>(*this) = static_cast<ClientProtocol&&>(other);
-        static_cast<Protocol&>(*this) = static_cast<Protocol&&>(other);
+        static_cast<NXProtocol&>(*this) = static_cast<NXProtocol&&>(other);
 
         m_stopped = std::move(other.m_stopped);
         if (!m_stopped)

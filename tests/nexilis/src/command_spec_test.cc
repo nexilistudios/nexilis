@@ -51,7 +51,7 @@ TEST_F(CommandSpecTest, Constructs)
 {
     EXPECT_EQ(spec.user.getId(), 1);
     EXPECT_EQ(spec.user.getUsername(), "");
-    EXPECT_EQ(spec.protocol.getType(), Protocol::Type::UNKNOWN);
+    EXPECT_EQ(spec.protocol.getType(), NXProtocol::Type::UNKNOWN);
 }
 
 TEST_F(CommandSpecTest, ArgsHelper)

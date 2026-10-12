@@ -21,7 +21,7 @@
 #include <nexilis/movement/movement_2D.hh>
 #include <nexilis/movement/movement_3D.hh>
 #include <nexilis/nx_class.hh>
-#include <nexilis/protocol.hh>
+#include <nexilis/nx_protocol.hh>
 #include <nexilis/server/command/command_result.hh>
 #include <nexilis/server/room.hh>
 #include <nexilis/server/server_config.hh>
@@ -68,7 +68,7 @@ public:
     /// \param protocol The protocol that was used in receiving the message.
     /// \param messageId The unique identifier for the message.
     /// \return Result from reading the command.
-    CommandResult read(const nx_data& command, User& user, Protocol& protocol, uint64_t messageId);
+    CommandResult read(const nx_data& command, User& user, NXProtocol& protocol, uint64_t messageId);
 
     /// Read the command from client.
     /// \param command_data The data for the command
@@ -77,7 +77,7 @@ public:
     /// \param protocol The protocol that was used in receiving the message.
     /// \param messageId The unique identifier for the message.
     /// \return Result from reading the command.
-    CommandResult read(const char* command_data, size_t length, User& client, Protocol& protocol, uint64_t messageId);
+    CommandResult read(const char* command_data, size_t length, User& client, NXProtocol& protocol, uint64_t messageId);
 
     ServerConfig& getServerConfig()
     {
@@ -93,10 +93,10 @@ public:
     static nx_data clientMessageData(CommandType cmd, const std::string& type, uint64_t message_id, const ClientMsgType& params);
 
     /// Send message to every protocol that is avainable for a client.
-    static bool sendMessageToClient(nx_data data, User& user, Protocol& protocol);
+    static bool sendMessageToClient(nx_data data, User& user, NXProtocol& protocol);
 
     /// Send message in room context.
-    static bool sendRoomCommand(const nx_data& data, User& user, Protocol& protocol);
+    static bool sendRoomCommand(const nx_data& data, User& user, NXProtocol& protocol);
 
     /// Create a serverside package for commands happening inside a room.
     /// This function is expected to be called by ServerImpl room functions.

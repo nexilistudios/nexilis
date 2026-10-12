@@ -19,6 +19,7 @@
 
 #include <nexilis/movement/movement_2D.hh>
 #include <nexilis/movement/movement_3D.hh>
+#include <nexilis/nx_protocol.hh>
 #include <nexilis/server/server_config.hh>
 #include <nexilis/server/user.hh>
 
@@ -40,8 +41,8 @@ public:
     static double linear(double progress, double totalDistance);
 
     /// 2D movement thread.
-    static std::thread object2D(std::unique_ptr<Movement2D> movement, User& user, Protocol& protocol);
-    static std::thread object3D(std::unique_ptr<Movement3D> movement, User& user, Protocol& protocol);
+    static std::thread object2D(std::unique_ptr<Movement2D> movement, User& user, NXProtocol& protocol);
+    static std::thread object3D(std::unique_ptr<Movement3D> movement, User& user, NXProtocol& protocol);
 
 private:
     static ServerConfig* m_settings;

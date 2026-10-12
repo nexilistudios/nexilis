@@ -18,8 +18,8 @@
 #define NEXILIS_BOOST_TCP_SERVER_HH
 
 #include <nexilis/nx_class.hh>
+#include <nexilis/nx_protocol.hh>
 #include <nexilis/ports.hh>
-#include <nexilis/protocol.hh>
 #include <nexilis/server/message/message_handler.hh>
 #include <nexilis/server/server_config.hh>
 #include <nexilis/server/server_protocol.hh>
@@ -33,7 +33,7 @@
 namespace nexilis::server::nxboost
 {
 
-class TCPServer : public Protocol,
+class TCPServer : public NXProtocol,
                   public ServerProtocol,
                   public NxClass
 {
@@ -56,16 +56,16 @@ public:
     /// Deleted move assignment operator.
     TCPServer& operator=(const TCPServer&) = delete;
 
-    /// Protocol::start() implementation.
+    /// NXProtocol::start() implementation.
     void start() override;
 
-    /// Protocol::stop() implementation.
+    /// NXProtocol::stop() implementation.
     void stop() override;
 
-    /// Protocol::getType() implementation.
-    Type getType() override
+    /// NXProtocol::getType() implementation.
+    NXProtocol::Type getType() override
     {
-        return Type::BOOST_TCP_SERVER;
+        return NXProtocol::Type::BOOST_TCP_SERVER;
     }
 
     /// Get the port where the server is running.

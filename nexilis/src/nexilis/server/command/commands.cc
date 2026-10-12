@@ -20,7 +20,7 @@
 namespace nexilis::server
 {
 
-DefaultArgs::DefaultArgs(User& user, Protocol& protocol, const nx_data& data, size_t messageId)
+DefaultArgs::DefaultArgs(User& user, NXProtocol& protocol, const nx_data& data, size_t messageId)
     : m_user(user),
       m_protocol(protocol),
       m_data(data),
