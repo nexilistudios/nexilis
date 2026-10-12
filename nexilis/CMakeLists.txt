@@ -187,6 +187,7 @@ add_library(nexilisc SHARED ${NEXILISC_SOURCES})
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set_target_properties(nexilis nexilisc PROPERTIES
         BUILD_RPATH_USE_ORIGIN TRUE
+        BUILD_RPATH "$ORIGIN"
         INSTALL_RPATH "$ORIGIN")
 endif()
 

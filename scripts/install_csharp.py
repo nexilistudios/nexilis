@@ -20,6 +20,7 @@ import shutil
 import platform
 import argparse
 import subprocess
+import re
 from pathlib import Path
 
 
@@ -31,12 +32,9 @@ def clean_output_dir(path):
 
     print(f"Cleaning {path}")
     for f in path.glob("**/*"):
-        if f.is_file() and f.suffix.lower() in (
-            ".dll",
-            ".so",
-            ".dylib",
-            ".pdb",
-            ".mdb",
+        if f.is_file() and (
+            f.suffix.lower() in (".dll", ".so", ".dylib", ".pdb", ".mdb")
+            or ".so." in f.name
         ):
             f.unlink()
             print(f"Removed: {f}")
@@ -65,6 +63,82 @@ def build_native(nexilis_root, target_platform, build_type):
     return build_dir
 
 
+def boost_runtime_libraries(build_dir, native_libraries, target_platform):
+    """Find dynamically linked Boost libraries needed beside the native binaries."""
+    if target_platform == "Linux":
+        dependencies = {}
+        for library in native_libraries:
+            result = subprocess.run(
+                ["ldd", str(library)], check=True, capture_output=True, text=True
+            )
+            for line in result.stdout.splitlines():
+                parts = line.strip().split()
+                if not parts or not parts[0].startswith("libboost_"):
+                    continue
+                if len(parts) < 3 or parts[1] != "=>" or parts[2] == "not":
+                    raise FileNotFoundError(
+                        f"Boost dependency cannot be resolved: {line}"
+                    )
+                source = Path(parts[2])
+                if not source.is_file():
+                    raise FileNotFoundError(f"Boost dependency not found: {source}")
+                dependencies[parts[0]] = source
+        return dependencies
+
+    if target_platform == "Windows":
+        # The submodule build places DLLs in the build tree. System Boost DLLs
+        # may instead be on PATH, so follow the imports reported by objdump.
+        available = {
+            path.name.lower(): path for path in build_dir.rglob("*.dll")
+        }
+        objdump = shutil.which("objdump")
+        dumpbin = shutil.which("dumpbin") if not objdump else None
+        dependencies = {}
+        pending = list(native_libraries)
+        while pending and (objdump or dumpbin):
+            library = pending.pop()
+            command = (
+                [objdump, "-p", str(library)]
+                if objdump
+                else [dumpbin, "/DEPENDENTS", str(library)]
+            )
+            result = subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            imported = (
+                re.findall(r"DLL Name:\s*(\S+)", result.stdout)
+                if objdump
+                else re.findall(r"^\s*(\S+\.dll)\s*$", result.stdout, re.I | re.M)
+            )
+            for name in imported:
+                if "boost_" not in name.lower() or name.lower() in dependencies:
+                    continue
+                source = available.get(name.lower())
+                if source is None:
+                    source = next(
+                        (
+                            Path(folder) / name
+                            for folder in os.get_exec_path()
+                            if (Path(folder) / name).is_file()
+                        ),
+                        None,
+                    )
+                if source is None:
+                    raise FileNotFoundError(f"Boost dependency not found: {name}")
+                dependencies[name.lower()] = source
+                pending.append(source)
+        if not (objdump or dumpbin):
+            dependencies = {
+                name: path for name, path in available.items() if "boost_" in name
+            }
+        return {path.name: path for path in dependencies.values()}
+
+    return {}
+
+
 def deploy_native(output_path, build_dir, target_platform, arch):
     """Deploy build artifacts to output directory"""
     libs = (
@@ -76,12 +150,17 @@ def deploy_native(output_path, build_dir, target_platform, arch):
     target_dir = output_path / target_platform / arch
     target_dir.mkdir(parents=True, exist_ok=True)
 
+    native_libraries = [build_dir / name for name in libs]
+    for library in native_libraries:
+        if not library.is_file():
+            raise FileNotFoundError(f"Native library not found at {library}")
+
+    runtime_libraries = boost_runtime_libraries(
+        build_dir, native_libraries, target_platform
+    )
     deployed = []
     for p in libs:
         source_path = build_dir / p
-
-        if not source_path.exists():
-            raise FileNotFoundError(f"Native library not found at {source_path}")
 
         target_path = target_dir / p
 
@@ -95,6 +174,11 @@ def deploy_native(output_path, build_dir, target_platform, arch):
 
         print(f"Successfully deployed {p} to {target_path}")
         deployed.append(target_path)
+
+    for name, source_path in runtime_libraries.items():
+        target_path = target_dir / name
+        shutil.copy2(source_path, target_path)
+        print(f"Successfully deployed {name} to {target_path}")
 
     return deployed[0]
 
