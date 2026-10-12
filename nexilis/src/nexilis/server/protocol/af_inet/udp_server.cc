@@ -284,7 +284,7 @@ void UDPServer::receiveFromClients()
 
             if (result == CommandResult::success)
             {
-                Log::info("UDPServer: Passed");
+                Log::debug("UDPServer: Passed");
             }
         }
         else

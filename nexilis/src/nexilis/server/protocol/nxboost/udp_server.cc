@@ -175,7 +175,7 @@ void UDPServer::receiveFromClients()
             }
 
             std::string address = m_remoteEndpoint.address().to_string();
-            Log::info("Received from ", address, bytes_received, " bytes.", " Data: ", m_receiveBuffer.data());
+            Log::debug("Received from ", address, bytes_received, " bytes.", " Data: ", m_receiveBuffer.data());
 
             // Create a new buffer containing only the received bytes.
             nx_data received_message(m_receiveBuffer.begin(), m_receiveBuffer.begin() + bytes_received);

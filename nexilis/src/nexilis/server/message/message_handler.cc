@@ -142,7 +142,7 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
             {
                 if (user->hasCommonAccess())
                 {
-                    Log::info(header(), "Message from known user");
+                    Log::debug(header(), "Message from known user");
                     return std::make_unique<Message>(handlePayload(payload, user, address));
                 }
                 // Message from verified client that has no access.
