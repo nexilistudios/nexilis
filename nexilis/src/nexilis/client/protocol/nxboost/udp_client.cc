@@ -119,6 +119,8 @@ void UDPClient::start()
         m_ioContextThread = std::thread([this]()
                                         { m_ioContext->run(); });
         m_socket.open(boost::asio::ip::udp::v4());
+        // Windows rejects receive_from on an unbound socket (WSAEINVAL).
+        m_socket.bind(boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), 0));
         m_receiveMessageThread = std::thread(&UDPClient::receiveLoop, this);
 
         ClientProtocol::start(getType());
@@ -198,7 +200,19 @@ void UDPClient::receiveLoop()
 {
     while (m_socket.is_open())
     {
-        std::size_t receivedBytes = m_socket.receive_from(boost::asio::buffer(m_receiveBuffer), m_remoteEndpoint);
+        boost::system::error_code recvEc;
+        std::size_t receivedBytes = m_socket.receive_from(boost::asio::buffer(m_receiveBuffer), m_remoteEndpoint, 0, recvEc);
+
+        if (recvEc)
+        {
+            if (m_stopped->load() || recvEc == boost::asio::error::operation_aborted ||
+                recvEc == boost::asio::error::bad_descriptor)
+            {
+                break;
+            }
+            Log::error("BoostUDPClient receive failed: ", recvEc.message());
+            continue;
+        }
 
         if (m_stopped->load())
         {
