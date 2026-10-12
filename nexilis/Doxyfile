@@ -2,7 +2,7 @@
 
 # Project settings
 PROJECT_NAME           = "nexilis"
-PROJECT_NUMBER         = "0.0.4-unstable"
+PROJECT_NUMBER         = "0.0.5-unstable"
 PROJECT_BRIEF          = "Nexilis Client/Server API documentation."
 
 OUTPUT_DIRECTORY       = docs
