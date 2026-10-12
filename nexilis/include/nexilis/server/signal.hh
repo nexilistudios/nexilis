@@ -19,6 +19,7 @@
 
 #include <atomic>
 #include <functional>
+#include <utility>
 
 namespace nexilis::server
 {
@@ -29,7 +30,8 @@ class SignalHandler
 {
 public:
     /// Install signal handlers for SIGINT and SIGTERM.
-    /// On Windows, installs a console control handler for CTRL_C_EVENT and CTRL_CLOSE_EVENT.
+    /// On Windows, installs a console control handler for Ctrl+C, Ctrl+Break,
+    /// console close, logoff, and system shutdown events.
     /// This function is idempotent; calling it multiple times has no additional effect.
     static void install();
 
@@ -45,14 +47,14 @@ public:
     /// Allows the application to continue running after a signal was received.
     static void clearShutdownRequested() noexcept;
 
-    /// Set a custom callback to be invoked when a shutdown signal is received.
-    /// The callback is invoked from the signal handler context (async-signal-safe only).
+    /// Set a callback to be invoked once by waitForShutdown() for each shutdown request.
+    /// The callback runs on the waiting thread, outside the OS signal/control handler.
+    /// Call waitForShutdown() to dispatch the callback.
     /// \param callback Function to call on shutdown signal. Pass nullptr to remove.
     static void setShutdownCallback(std::function<void()> callback);
 
     /// Internal state for signal handling.
     static std::atomic<bool> s_shutdownRequested;
-    static std::function<void()> s_shutdownCallback;
 };
 
 /// Free-function API for simple signal handling.
@@ -87,7 +89,7 @@ inline void clearShutdownRequested() noexcept
 }
 
 /// Set a custom callback to be invoked when a shutdown signal is received.
-/// The callback is invoked from the signal handler context (async-signal-safe only).
+/// The callback runs on the thread calling waitForShutdown().
 /// \param callback Function to call on shutdown signal. Pass nullptr to remove.
 /// \see SignalHandler::setShutdownCallback
 inline void setShutdownCallback(std::function<void()> callback)

@@ -25,3 +25,12 @@ See [weekly releases](releases.md) for automated patch versioning and Doxygen
 website publishing.
 
 The Boost TCP client resolves server hostnames for its authentication and session connections. The Boost UDP client also resolves IPv4 hostnames before sending gameplay packets. A failed TCP session-port connection changes the client protocol status to `error` so callers can report the failure.
+
+Server applications can call `nexilis::server::installSignalHandlers()` and then
+`nexilis::server::waitForShutdown()` for graceful shutdown. On Windows this handles
+Ctrl+C, Ctrl+Break, console close, logoff, and system shutdown control events. On POSIX
+systems it handles SIGINT, SIGTERM, and SIGHUP. A shutdown callback registered
+with `setShutdownCallback()` runs once per request on the thread calling
+`waitForShutdown()`; call `clearShutdownRequested()` before waiting for another
+request. Console close and system shutdown events may impose a platform deadline
+on cleanup.

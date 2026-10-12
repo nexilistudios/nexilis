@@ -17,15 +17,17 @@
 #include <nexilis/server/signal.hh>
 
 #include <atomic>
-#include <condition_variable>
+#include <cerrno>
 #include <csignal>
 #include <functional>
 #include <mutex>
+#include <system_error>
+#include <utility>
 
 #if defined(_WIN32)
 #include <windows.h>
 #else
-#include <pthread.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
 #endif
@@ -34,7 +36,19 @@ namespace nexilis::server
 {
 
 std::atomic<bool> SignalHandler::s_shutdownRequested{false};
-std::function<void()> SignalHandler::s_shutdownCallback{};
+
+namespace
+{
+std::mutex callbackMutex;
+std::function<void()> shutdownCallback;
+std::atomic<bool> callbackDelivered{false};
+
+#if defined(_WIN32)
+HANDLE shutdownEvent = nullptr;
+#else
+int shutdownPipe[2] = {-1, -1};
+#endif
+} // namespace
 
 #if defined(_WIN32)
 
@@ -45,35 +59,61 @@ static BOOL WINAPI consoleCtrlHandler(DWORD ctrlType)
         case CTRL_C_EVENT:
         case CTRL_CLOSE_EVENT:
         case CTRL_BREAK_EVENT:
+        case CTRL_LOGOFF_EVENT:
         case CTRL_SHUTDOWN_EVENT:
             SignalHandler::s_shutdownRequested.store(true, std::memory_order_release);
-            if (SignalHandler::s_shutdownCallback)
-            {
-                SignalHandler::s_shutdownCallback();
-            }
+            SetEvent(shutdownEvent);
             return TRUE;
         default:
             return FALSE;
     }
 }
 
+namespace
+{
+struct ConsoleRegistration
+{
+    ConsoleRegistration()
+    {
+        shutdownEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (shutdownEvent == nullptr)
+            throw std::system_error(static_cast<int>(GetLastError()), std::system_category(),
+                                    "CreateEventW");
+        if (!SetConsoleCtrlHandler(consoleCtrlHandler, TRUE))
+        {
+            const auto error = GetLastError();
+            CloseHandle(shutdownEvent);
+            shutdownEvent = nullptr;
+            throw std::system_error(static_cast<int>(error), std::system_category(),
+                                    "SetConsoleCtrlHandler");
+        }
+    }
+
+    ~ConsoleRegistration()
+    {
+        SetConsoleCtrlHandler(consoleCtrlHandler, FALSE);
+        CloseHandle(shutdownEvent);
+    }
+};
+} // namespace
+
 void SignalHandler::install()
 {
-    static std::once_flag flag;
-    std::call_once(flag, []()
-                   { SetConsoleCtrlHandler(consoleCtrlHandler, TRUE); });
+    static ConsoleRegistration registration;
+    (void)registration;
 }
 
 #else
 
 static void signalHandler(int signum)
 {
+    const int savedErrno = errno;
     (void)signum;
     SignalHandler::s_shutdownRequested.store(true, std::memory_order_release);
-    if (SignalHandler::s_shutdownCallback)
-    {
-        SignalHandler::s_shutdownCallback();
-    }
+    const char wake = 1;
+    const auto result = write(shutdownPipe[1], &wake, 1);
+    (void)result;
+    errno = savedErrno;
 }
 
 void SignalHandler::install()
@@ -81,16 +121,29 @@ void SignalHandler::install()
     static std::once_flag flag;
     std::call_once(flag, []()
                    {
+                       if (pipe(shutdownPipe) != 0)
+                           throw std::system_error(errno, std::generic_category(), "pipe");
+                       const int flags = fcntl(shutdownPipe[1], F_GETFL);
+                       if (flags == -1 || fcntl(shutdownPipe[1], F_SETFL, flags | O_NONBLOCK) == -1)
+                       {
+                           const int error = errno;
+                           close(shutdownPipe[0]);
+                           close(shutdownPipe[1]);
+                           shutdownPipe[0] = shutdownPipe[1] = -1;
+                           throw std::system_error(error, std::generic_category(), "fcntl");
+                       }
                        struct sigaction sa{};
                        sa.sa_handler = signalHandler;
                        sigemptyset(&sa.sa_mask);
                        sa.sa_flags = SA_RESTART;
 
-                       sigaction(SIGINT, &sa, nullptr);
-                       sigaction(SIGTERM, &sa, nullptr);
+                       if (sigaction(SIGINT, &sa, nullptr) != 0 ||
+                           sigaction(SIGTERM, &sa, nullptr) != 0)
+                           throw std::system_error(errno, std::generic_category(), "sigaction");
 
 #ifdef SIGHUP
-                       sigaction(SIGHUP, &sa, nullptr);
+                       if (sigaction(SIGHUP, &sa, nullptr) != 0)
+                           throw std::system_error(errno, std::generic_category(), "sigaction");
 #endif
                    });
 }
@@ -104,24 +157,51 @@ bool SignalHandler::isShutdownRequested() noexcept
 
 void SignalHandler::waitForShutdown()
 {
-    std::mutex mtx;
-    std::condition_variable cv;
+    install();
+#if defined(_WIN32)
+    if (!isShutdownRequested() && WaitForSingleObject(shutdownEvent, INFINITE) != WAIT_OBJECT_0)
+        throw std::system_error(static_cast<int>(GetLastError()), std::system_category(),
+                                "WaitForSingleObject");
+#else
+    while (!isShutdownRequested())
     {
-        std::unique_lock<std::mutex> lock(mtx);
-
-        cv.wait(lock, []()
-                { return SignalHandler::isShutdownRequested(); });
+        char wake;
+        if (read(shutdownPipe[0], &wake, 1) == -1 && errno != EINTR)
+            throw std::system_error(errno, std::generic_category(), "read");
+    }
+#endif
+    if (!callbackDelivered.exchange(true, std::memory_order_acq_rel))
+    {
+        std::function<void()> callback;
+        {
+            std::lock_guard<std::mutex> lock(callbackMutex);
+            callback = shutdownCallback;
+        }
+        if (callback)
+            callback();
     }
 }
 
 void SignalHandler::clearShutdownRequested() noexcept
 {
+#if defined(_WIN32)
     s_shutdownRequested.store(false, std::memory_order_release);
+    if (shutdownEvent != nullptr)
+    {
+        ResetEvent(shutdownEvent);
+        if (s_shutdownRequested.load(std::memory_order_acquire))
+            SetEvent(shutdownEvent);
+    }
+#else
+    s_shutdownRequested.store(false, std::memory_order_release);
+#endif
+    callbackDelivered.store(false, std::memory_order_release);
 }
 
 void SignalHandler::setShutdownCallback(std::function<void()> callback)
 {
-    s_shutdownCallback = std::move(callback);
+    std::lock_guard<std::mutex> lock(callbackMutex);
+    shutdownCallback = std::move(callback);
 }
 
 } // namespace nexilis::server
