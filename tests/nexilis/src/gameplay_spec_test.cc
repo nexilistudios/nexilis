@@ -25,6 +25,8 @@
 
 #include <boost/json/serialize.hpp>
 
+#include <algorithm>
+
 using namespace nexilis;
 
 namespace
@@ -1073,6 +1075,35 @@ TEST_F(GameplaySpecTest, Player3DPositionWithYawUpdatesServerAndBroadcasts)
     EXPECT_FLOAT_EQ(m_sender->getObject3D().getYaw(), 1.25f);
     ASSERT_EQ(targetMessages.size(), 1);
     EXPECT_DOUBLE_EQ(targetMessages[0].at("yaw").as_double(), 1.25);
+}
+
+TEST_F(GameplaySpecTest, JoiningPlayerReceivesExistingPlayerYaw)
+{
+    server::RoomStorage::add(server::Room(RoomData(SENDER_ID, "gameplay_room", ROOM_ID)));
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->joinRoom(SENDER_ID);
+    m_sender->setRoomId(ROOM_ID);
+    m_sender->setBoostTCPSend([](const nx_data&) {});
+    m_sender->getObject3D().setPosition({10.0f, 20.0f, 30.0f});
+    m_sender->getObject3D().setYaw(1.25f);
+
+    auto targetMessages = receivedMessages(*m_target);
+    nx_data joinBytes{static_cast<uint8_t>(CommandType::room),
+                      static_cast<uint8_t>(RoomCommandType::Root::management),
+                      static_cast<uint8_t>(RoomCommandType::Management::join)};
+    auto roomBytes = Util::convertToByteVector(ROOM_ID);
+    joinBytes.insert(joinBytes.end(), roomBytes.begin(), roomBytes.end());
+
+    ASSERT_EQ(read(joinBytes, *m_target), server::CommandResult::success);
+    auto position = std::find_if(targetMessages.begin(), targetMessages.end(),
+                                 [](const auto& message)
+                                 {
+                                     return message.at("type").as_string() == "player_3D" &&
+                                            message.at("action").as_string() == "position";
+                                 });
+    ASSERT_NE(position, targetMessages.end());
+    EXPECT_EQ(Util::toUint64(position->at("client_id")), SENDER_ID);
+    EXPECT_DOUBLE_EQ(position->at("yaw").as_double(), 1.25);
 }
 
 TEST_F(GameplaySpecTest, Player3DDimensionUpdatesServerAndBroadcasts)

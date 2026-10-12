@@ -79,7 +79,8 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
                 {"client_id", boost::json::value(existingClientId)},
                 {"x", boost::json::value(pos.x)},
                 {"y", boost::json::value(pos.y)},
-                {"z", boost::json::value(pos.z)}};
+                {"z", boost::json::value(pos.z)},
+                {"yaw", boost::json::value(existingUser->getObject3D().getYaw())}};
         auto posMsg = Command::clientMessageData(CommandType::room, "player_3D", 0, posParams);
         Command::sendMessageToClient(posMsg, user, protocol);
 

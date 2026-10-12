@@ -46,7 +46,8 @@ may append one float yaw in radians. The server accepts both 12-byte legacy
 positions and 16-byte positions with yaw, then relays `yaw` in its JSON position
 message. Legacy packets use yaw zero. Yaw is measured about the vertical Y axis;
 zero faces world -Z. The C, C#, and Lua position helpers keep sending the legacy
-12-byte form.
+12-byte form. When a client joins a room, the initial position messages for
+existing players include their current yaw.
 
 The `room/player_3D/movement` request similarly accepts its legacy three-float
 velocity plus float delta time, or one additional float yaw. Movement responses
