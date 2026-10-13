@@ -132,7 +132,7 @@ void SignalHandler::install()
                            shutdownPipe[0] = shutdownPipe[1] = -1;
                            throw std::system_error(error, std::generic_category(), "fcntl");
                        }
-                       struct sigaction sa{};
+                       struct sigaction sa;
                        sa.sa_handler = signalHandler;
                        sigemptyset(&sa.sa_mask);
                        sa.sa_flags = SA_RESTART;

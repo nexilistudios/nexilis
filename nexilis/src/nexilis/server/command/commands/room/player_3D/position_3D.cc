@@ -16,6 +16,7 @@
 
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
+#include <nexilis/server/gameplay_limits.hh>
 #include <nexilis/server/room_storage.hh>
 
 #include <cmath>
@@ -44,7 +45,20 @@ CommandResult ServerImpl::room_player3d_position(const DefaultArgs& args)
     if (!std::isfinite(vector.x) || !std::isfinite(vector.y) ||
         !std::isfinite(vector.z) || !std::isfinite(yaw))
         return CommandResult::invalid_input;
-    Log::debug("Position x:", vector.x, " y:", vector.y, " z:", vector.z);
+
+    // Keep the position inside the configured world limits: the
+    // horizontal coordinates and the height are clamped to the
+    // nearest allowed value.
+    const auto& limits = GameplayLimits::get();
+    Vector3f position(limits.clampHorizontal(vector.x),
+                      limits.clampHeight(vector.y),
+                      limits.clampHorizontal(vector.z));
+    if (position.x != vector.x || position.y != vector.y || position.z != vector.z)
+    {
+        Log::warning("Position (", vector.x, ", ", vector.y, ", ", vector.z,
+                     ") clamped to (", position.x, ", ", position.y, ", ", position.z, ")");
+    }
+    Log::debug("Position x:", position.x, " y:", position.y, " z:", position.z);
 
     auto currentRoom = RoomStorage::getRoomById(user.getRoomId());
 
@@ -54,13 +68,13 @@ CommandResult ServerImpl::room_player3d_position(const DefaultArgs& args)
         return CommandResult::failure;
     }
 
-    user.getObject3D().setPosition(vector);
+    user.getObject3D().setPosition(position);
     user.getObject3D().setYaw(yaw);
 
     std::map<std::string, boost::json::value> params{
-            {"x", boost::json::value(vector.x)},
-            {"y", boost::json::value(vector.y)},
-            {"z", boost::json::value(vector.z)},
+            {"x", boost::json::value(position.x)},
+            {"y", boost::json::value(position.y)},
+            {"z", boost::json::value(position.z)},
             {"yaw", boost::json::value(yaw)}};
 
     auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, args.getData(), params, args.getMessageId());

@@ -17,6 +17,7 @@
 #include <nexilis/server/client_storage.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
+#include <nexilis/server/gameplay_limits.hh>
 #include <nexilis/server/movement.hh>
 #include <nexilis/server/room_storage.hh>
 
@@ -45,11 +46,24 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
     if (!std::isfinite(vec_x) || !std::isfinite(vec_y) || !std::isfinite(vec_z) ||
         !std::isfinite(delta) || !std::isfinite(yaw))
         return CommandResult::invalid_input;
+
+    // Keep the movement speed inside the configured limit by
+    // scaling the velocity down to the maximum.
+    const auto& limits = GameplayLimits::get();
+    float speed = std::sqrt(vec_x * vec_x + vec_y * vec_y + vec_z * vec_z);
+    if (speed > limits.getMaxMovementSpeed())
+    {
+        float scale = limits.getMaxMovementSpeed() / speed;
+        vec_x *= scale;
+        vec_y *= scale;
+        vec_z *= scale;
+        Log::warning("Movement speed ", speed, " clamped to ", limits.getMaxMovementSpeed());
+    }
     auto movement_vector = Vector3f(vec_x, vec_y, vec_z);
     auto mtx = std::make_shared<std::mutex>();
 
     // clang-format off
-    std::thread([mtx, movement_vector, &user, data, &protocol, messageId, delta, yaw]()
+    std::thread([mtx, movement_vector, limits, &user, data, &protocol, messageId, delta, yaw]()
     {
         try
         {
@@ -74,6 +88,19 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
             auto new_pos = Vector3f(current_pos.x + movement_vector.x * delta,
                                     current_pos.y + movement_vector.y * delta,
                                     current_pos.z + movement_vector.z * delta);
+
+            // Keep the resulting position inside the configured
+            // world limits: the horizontal coordinates and the
+            // height are clamped to the nearest allowed value.
+            Vector3f clamped_pos(limits.clampHorizontal(new_pos.x),
+                                 limits.clampHeight(new_pos.y),
+                                 limits.clampHorizontal(new_pos.z));
+            if (clamped_pos.x != new_pos.x || clamped_pos.y != new_pos.y ||
+                clamped_pos.z != new_pos.z)
+            {
+                Log::warning("Movement to (", new_pos.x, ", ", new_pos.y, ", ", new_pos.z,
+                             ") clamped to (", clamped_pos.x, ", ", clamped_pos.y, ", ", clamped_pos.z, ")");
+            }
 
             // Overlap validation: when the room forbids clients from sharing
             // positions, drop this move if the new position would intersect
@@ -111,13 +138,13 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
 
             {
                 std::lock_guard<std::mutex> lock(*mtx);
-                user.getObject3D().setPosition(new_pos);
+                user.getObject3D().setPosition(clamped_pos);
                 user.getObject3D().setYaw(yaw);
                 std::map<std::string, boost::json::value> params
                 {
-                    {"x", boost::json::value(new_pos.x)},
-                    {"y", boost::json::value(new_pos.y)},
-                    {"z", boost::json::value(new_pos.z)},
+                    {"x", boost::json::value(clamped_pos.x)},
+                    {"y", boost::json::value(clamped_pos.y)},
+                    {"z", boost::json::value(clamped_pos.z)},
                     {"yaw", boost::json::value(yaw)},
                 };
                 auto room_command = Command::createRoomCommand(user.getRoomId(), user, data, params, messageId);

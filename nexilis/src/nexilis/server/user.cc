@@ -30,6 +30,7 @@ User::User(User&& other) noexcept
       m_ip_address(std::move(other.m_ip_address)),
       m_username(std::move(other.m_username)),
       m_roomId(std::move(other.m_roomId)),
+      m_lastShotTime(other.m_lastShotTime),
       m_boostTCPSendToClient(std::move(other.m_boostTCPSendToClient)),
       m_boostUDPSendToClient(std::move(other.m_boostUDPSendToClient)),
       m_unixStreamSendToClient(std::move(other.m_unixStreamSendToClient)),
@@ -49,6 +50,7 @@ User& User::operator=(User&& other) noexcept
         m_ip_address = std::move(other.m_ip_address);
         m_username = std::move(other.m_username);
         m_roomId = std::move(other.m_roomId);
+        m_lastShotTime = other.m_lastShotTime;
         m_boostTCPSendToClient = std::move(other.m_boostTCPSendToClient);
         m_boostUDPSendToClient = std::move(other.m_boostUDPSendToClient);
         m_unixStreamSendToClient = std::move(other.m_unixStreamSendToClient);

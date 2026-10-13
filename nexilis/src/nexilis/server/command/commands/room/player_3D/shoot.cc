@@ -15,6 +15,7 @@
    along with this file.  If not, see <https://gnu.org>. */
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 
 #include <nexilis/command_type.hh>
@@ -22,6 +23,7 @@
 #include <nexilis/room_command_type.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
+#include <nexilis/server/gameplay_limits.hh>
 #include <nexilis/server/room_storage.hh>
 #include <nexilis/util.hh>
 
@@ -48,8 +50,12 @@ CommandResult ServerImpl::room_player3d_shoot(const DefaultArgs& args)
     payload = Util::removeAmountOfBytesFromVector(payload, 8);
     auto damage = Util::floatFromFront(payload);
 
-    if (targetId == user.getId() || !std::isfinite(damage) || damage <= 0.0f || damage > 35.0f)
+    if (targetId == user.getId() || !std::isfinite(damage) || damage <= 0.0f)
         return CommandResult::invalid_input;
+
+    // Keep the damage inside the configured per-shot limit.
+    const auto& limits = GameplayLimits::get();
+    damage = limits.clampDamage(damage);
 
     auto room = RoomStorage::getRoomById(user.getRoomId());
     if (!room)
@@ -75,6 +81,23 @@ CommandResult ServerImpl::room_player3d_shoot(const DefaultArgs& args)
         return CommandResult::invalid_input;
     if (room->getPlayerHealth(user.getId()) <= 0.0f)
         return CommandResult::invalid_input;
+
+    // Shooting rate limit: a shot that arrives before the minimum
+    // interval since the last accepted shot is dropped, so the
+    // effective rate never exceeds the configured maximum.
+    auto interval = limits.shotInterval();
+    if (interval.count() > 0.0f)
+    {
+        auto now = std::chrono::steady_clock::now();
+        if (now - user.getLastShotTime() < interval)
+        {
+            Log::warning("Shoot: player ", user.getId(),
+                         " exceeded the shooting rate limit of ",
+                         limits.getMaxShootingRate(), " shots per second");
+            return CommandResult::invalid_input;
+        }
+        user.setLastShotTime(now);
+    }
 
     // Only triggers a death when this hit actually brought the target from
     // alive to dead. Shots that land on an already-dead (not yet respawned)

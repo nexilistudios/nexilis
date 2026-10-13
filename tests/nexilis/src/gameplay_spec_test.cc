@@ -20,6 +20,7 @@
 #include <nexilis/room_command_type.hh>
 #include <nexilis/server/client_storage.hh>
 #include <nexilis/server/command/command.hh>
+#include <nexilis/server/gameplay_limits.hh>
 #include <nexilis/server/movement.hh>
 #include <nexilis/server/room_storage.hh>
 
@@ -353,6 +354,10 @@ protected:
         server::RoomStorage::clear();
         server::ClientStorage::clear();
 
+        // Legacy tests fire shots back-to-back; disable the default
+        // shooting rate limit so it does not interfere.
+        command.getServerConfig().getGameplayLimits().setMaxShootingRate(0.0f);
+
         auto sender = std::make_unique<server::User>(SENDER_ID, "127.0.0.1");
         auto target = std::make_unique<server::User>(TARGET_ID, "127.0.0.2");
         m_sender = sender.get();
@@ -572,15 +577,15 @@ TEST_F(GameplaySpecTest, ShootRequiresOpposingTeams)
     EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH - 25.0f);
 }
 
-TEST_F(GameplaySpecTest, ShootRejectsDamageAbovePerShotCap)
+TEST_F(GameplaySpecTest, ShootClampsDamageAbovePerShotCap)
 {
     setUpRoom();
     setUpOpposingTeams();
 
-    EXPECT_EQ(read(shootBytes(TARGET_ID, 35.1f), *m_sender), server::CommandResult::invalid_input);
+    ASSERT_EQ(read(shootBytes(TARGET_ID, 35.1f), *m_sender), server::CommandResult::success);
 
     auto* room = server::RoomStorage::getRoomById(ROOM_ID);
-    EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH);
+    EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH - 35.0f);
 }
 
 TEST_F(GameplaySpecTest, ShootRejectsSelfTargetingAndNonPositiveDamage)
@@ -593,6 +598,139 @@ TEST_F(GameplaySpecTest, ShootRejectsSelfTargetingAndNonPositiveDamage)
 
     auto* room = server::RoomStorage::getRoomById(ROOM_ID);
     EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH);
+}
+
+// ---------------------------------------------------------------------------
+// Gameplay limits (position, movement speed, shooting rate, damage, height)
+// ---------------------------------------------------------------------------
+
+TEST(GameplayLimitsDefaultsTest, MatchesDocumentedDefaults)
+{
+    const server::GameplayLimits limits;
+
+    EXPECT_FLOAT_EQ(limits.getMaxHorizontalPosition(), nexilis::NEXILIS_MAX_POSITION);
+    EXPECT_FLOAT_EQ(limits.getMaxMovementSpeed(), 100.0f);
+    EXPECT_FLOAT_EQ(limits.getMaxShootingRate(), 10.0f);
+    EXPECT_FLOAT_EQ(limits.getMaxDamagePerShot(), 35.0f);
+    EXPECT_FLOAT_EQ(limits.getMinHeight(), 0.0f);
+    EXPECT_FLOAT_EQ(limits.getMaxHeight(), 1000.0f);
+}
+
+TEST(GameplayLimitsClampTest, ClampsValuesIntoConfiguredRanges)
+{
+    server::GameplayLimits limits;
+    limits.setMaxHorizontalPosition(50.0f);
+    limits.setMinHeight(-10.0f);
+    limits.setMaxHeight(20.0f);
+    limits.setMaxMovementSpeed(5.0f);
+    limits.setMaxDamagePerShot(7.0f);
+
+    EXPECT_FLOAT_EQ(limits.clampHorizontal(100.0f), 50.0f);
+    EXPECT_FLOAT_EQ(limits.clampHorizontal(-100.0f), -50.0f);
+    EXPECT_FLOAT_EQ(limits.clampHorizontal(10.0f), 10.0f);
+    EXPECT_FLOAT_EQ(limits.clampHeight(100.0f), 20.0f);
+    EXPECT_FLOAT_EQ(limits.clampHeight(-100.0f), -10.0f);
+    EXPECT_FLOAT_EQ(limits.clampSpeed(100.0f), 5.0f);
+    EXPECT_FLOAT_EQ(limits.clampDamage(100.0f), 7.0f);
+    EXPECT_FLOAT_EQ(limits.shotInterval().count(), 0.1f);
+}
+
+TEST_F(GameplaySpecTest, PositionClampsHorizontalAndHeightToLimits)
+{
+    setUpRoom();
+    auto targetMessages = receivedMessages(*m_target);
+
+    const Vector3f position(20000.0f, -5.0f, 20000.0f);
+    ASSERT_EQ(read(player3DPositionBytes(position), *m_sender), server::CommandResult::success);
+
+    auto serverPosition = m_sender->getObject3D().getPosition();
+    EXPECT_FLOAT_EQ(serverPosition.x, nexilis::NEXILIS_MAX_POSITION);
+    EXPECT_FLOAT_EQ(serverPosition.y, 0.0f);
+    EXPECT_FLOAT_EQ(serverPosition.z, nexilis::NEXILIS_MAX_POSITION);
+
+    // The broadcast carries the clamped position.
+    ASSERT_EQ(targetMessages.size(), 1);
+    EXPECT_DOUBLE_EQ(targetMessages[0].at("x").as_double(), nexilis::NEXILIS_MAX_POSITION);
+    EXPECT_DOUBLE_EQ(targetMessages[0].at("y").as_double(), 0.0);
+    EXPECT_DOUBLE_EQ(targetMessages[0].at("z").as_double(), nexilis::NEXILIS_MAX_POSITION);
+}
+
+TEST_F(GameplaySpecTest, PositionClampsToConfiguredLimits)
+{
+    setUpRoom();
+    command.getServerConfig().getGameplayLimits().setMaxHorizontalPosition(50.0f);
+    command.getServerConfig().getGameplayLimits().setMinHeight(-10.0f);
+    command.getServerConfig().getGameplayLimits().setMaxHeight(20.0f);
+
+    ASSERT_EQ(read(player3DPositionBytes({100.0f, 100.0f, -100.0f}), *m_sender),
+              server::CommandResult::success);
+
+    auto serverPosition = m_sender->getObject3D().getPosition();
+    EXPECT_FLOAT_EQ(serverPosition.x, 50.0f);
+    EXPECT_FLOAT_EQ(serverPosition.y, 20.0f);
+    EXPECT_FLOAT_EQ(serverPosition.z, -50.0f);
+}
+
+TEST_F(GameplaySpecTest, MovementClampsSpeedToLimit)
+{
+    setUpRoom();
+
+    // 300 units/s exceeds the default 100 units/s cap, so the
+    // displacement is capped at 100 * 0.1 = 10.
+    ASSERT_EQ(read(player3DMovementBytes({300.0f, 0.0f, 0.0f}, 0.1f), *m_sender),
+              server::CommandResult::success);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    auto serverPosition = m_sender->getObject3D().getPosition();
+    EXPECT_NEAR(serverPosition.x, 10.0f, 0.01f);
+    EXPECT_FLOAT_EQ(serverPosition.y, 0.0f);
+    EXPECT_FLOAT_EQ(serverPosition.z, 0.0f);
+}
+
+TEST_F(GameplaySpecTest, MovementClampsResultingPositionToLimits)
+{
+    setUpRoom();
+    command.getServerConfig().getGameplayLimits().setMaxHorizontalPosition(100.0f);
+
+    m_sender->getObject3D().setPosition({90.0f, 500.0f, 0.0f});
+
+    // One second at 1000 units/s would reach x = 1090; both the
+    // speed and the resulting position are clamped.
+    ASSERT_EQ(read(player3DMovementBytes({1000.0f, 0.0f, 0.0f}, 1.0f), *m_sender),
+              server::CommandResult::success);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    auto serverPosition = m_sender->getObject3D().getPosition();
+    EXPECT_NEAR(serverPosition.x, 100.0f, 0.01f);
+}
+
+TEST_F(GameplaySpecTest, ShootRateLimitDropsFastFollowUpShot)
+{
+    setUpRoom();
+    setUpOpposingTeams();
+    command.getServerConfig().getGameplayLimits().setMaxShootingRate(1.0f);
+
+    ASSERT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender), server::CommandResult::success);
+    // The follow-up shot arrives inside the one second interval
+    // and is dropped.
+    EXPECT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender), server::CommandResult::invalid_input);
+
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH - 25.0f);
+}
+
+TEST_F(GameplaySpecTest, ShootRateLimitAllowsShotAfterInterval)
+{
+    setUpRoom();
+    setUpOpposingTeams();
+    command.getServerConfig().getGameplayLimits().setMaxShootingRate(10.0f);
+
+    ASSERT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender), server::CommandResult::success);
+    std::this_thread::sleep_for(std::chrono::milliseconds(110));
+    ASSERT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender), server::CommandResult::success);
+
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH - 50.0f);
 }
 
 // ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@
 #ifndef NEXILIS_SERVER_USER_HH
 #define NEXILIS_SERVER_USER_HH
 
+#include <chrono>
 #include <cstdint>
 #include <nexilis/base_client.hh>
 #include <nexilis/nexilis_constants.hh>
@@ -94,6 +95,18 @@ public:
     uint64_t getRoomId() const
     {
         return m_roomId;
+    }
+
+    /// Time of the last accepted shot. Used to enforce the
+    /// shooting rate limit.
+    std::chrono::steady_clock::time_point getLastShotTime() const
+    {
+        return m_lastShotTime;
+    }
+
+    void setLastShotTime(std::chrono::steady_clock::time_point time)
+    {
+        m_lastShotTime = time;
     }
 
     void setUsername(const std::string& username)
@@ -226,6 +239,7 @@ private:
     std::string m_ip_address;
     std::string m_username;
     uint64_t m_roomId = 0;
+    std::chrono::steady_clock::time_point m_lastShotTime{};
 
 private:
     std::function<void(nx_data)> m_boostTCPSendToClient = nullptr;

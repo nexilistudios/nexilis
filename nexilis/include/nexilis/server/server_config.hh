@@ -18,6 +18,7 @@
 #define NEXILIS_SERVER_CONFIG_HH
 
 #include <nexilis/auth_config.hh>
+#include <nexilis/server/gameplay_limits.hh>
 
 #include <cassert>
 #include <string>
@@ -66,6 +67,16 @@ public:
         return m_tickrate;
     }
 
+    /// Gameplay limits enforced on player actions.
+    GameplayLimits& getGameplayLimits()
+    {
+        return m_gameplayLimits;
+    }
+    const GameplayLimits& getGameplayLimits() const
+    {
+        return m_gameplayLimits;
+    }
+
     /// Whether TCP connections are encrypted with TLS-PSK.
     /// \note The pre-shared key is derived from the passphrase, so a client
     ///       only connects when it knows the same passphrase. Off by default
@@ -84,6 +95,7 @@ private:
     std::string m_rootPassword;
     float m_tickrate = 60.f;
     bool m_tls = false;
+    GameplayLimits m_gameplayLimits;
 };
 
 } // namespace nexilis::server

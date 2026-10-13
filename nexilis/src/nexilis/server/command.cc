@@ -83,11 +83,14 @@ CommandResult Command::read(const nx_data& command, User& user, NXProtocol& prot
     // DefaultArgs from Commands.
     DefaultArgs args(user, protocol, command, messageId);
 
-    // Keep the movement system bound to the live server settings: the static
-    // pointer must be refreshed on every dispatch so a fresh Command (e.g. a
-    // recreated server or a test fixture) does not leave detached movement
-    // threads reading a destroyed configuration's tickrate.
+    // Keep the movement system and the gameplay limits bound to the
+    // live server settings: the static pointers must be refreshed on
+    // every dispatch so a fresh Command (e.g. a recreated server or a
+    // test fixture) does not leave detached movement threads reading a
+    // destroyed configuration's tickrate or command handlers reading
+    // destroyed limits.
     Movement::_initialize(m_settings);
+    GameplayLimits::_initialize(m_settings.getGameplayLimits());
 
     Log::debug(header(), commandTypeAsString(arg));
     switch (arg)

@@ -53,6 +53,21 @@ The `room/player_3D/movement` request similarly accepts its legacy three-float
 velocity plus float delta time, or one additional float yaw. Movement responses
 relay that yaw, and the legacy form uses zero.
 
+The server enforces gameplay limits on `room/player_3D/position`,
+`room/player_3D/movement` and `room/player_3D/shoot`. Every limit has a
+default and is configurable through `nexilis::server::ServerConfig::getGameplayLimits()`:
+
+- Maximum horizontal position (absolute X and Z coordinate): 10000
+- Maximum movement speed (units per second): 100
+- Maximum shooting rate (shots per second): 10; a non-positive value disables the limit
+- Maximum damage per shot: 35
+- Minimum and maximum height (Y coordinate): 0 and 1000
+
+Positions outside their limits are clamped to the nearest allowed value (the
+clamped position is applied and broadcast), movement speeds above the maximum
+are scaled down, damage above the per-shot cap is reduced to it, and shots
+that arrive sooner than the shooting rate allows are dropped.
+
 `Packet::Room::Player3D::matchAction(api, action)` sends room/player_3D action byte `8` followed by exactly one byte: `0` cancels, `1` begins planting, and `2` begins defusing. The room's application-installed action handler validates the request; rooms without a handler reject it. The server's combat callback can also deny hits by participants who are outside an active round. These callbacks are optional and do not change normal rooms.
 
 An application can send a server-authored JSON room response with `type: "match"` and `action: "state"`. Nexilis exposes the parsed events through `consumeMatchEvents()` as owning pointers to the polymorphic `ClientAPI::MatchEvent` base. The `game_mode` field selects a derived event: `"bomb"` creates `BombMatchEvent`, while `"deathmatch"` creates `DeathmatchMatchEvent`. The base holds `room_id` and a virtual `kind()` discriminator. A missing `game_mode` is treated as bomb for compatibility with older messages; unknown modes are rejected.
