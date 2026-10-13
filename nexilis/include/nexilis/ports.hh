@@ -28,9 +28,18 @@ class Ports
 public:
     static uint16_t getBoostTCPPort();
 
+    /// Override the Boost TCP authentication port for protocols created later.
+    static void setBoostTCPPort(uint16_t port);
+
     static uint16_t getBoostUDPPort();
 
+    /// Override the Boost UDP port for protocols created later.
+    static void setBoostUDPPort(uint16_t port);
+
     static uint16_t getBoostTCPSessionPort();
+
+    /// Override the Boost TCP session port for protocols created later.
+    static void setBoostTCPSessionPort(uint16_t port);
 
     static uint16_t getInetTCPPort();
 

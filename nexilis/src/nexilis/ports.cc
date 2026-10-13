@@ -26,6 +26,11 @@ uint16_t Ports::getBoostTCPPort()
     return m_boostTCPPort;
 }
 
+void Ports::setBoostTCPPort(uint16_t port)
+{
+    m_boostTCPPort = port;
+}
+
 uint16_t Ports::m_boostUDPPort = 54201;
 
 uint16_t Ports::getBoostUDPPort()
@@ -33,11 +38,21 @@ uint16_t Ports::getBoostUDPPort()
     return m_boostUDPPort;
 }
 
+void Ports::setBoostUDPPort(uint16_t port)
+{
+    m_boostUDPPort = port;
+}
+
 uint16_t Ports::m_boostTCPSessionPort = 54202;
 
 uint16_t Ports::getBoostTCPSessionPort()
 {
     return m_boostTCPSessionPort;
+}
+
+void Ports::setBoostTCPSessionPort(uint16_t port)
+{
+    m_boostTCPSessionPort = port;
 }
 
 uint16_t Ports::m_inetTCPPort = 54300;

@@ -1,6 +1,6 @@
 # Network ports
 
-Nexilis uses these fixed server listening ports by default:
+Nexilis uses these server listening ports by default:
 
 | Transport | Port | Purpose |
 | --- | ---: | --- |
@@ -20,3 +20,9 @@ matching client ports. Client port settings also allow a different Boost UDP
 destination. Keep both ends in sync when overriding a port. Outbound client
 sockets can have operating-system-assigned local source ports; these are not
 server listening ports.
+
+Call `Ports::setBoostTCPPort`, `Ports::setBoostUDPPort`, and
+`Ports::setBoostTCPSessionPort` before constructing the corresponding Boost
+protocol objects to override their process-wide defaults. The Boost client only
+needs the authentication TCP and UDP overrides: it learns the TCP session port
+from the server during authentication.
