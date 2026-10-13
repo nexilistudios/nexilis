@@ -234,7 +234,7 @@ void StreamServer::handleMessages()
 
             if (result == CommandResult::success)
             {
-                Log::info("Passed");
+                Log::debug("StreamServer: Passed");
             }
         }
     }

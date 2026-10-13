@@ -222,7 +222,7 @@ void UDPServer::receiveFromClients()
                 switch (passCommand)
                 {
                     case CommandResult::success:
-                        Log::info("UDPServer: Passed");
+                        Log::debug("UDPServer: Passed");
                         break;
 
                     default:

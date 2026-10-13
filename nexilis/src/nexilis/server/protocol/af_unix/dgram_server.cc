@@ -270,7 +270,7 @@ void DgramServer::receiveFromClients()
 
             if (result == CommandResult::success)
             {
-                Log::info("DgramServer: Passed");
+                Log::debug("DgramServer: Passed");
             }
         }
         else

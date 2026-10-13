@@ -283,7 +283,7 @@ void TCPServer::handleClient(const std::shared_ptr<Client>& client)
 
                                              if (result == CommandResult::success)
                                              {
-                                                 Log::info("TCPServer: Passed");
+                                                 Log::debug("TCPServer: Passed");
                                              }
                                          }
                                          else
