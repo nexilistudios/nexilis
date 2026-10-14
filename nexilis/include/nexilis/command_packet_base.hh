@@ -224,6 +224,16 @@ public:
                 return Impl::room_player3d_shoot(std::forward<Args>(args)...);
             }
             template <typename... Args>
+            static auto fire(Args&&... args)
+            {
+                return Impl::room_player3d_fire(std::forward<Args>(args)...);
+            }
+            template <typename... Args>
+            static auto reload(Args&&... args)
+            {
+                return Impl::room_player3d_reload(std::forward<Args>(args)...);
+            }
+            template <typename... Args>
             static auto setTeam(Args&&... args)
             {
                 return Impl::room_player3d_set_team(std::forward<Args>(args)...);

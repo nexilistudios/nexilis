@@ -26,6 +26,7 @@
 #include <atomic>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 
 namespace nexilis::server
@@ -45,6 +46,17 @@ public:
     using ActionHandler = std::function<bool(Room& room, uint64_t playerId, uint8_t action)>;
     using CombatHandler = std::function<bool(uint64_t shooterId, uint64_t targetId)>;
     using TeamSelectionHandler = std::function<bool(uint64_t playerId)>;
+    using MovementInputHandler = std::function<bool(uint64_t playerId, const Vector3f& input, float yaw)>;
+    struct ShotHit
+    {
+        uint64_t targetId;
+        float damage;
+    };
+    using ShotHandler = std::function<std::optional<ShotHit>(uint64_t shooterId,
+                                                             const Vector3f& direction,
+                                                             uint8_t slot, uint8_t action)>;
+    using SpawnHandler = std::function<void(Room& room, uint64_t playerId)>;
+    using GameItemPickupHandler = std::function<bool(Room& room, uint64_t playerId, uint64_t itemId)>;
 
     /// A broadcast message that has been sent in the room.
     struct Broadcast
@@ -142,6 +154,22 @@ public:
     bool canDamage(uint64_t shooterId, uint64_t targetId) const;
     void setTeamSelectionHandler(TeamSelectionHandler handler);
     bool canSelectTeam(uint64_t playerId) const;
+    void setClientPositionAllowed(bool allowed);
+    bool isClientPositionAllowed() const;
+    void setMovementInputHandler(MovementInputHandler handler);
+    bool onMovementInput(uint64_t playerId, const Vector3f& input, float yaw);
+    bool hasMovementInputHandler() const;
+    void setShotHandler(ShotHandler handler);
+    bool hasShotHandler() const;
+    std::optional<ShotHit> resolveShot(uint64_t shooterId, const Vector3f& direction,
+                                       uint8_t slot, uint8_t action);
+    void setSpawnHandler(SpawnHandler handler);
+    void spawnPlayer(uint64_t playerId);
+    void setClientGameItemCreationAllowed(bool allowed);
+    bool isClientGameItemCreationAllowed() const;
+    void setGameItemPickupHandler(GameItemPickupHandler handler);
+    bool onGameItemPickup(uint64_t playerId, uint64_t itemId);
+    bool hasGameItemPickupHandler() const;
 
     /// Notify the room that a player died. Invokes the registered DeathHandler if set.
     /// \param killerId The id of the player that caused the death.
@@ -178,6 +206,12 @@ private:
     ActionHandler m_actionHandler;
     CombatHandler m_combatHandler;
     TeamSelectionHandler m_teamSelectionHandler;
+    MovementInputHandler m_movementInputHandler;
+    ShotHandler m_shotHandler;
+    SpawnHandler m_spawnHandler;
+    GameItemPickupHandler m_gameItemPickupHandler;
+    bool m_clientPositionAllowed = true;
+    bool m_clientGameItemCreationAllowed = true;
 
     /// Guards per-player game state (health, kills, deaths, teams). The server
     /// runs one command thread per client, so these shared maps must be

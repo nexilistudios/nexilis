@@ -67,6 +67,8 @@ CommandResult ServerImpl::room_player3d_position(const DefaultArgs& args)
         Log::warning("Client not currently in room.");
         return CommandResult::failure;
     }
+    if (!currentRoom->isClientPositionAllowed())
+        return CommandResult::invalid_input;
 
     user.getObject3D().setPosition(position);
     user.getObject3D().setYaw(yaw);

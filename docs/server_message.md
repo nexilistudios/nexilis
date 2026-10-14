@@ -53,6 +53,26 @@ The `room/player_3D/movement` request similarly accepts its legacy three-float
 velocity plus float delta time, or one additional float yaw. Movement responses
 relay that yaw, and the legacy form uses zero.
 
+An application room can disable client position requests and install a movement
+input handler. In that room, the three movement floats are input direction and
+jump intent, the client delta time is ignored, and the application updates and
+broadcasts positions on its server tick. The application must validate speed,
+collisions, and input age. Other rooms retain the legacy movement behavior.
+
+An application room can install a shot handler. In that room,
+`room/player_3D/shoot` requires three floats for aim direction followed by one
+byte for weapon slot (1 primary, 2 secondary, 3 knife) and one action byte
+(0 fire, 1 reload). Legacy target ID and damage requests are rejected. The
+handler computes the hit and damage from server state; a request with no valid
+hit does not damage anyone. Other rooms retain the legacy target/damage format.
+
+An application room can also disable client game item creation and deletion
+and install a pickup handler. Pickup requests use `room/game_item/update`
+with an eight-byte item ID and the remaining string `picked_up`. The handler
+must validate ownership, status, and proximity before the status is broadcast.
+The nx-3D handler consumes the item on pickup and follows the status message
+with a destroy message so all clients remove it.
+
 The server enforces gameplay limits on `room/player_3D/position`,
 `room/player_3D/movement` and `room/player_3D/shoot`. Every limit has a
 default and is configurable through `nexilis::server::ServerConfig::getGameplayLimits()`:

@@ -41,6 +41,12 @@ Room::Room(Room&& other)
       m_actionHandler(std::move(other.m_actionHandler)),
       m_combatHandler(std::move(other.m_combatHandler)),
       m_teamSelectionHandler(std::move(other.m_teamSelectionHandler)),
+      m_movementInputHandler(std::move(other.m_movementInputHandler)),
+      m_shotHandler(std::move(other.m_shotHandler)),
+      m_spawnHandler(std::move(other.m_spawnHandler)),
+      m_gameItemPickupHandler(std::move(other.m_gameItemPickupHandler)),
+      m_clientPositionAllowed(other.m_clientPositionAllowed),
+      m_clientGameItemCreationAllowed(other.m_clientGameItemCreationAllowed),
       m_overlappingAllowed(other.m_overlappingAllowed.load())
 {
 }
@@ -61,6 +67,12 @@ Room& Room::operator=(Room&& other)
         m_actionHandler = std::move(other.m_actionHandler);
         m_combatHandler = std::move(other.m_combatHandler);
         m_teamSelectionHandler = std::move(other.m_teamSelectionHandler);
+        m_movementInputHandler = std::move(other.m_movementInputHandler);
+        m_shotHandler = std::move(other.m_shotHandler);
+        m_spawnHandler = std::move(other.m_spawnHandler);
+        m_gameItemPickupHandler = std::move(other.m_gameItemPickupHandler);
+        m_clientPositionAllowed = other.m_clientPositionAllowed;
+        m_clientGameItemCreationAllowed = other.m_clientGameItemCreationAllowed;
         m_overlappingAllowed.store(other.m_overlappingAllowed.load());
         BaseRoom::operator=(std::move(other));
     }
@@ -223,6 +235,69 @@ void Room::setTeamSelectionHandler(TeamSelectionHandler handler)
 bool Room::canSelectTeam(uint64_t playerId) const
 {
     return !m_teamSelectionHandler || m_teamSelectionHandler(playerId);
+}
+void Room::setClientPositionAllowed(bool allowed)
+{
+    m_clientPositionAllowed = allowed;
+}
+bool Room::isClientPositionAllowed() const
+{
+    return m_clientPositionAllowed;
+}
+void Room::setMovementInputHandler(MovementInputHandler handler)
+{
+    m_movementInputHandler = std::move(handler);
+}
+bool Room::onMovementInput(uint64_t playerId, const Vector3f& input, float yaw)
+{
+    return m_movementInputHandler && m_movementInputHandler(playerId, input, yaw);
+}
+bool Room::hasMovementInputHandler() const
+{
+    return static_cast<bool>(m_movementInputHandler);
+}
+void Room::setShotHandler(ShotHandler handler)
+{
+    m_shotHandler = std::move(handler);
+}
+bool Room::hasShotHandler() const
+{
+    return static_cast<bool>(m_shotHandler);
+}
+std::optional<Room::ShotHit> Room::resolveShot(uint64_t shooterId,
+                                               const Vector3f& direction,
+                                               uint8_t slot, uint8_t action)
+{
+    return m_shotHandler ? m_shotHandler(shooterId, direction, slot, action) : std::nullopt;
+}
+void Room::setSpawnHandler(SpawnHandler handler)
+{
+    m_spawnHandler = std::move(handler);
+}
+void Room::spawnPlayer(uint64_t playerId)
+{
+    if (m_spawnHandler)
+        m_spawnHandler(*this, playerId);
+}
+void Room::setClientGameItemCreationAllowed(bool allowed)
+{
+    m_clientGameItemCreationAllowed = allowed;
+}
+bool Room::isClientGameItemCreationAllowed() const
+{
+    return m_clientGameItemCreationAllowed;
+}
+void Room::setGameItemPickupHandler(GameItemPickupHandler handler)
+{
+    m_gameItemPickupHandler = std::move(handler);
+}
+bool Room::onGameItemPickup(uint64_t playerId, uint64_t itemId)
+{
+    return m_gameItemPickupHandler && m_gameItemPickupHandler(*this, playerId, itemId);
+}
+bool Room::hasGameItemPickupHandler() const
+{
+    return static_cast<bool>(m_gameItemPickupHandler);
 }
 
 void Room::onPlayerDied(uint64_t killerId, uint64_t victimId)

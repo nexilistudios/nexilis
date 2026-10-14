@@ -81,6 +81,9 @@ struct ClientImpl
     static nx_data room_player3d_movement(ClientAPI& api, Vector3f movement, float deltatime, float yaw);
 
     static nx_data room_player3d_shoot(ClientAPI& api, uint64_t targetId, float damage);
+    /// Send an aim direction and equipped slot; the room's server resolves the hit.
+    static nx_data room_player3d_fire(ClientAPI& api, Vector3f direction, uint8_t slot);
+    static nx_data room_player3d_reload(ClientAPI& api, uint8_t slot);
 
     static nx_data room_player3d_set_team(ClientAPI& api, const std::string& team);
 

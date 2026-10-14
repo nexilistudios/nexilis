@@ -47,6 +47,12 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
         !std::isfinite(delta) || !std::isfinite(yaw))
         return CommandResult::invalid_input;
 
+    auto* inputRoom = RoomStorage::getRoomById(user.getRoomId());
+    if (inputRoom && inputRoom->hasMovementInputHandler())
+        return inputRoom->onMovementInput(user.getId(), Vector3f(vec_x, vec_y, vec_z), yaw)
+                       ? CommandResult::success
+                       : CommandResult::invalid_input;
+
     // Keep the movement speed inside the configured limit by
     // scaling the velocity down to the maximum.
     const auto& limits = GameplayLimits::get();

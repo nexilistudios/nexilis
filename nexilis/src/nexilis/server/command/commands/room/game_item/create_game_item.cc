@@ -27,6 +27,9 @@ namespace nexilis::server
 CommandResult ServerImpl::room_gameitem_create(const DefaultArgs& args)
 {
     auto& user = args.getUser();
+    auto room = RoomStorage::getRoomById(user.getRoomId());
+    if (!room || !room->isClientGameItemCreationAllowed())
+        return CommandResult::failure;
     auto data = args.getData();
     auto payload = Util::removeAmountOfBytesFromVector(data, 3);
 
@@ -52,7 +55,6 @@ CommandResult ServerImpl::room_gameitem_create(const DefaultArgs& args)
     uint64_t itemId = item.getId();
     Log::info("Created game item with id: ", itemId, " type: ", item_type);
 
-    auto room = RoomStorage::getRoomById(user.getRoomId());
     room->addGameItem(std::move(item));
 
     std::map<std::string, boost::json::value> params{

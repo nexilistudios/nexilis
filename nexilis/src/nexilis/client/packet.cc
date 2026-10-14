@@ -391,6 +391,26 @@ nx_data ClientImpl::room_player3d_shoot(ClientAPI& api, uint64_t targetId, float
     return id;
 }
 
+nx_data ClientImpl::room_player3d_fire(ClientAPI& api, Vector3f direction, uint8_t slot)
+{
+    auto id = _Packet::clientIdentification(api);
+    id.emplace_back(static_cast<uint8_t>(CommandType::room));
+    id.emplace_back(static_cast<uint8_t>(RoomCommandType::Root::player_3D));
+    id.emplace_back(static_cast<uint8_t>(RoomCommandType::PlayerType::shoot));
+    emplaceAll(id, direction, slot, static_cast<uint8_t>(0));
+    return id;
+}
+
+nx_data ClientImpl::room_player3d_reload(ClientAPI& api, uint8_t slot)
+{
+    auto id = _Packet::clientIdentification(api);
+    id.emplace_back(static_cast<uint8_t>(CommandType::room));
+    id.emplace_back(static_cast<uint8_t>(RoomCommandType::Root::player_3D));
+    id.emplace_back(static_cast<uint8_t>(RoomCommandType::PlayerType::shoot));
+    emplaceAll(id, Vector3f{}, slot, static_cast<uint8_t>(1));
+    return id;
+}
+
 nx_data ClientImpl::room_player3d_set_team(ClientAPI& api, const std::string& team)
 {
     auto id = _Packet::clientIdentification(api);
