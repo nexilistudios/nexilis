@@ -76,6 +76,11 @@ Bomb snapshots include `round`, `terrorist_score`, `counter_terrorist_score`, `q
 
 ## Response format
 
+`Get::Info::clients` replies as `info_general` with `client_amount`, the
+server-wide connected client count. C++ clients expose the latest value through
+`ClientAPI::getServerClientCount()`. Joining a room also sends a full leaderboard
+seed so team selection screens can show the existing team roster.
+
 The Boost TCP server sends JSON responses terminated by a newline character (`\n`); its client reads until `\n`. The POSIX `af_inet` TCP transport instead prefixes server responses with a 4-byte length. These transports should not be assumed to have interchangeable response framing.
 
 ## TLS-PSK transport protection (optional)

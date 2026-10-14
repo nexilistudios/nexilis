@@ -15,6 +15,7 @@
    along with this file.  If not, see <https://gnu.org>. */
 
 #include <nexilis/client/command/get/client_id.hh>
+#include <nexilis/client/command/get/info_client_count.hh>
 #include <nexilis/client/command/get/info_rooms.hh>
 #include <nexilis/client/command/get/room_id.hh>
 #include <nexilis/client/command/room/communication.hh>
@@ -139,6 +140,12 @@ std::unique_ptr<BaseAPICommand> CommandParser::parseGettingCommand(const boost::
         }
 
         return makeError(ReadResult::invalid_input);
+    }
+
+    else if (type == "info_general" && json.contains("client_amount"))
+    {
+        return std::make_unique<GetInfoClientCountCommand>(
+                Util::toUint64(json.at("client_amount")));
     }
 
     return makeError(ReadResult::parsing_failed, "cannot find get command type");

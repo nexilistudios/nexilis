@@ -208,6 +208,7 @@ public:
         ClientAPIData(ClientAPIData&& other)
             : m_isInitialized(std::move(other.m_isInitialized)),
               m_isOverLappingAllowed2D(std::move(other.m_isOverLappingAllowed2D)),
+              m_serverClientCount(other.m_serverClientCount.load()),
               m_currentlyActiveRooms(std::move(other.m_currentlyActiveRooms)),
               m_messageIds(std::move(other.m_messageIds)),
               m_callbacks(std::move(other.m_callbacks)),
@@ -233,6 +234,7 @@ public:
             {
                 m_isInitialized = std::move(other.m_isInitialized);
                 m_isOverLappingAllowed2D = std::move(other.m_isOverLappingAllowed2D);
+                m_serverClientCount.store(other.m_serverClientCount.load());
                 m_currentlyActiveRooms = std::move(other.m_currentlyActiveRooms);
                 m_messageIds = std::move(other.m_messageIds);
                 m_callbacks = std::move(other.m_callbacks);
@@ -292,6 +294,16 @@ public:
         void setCurrentlyActiveRooms(std::vector<client::Room>&& rooms)
         {
             m_currentlyActiveRooms = std::move(rooms);
+        }
+
+        void setServerClientCount(uint64_t count)
+        {
+            m_serverClientCount.store(count);
+        }
+
+        uint64_t getServerClientCount() const
+        {
+            return m_serverClientCount.load();
         }
 
         const std::vector<uint64_t>& getMessageIds() const
@@ -397,6 +409,9 @@ public:
 
         /// Can the 2D elements overlap each other.
         bool m_isOverLappingAllowed2D = false;
+
+        /// Last server-wide connected client count from info_general.
+        std::atomic<uint64_t> m_serverClientCount{0};
 
         /// Rooms that the client knows about.
         std::vector<client::Room> m_currentlyActiveRooms;
@@ -530,6 +545,11 @@ public:
     {
         std::lock_guard<std::mutex> lock(*m_clientAPIData.getRoomsMutex());
         return m_clientAPIData.getCurrentlyActiveRooms();
+    }
+
+    uint64_t getServerClientCount() const
+    {
+        return m_clientAPIData.getServerClientCount();
     }
 
     /// Get a reference to a room from room id.

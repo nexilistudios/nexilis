@@ -97,6 +97,11 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
         Command::sendMessageToClient(dimMsg, user, protocol);
     }
 
+    // Seed the new client's team roster before they choose a side.
+    auto roster = Command::createRoomLeaderboardCommand(
+            roomId, user, Command::playerStatsEntries(*room, room->getClients()), 0);
+    Command::sendMessageToClient(roster, user, protocol);
+
     // Send existing game items to the joining client
     for (auto& item : room->getGameItems())
     {
