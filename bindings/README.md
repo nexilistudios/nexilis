@@ -16,7 +16,7 @@ Run that command from the repository root. The wrapper calls the native `nexilis
 to build the native libraries and place the C# assembly and native libraries under
 `dist/` by default. It also copies dynamically linked Boost libraries, including
 Boost.JSON, beside the native libraries under `dist/<platform>/<arch>/`. Run it
-from the repository root after initializing the Boost submodule. The script
+from the repository root after initializing the Boost module submodules. The script
 currently selects the host platform, so its `--arch` label does not
 cross-compile binaries. OpenSSL and the C/C++ runtime remain system
 dependencies. On Linux, add `dist/Linux/<arch>/` to the runtime library search

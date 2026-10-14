@@ -1,12 +1,12 @@
 # Dependencies
 
-The native library requires CMake 3.25 or newer, a C++20 compiler, OpenSSL 1.1.1 or newer, and Boost. `nexilis/CMakeLists.txt` builds against the Boost submodule for local builds. In CI it uses a system Boost installation with the JSON component (Boost 1.75 or newer).
+The native library requires CMake 3.25 or newer, a C++20 compiler, OpenSSL 1.1.1 or newer, and Boost. Local builds use individually pinned submodules for Boost.Asio, Boost.JSON, Boost.SmartPtr, and their required modules instead of cloning the complete Boost superproject. CI uses a system Boost installation with the JSON component (Boost 1.75 or newer).
 
 OpenSSL is a required build dependency even when the optional encryption features are disabled. The native libraries link to `OpenSSL::SSL`. Boost.JSON is a compiled dependency; the local build creates it from the submodule.
 
 The CMake install target does not include public headers. Its package config also records absolute Boost include paths from the source checkout when submodules are used, so the installed package alone cannot be used by downstream projects or reliably moved to another machine.
 
-For a local checkout, initialize the submodule:
+For a local checkout, initialize the Boost module submodules:
 
 ```sh
 git submodule update --init --recursive

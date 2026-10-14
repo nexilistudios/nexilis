@@ -108,20 +108,47 @@ add_compile_definitions(
 )
 
 if (USE_SUBMODULES)
-    message(STATUS "Using boost submodules")
+    message(STATUS "Using individual Boost submodules")
     set(BOOST_SUBMODULE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third-party/boost")
 
-    # Libraries to build (json and its dependencies)
-    set(BOOST_LIBS_TO_BUILD
-        # Core dependencies (order matters for some)
-        assert config core mp11 throw_exception static_assert
-        predef winapi align move describe endian variant2
-        intrusive container_hash compat
-        # Libraries with source files
-        container system json
+    # Boost.JSON's dependency closure plus the headers Nexilis uses directly.
+    # The order ensures that each module's CMake targets already exist when a
+    # dependent module is added.
+    set(NEXILIS_BOOST_CMAKE_MODULES
+        config
+        mp11
+        assert
+        throw_exception
+        core
+        predef
+        compat
+        describe
+        container_hash
+        move
+        intrusive
+        container
+        endian
+        variant2
+        winapi
+        system
+        align
+        smart_ptr
     )
 
-    # Glob ALL include directories for headers
+    set(NEXILIS_BOOST_REQUIRED_MODULES
+        ${NEXILIS_BOOST_CMAKE_MODULES}
+        asio
+        json
+    )
+
+    foreach(lib ${NEXILIS_BOOST_REQUIRED_MODULES})
+        if(NOT EXISTS "${BOOST_SUBMODULE_DIR}/libs/${lib}/CMakeLists.txt")
+            message(FATAL_ERROR
+                "Required Boost module '${lib}' is missing. "
+                "Run: git submodule update --init --recursive")
+        endif()
+    endforeach()
+
     file(GLOB BOOST_LIB_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/third-party/boost/libs/*")
     set(NEXILIS_BOOST_INCLUDE_DIRS "")
     foreach(lib_dir ${BOOST_LIB_DIRS})
@@ -131,15 +158,19 @@ if (USE_SUBMODULES)
         endif()
     endforeach()
 
-    # Build only the libraries we need
-    foreach(lib ${BOOST_LIBS_TO_BUILD})
-        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boost/libs/${lib}/CMakeLists.txt)
-           add_subdirectory(third-party/boost/libs/${lib} SYSTEM)
-        endif()
+    foreach(lib ${NEXILIS_BOOST_CMAKE_MODULES})
+        add_subdirectory(third-party/boost/libs/${lib} SYSTEM EXCLUDE_FROM_ALL)
     endforeach()
 
-    set(NEXILIS_BOOST_INCLUDE_DIRS "${NEXILIS_BOOST_INCLUDE_DIRS}" CACHE STRING "Boost include directories for submodules" FORCE)
+    add_subdirectory(third-party/boost/libs/json SYSTEM EXCLUDE_FROM_ALL)
+
+    set(NEXILIS_BOOST_JSON_LIBRARY
+        "${CMAKE_CURRENT_BINARY_DIR}/third-party/boost/libs/json/${CMAKE_SHARED_LIBRARY_PREFIX}boost_json${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        CACHE FILEPATH "Boost.JSON library built from the selected submodules" FORCE)
+    set(NEXILIS_BOOST_INCLUDE_DIRS "${NEXILIS_BOOST_INCLUDE_DIRS}"
+        CACHE STRING "Boost include directories for submodules" FORCE)
 else()
+    set(NEXILIS_BOOST_JSON_LIBRARY "")
     message(STATUS "Using system boost")
     find_package(Boost 1.75 REQUIRED COMPONENTS json)
 
@@ -197,6 +228,11 @@ target_include_directories(nexilis PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
+
+if(USE_SUBMODULES)
+    target_include_directories(nexilis SYSTEM PUBLIC
+        "$<BUILD_INTERFACE:${NEXILIS_BOOST_INCLUDE_DIRS}>")
+endif()
 
 target_include_directories(nexilisc PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

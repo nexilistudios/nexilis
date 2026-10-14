@@ -35,7 +35,6 @@ linkoptions({
 	"-Wl,-rpath,'$$ORIGIN'",
 })
 local boost_includes = os.matchdirs("../../nexilis/third-party/boost/libs/*/include")
-table.insert(boost_includes, "../../nexilis/third-party/boost/libs/numeric/conversion/include")
 includedirs({
 	"../../nexilis/include",
 	boost_includes,

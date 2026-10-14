@@ -1,3 +1,60 @@
-[submodule "nexilis/third-party/boost"]
-	path = nexilis/third-party/boost
-	url = https://github.com/boostorg/boost.git
+[submodule "boost-align"]
+	path = nexilis/third-party/boost/libs/align
+	url = https://github.com/boostorg/align.git
+[submodule "boost-asio"]
+	path = nexilis/third-party/boost/libs/asio
+	url = https://github.com/boostorg/asio.git
+[submodule "boost-assert"]
+	path = nexilis/third-party/boost/libs/assert
+	url = https://github.com/boostorg/assert.git
+[submodule "boost-compat"]
+	path = nexilis/third-party/boost/libs/compat
+	url = https://github.com/boostorg/compat.git
+[submodule "boost-config"]
+	path = nexilis/third-party/boost/libs/config
+	url = https://github.com/boostorg/config.git
+[submodule "boost-container"]
+	path = nexilis/third-party/boost/libs/container
+	url = https://github.com/boostorg/container.git
+[submodule "boost-container-hash"]
+	path = nexilis/third-party/boost/libs/container_hash
+	url = https://github.com/boostorg/container_hash.git
+[submodule "boost-core"]
+	path = nexilis/third-party/boost/libs/core
+	url = https://github.com/boostorg/core.git
+[submodule "boost-describe"]
+	path = nexilis/third-party/boost/libs/describe
+	url = https://github.com/boostorg/describe.git
+[submodule "boost-endian"]
+	path = nexilis/third-party/boost/libs/endian
+	url = https://github.com/boostorg/endian.git
+[submodule "boost-intrusive"]
+	path = nexilis/third-party/boost/libs/intrusive
+	url = https://github.com/boostorg/intrusive.git
+[submodule "boost-json"]
+	path = nexilis/third-party/boost/libs/json
+	url = https://github.com/boostorg/json.git
+[submodule "boost-move"]
+	path = nexilis/third-party/boost/libs/move
+	url = https://github.com/boostorg/move.git
+[submodule "boost-mp11"]
+	path = nexilis/third-party/boost/libs/mp11
+	url = https://github.com/boostorg/mp11.git
+[submodule "boost-predef"]
+	path = nexilis/third-party/boost/libs/predef
+	url = https://github.com/boostorg/predef.git
+[submodule "boost-smart-ptr"]
+	path = nexilis/third-party/boost/libs/smart_ptr
+	url = https://github.com/boostorg/smart_ptr.git
+[submodule "boost-system"]
+	path = nexilis/third-party/boost/libs/system
+	url = https://github.com/boostorg/system.git
+[submodule "boost-throw-exception"]
+	path = nexilis/third-party/boost/libs/throw_exception
+	url = https://github.com/boostorg/throw_exception.git
+[submodule "boost-variant2"]
+	path = nexilis/third-party/boost/libs/variant2
+	url = https://github.com/boostorg/variant2.git
+[submodule "boost-winapi"]
+	path = nexilis/third-party/boost/libs/winapi
+	url = https://github.com/boostorg/winapi.git

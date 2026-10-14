@@ -8,7 +8,7 @@ The module is currently for 64 bit Linux. It needs LuaJIT and the matching
 `libnexilisc.so` and `libnexilis.so` from this checkout.
 
 Build the native libraries first (`cmake -B nexilis/build nexilis && cmake
---build nexilis/build`). Initialize the Boost submodule for a local CMake build,
+--build nexilis/build`). Initialize the Boost module submodules for a local CMake build,
 or configure with a system Boost.JSON installation in CI mode. Set
 `NEXILISC_LIBRARY` to the absolute path of `libnexilisc.so`; CMake places both
 shared libraries in `nexilis/build`.
