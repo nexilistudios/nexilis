@@ -564,7 +564,7 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
 
                     if (passCommand == CommandResult::success)
                     {
-                        Log::info(header(), "command success");
+                        Log::debug(header(), "command success");
                     }
                     else
                     {
