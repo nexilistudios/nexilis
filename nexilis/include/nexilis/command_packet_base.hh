@@ -19,6 +19,19 @@
 
 #include <utility>
 
+/// Shared static dispatch surface for client and server operations.
+///
+/// This template is the Curiously Recurring Template Pattern (CRTP)-style base:
+/// it is parameterized by its implementation type \p Impl and forwards every
+/// call to a matching static function on \p Impl. The nested `Set`, `Get` and
+/// `Room` structs group operations like namespaces, and each leaf forwards its
+/// arguments with std::forward, so dispatch is resolved at compile time with no
+/// virtual functions.
+///
+/// The server instantiates it as `Commands = CommandPacketBase<ServerImpl>`
+/// (see server/command/commands.hh) and the client as
+/// `Packet = CommandPacketBase<ClientImpl>` (see client/packet.hh).
+/// See docs/commands.md for the full description.
 template <typename Impl>
 class CommandPacketBase
 {

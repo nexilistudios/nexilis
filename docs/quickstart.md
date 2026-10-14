@@ -155,6 +155,7 @@ make test          # everything, including Premake, Lua, and C#
 Then read:
 
 - [Documentation index](README.md) — structure and testing
+- [Commands and packets](commands.md) — how `Packet`/`Commands` dispatch works
 - [Message protocol](server_message.md) — packet format and security notes
 - [Dependencies](dependencies.md) — Boost, OpenSSL, GoogleTest
 - [Bindings](../bindings/README.md) — C# and LuaJIT usage

@@ -31,6 +31,7 @@ On Linux with the MinGW-w64 cross compiler and Windows OpenSSL development libra
 
 - [Quick start](docs/quickstart.md), [documentation index](docs/README.md), and [dependencies](docs/dependencies.md)
 - [Client/server message format](docs/server_message.md)
+- [Commands and packets](docs/commands.md)
 - [Network ports](docs/ports.md)
 - [C# bindings](bindings/README.md)
 - [Examples](examples/) and [test commands](docs/README.md#testing)
