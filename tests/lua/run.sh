@@ -10,7 +10,7 @@ export NEXILISC_LIBRARY="$native_dir/libnexilisc.so"
 luajit tests/lua/client_test.lua
 shopt -s nullglob
 boost_includes=()
-for include in nexilis/third-party/boost/libs/*/include nexilis/third-party/boost/libs/numeric/conversion/include; do
+for include in nexilis/third-party/boost/libs/*/include; do
     if [[ -d "$include" ]]; then boost_includes+=(-I "$include"); fi
 done
 g++ -std=c++20 -I nexilis/include "${boost_includes[@]}" tests/lua/server.cc \

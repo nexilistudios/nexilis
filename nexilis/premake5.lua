@@ -37,17 +37,12 @@ linkoptions({
 	"-static-libgcc",
 })
 
--- All boost submodule headers. Keeps every translation unit on the exact
--- same boost version, no matter which system boost is installed.
+-- All selected Boost module headers. Keeps every translation unit on the
+-- exact same Boost version, no matter which system Boost is installed.
 local boost_includes = os.matchdirs("third-party/boost/libs/*/include")
--- Modules that live nested inside another module directory.
 local boost_sources = os.matchfiles("third-party/boost/libs/json/src/**.cpp")
-if #boost_sources > 0 then
-	table.insert(boost_includes, "third-party/boost/libs/numeric/conversion/include")
-end
 
--- Boost libraries with compiled sources (mirrors BOOST_LIBS_TO_BUILD
--- in CMakeLists.txt).
+-- Boost libraries with compiled sources.
 if #boost_sources > 0 then
 	project("nexilis-boost")
 	kind("StaticLib")

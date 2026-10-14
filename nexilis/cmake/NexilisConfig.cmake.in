@@ -8,16 +8,23 @@ set(NEXILIS_IS_CI @NEXILIS_IS_CI@)
 set(NEXILIS_USE_SUBMODULES @NEXILIS_USE_SUBMODULES@)
 set(NEXILIS_VERSION "@NEXILIS_VERSION@")
 set(NEXILIS_BOOST_INCLUDE_DIRS "@NEXILIS_BOOST_INCLUDE_DIRS@")
+set(NEXILIS_BOOST_JSON_LIBRARY "@NEXILIS_BOOST_JSON_LIBRARY@")
 
 if(@NEXILIS_USE_SUBMODULES@)
-    message(STATUS "Using boost submodules")
+    message(STATUS "Using individual Boost submodules")
 
-    # Create boost_json interface target for consumers
+    # Use the same Boost.JSON headers and binary as the Nexilis build. This
+    # prevents local consumers from compiling against the selected submodules
+    # while accidentally linking a different system Boost version.
     if(NOT TARGET boost_json)
-        add_library(boost_json INTERFACE IMPORTED)
+        add_library(boost_json UNKNOWN IMPORTED)
         set_target_properties(boost_json PROPERTIES
+            IMPORTED_LOCATION "${NEXILIS_BOOST_JSON_LIBRARY}"
             INTERFACE_INCLUDE_DIRECTORIES "${NEXILIS_BOOST_INCLUDE_DIRS}"
         )
+    endif()
+    if(NOT TARGET Boost::json)
+        add_library(Boost::json ALIAS boost_json)
     endif()
 else()
     find_dependency(Boost REQUIRED COMPONENTS json)
