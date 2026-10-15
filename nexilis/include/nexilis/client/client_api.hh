@@ -138,6 +138,16 @@ public:
         float x = 0.0f, y = 0.0f, z = 0.0f;
     };
 
+    /// Animation chosen by an application server for a room player.
+    struct AnimationEvent
+    {
+        uint64_t room_id = 0;
+        uint64_t client_id = 0;
+        std::string state;
+        std::string weapon;
+        float duration = 0.0f;
+    };
+
     /// Player 2D shoot event.
     struct Player2DShootEvent
     {
@@ -216,6 +226,7 @@ public:
               m_pendingRespawnEvents(std::move(other.m_pendingRespawnEvents)),
               m_pendingLeaderboardEvents(std::move(other.m_pendingLeaderboardEvents)),
               m_pendingAudioEvents(std::move(other.m_pendingAudioEvents)),
+              m_pendingAnimationEvents(std::move(other.m_pendingAnimationEvents)),
               m_pendingMatchEvents(std::move(other.m_pendingMatchEvents)),
               m_pendingPlayer2DShootEvents(std::move(other.m_pendingPlayer2DShootEvents)),
               m_damageMutex(std::move(other.m_damageMutex)),
@@ -242,6 +253,7 @@ public:
                 m_pendingRespawnEvents = std::move(other.m_pendingRespawnEvents);
                 m_pendingLeaderboardEvents = std::move(other.m_pendingLeaderboardEvents);
                 m_pendingAudioEvents = std::move(other.m_pendingAudioEvents);
+                m_pendingAnimationEvents = std::move(other.m_pendingAnimationEvents);
                 m_pendingMatchEvents = std::move(other.m_pendingMatchEvents);
                 m_pendingPlayer2DShootEvents = std::move(other.m_pendingPlayer2DShootEvents);
                 m_damageMutex = std::move(other.m_damageMutex);
@@ -379,6 +391,18 @@ public:
             return std::move(m_pendingAudioEvents);
         }
 
+        void pushAnimationEvent(AnimationEvent event)
+        {
+            std::lock_guard<std::mutex> lock(*m_damageMutex);
+            m_pendingAnimationEvents.push_back(std::move(event));
+        }
+
+        std::vector<AnimationEvent> consumeAnimationEvents()
+        {
+            std::lock_guard<std::mutex> lock(*m_damageMutex);
+            return std::move(m_pendingAnimationEvents);
+        }
+
         void pushMatchEvent(std::unique_ptr<MatchEvent> event)
         {
             std::lock_guard<std::mutex> lock(*m_damageMutex);
@@ -430,6 +454,7 @@ public:
         std::vector<LeaderboardEvent> m_pendingLeaderboardEvents;
         /// Pending positional audio events.
         std::vector<AudioEvent> m_pendingAudioEvents;
+        std::vector<AnimationEvent> m_pendingAnimationEvents;
         std::vector<std::unique_ptr<MatchEvent>> m_pendingMatchEvents;
         /// Pending Player 2D shoot events.
         std::vector<Player2DShootEvent> m_pendingPlayer2DShootEvents;
@@ -642,6 +667,12 @@ public:
     std::vector<AudioEvent> consumeAudioEvents()
     {
         return m_clientAPIData.consumeAudioEvents();
+    }
+
+    /// Consume server-authored player animation changes (thread-safe).
+    std::vector<AnimationEvent> consumeAnimationEvents()
+    {
+        return m_clientAPIData.consumeAnimationEvents();
     }
 
     /// Consume all pending Player 2D shoot events (thread-safe).

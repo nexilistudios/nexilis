@@ -151,6 +151,30 @@ private:
     float m_z;
 };
 
+class RoomAnimationEventCommand : public BaseAPICommand
+{
+public:
+    RoomAnimationEventCommand(uint64_t room_id, uint64_t client_id, std::string state,
+                              std::string weapon, float duration)
+        : m_room_id(room_id), m_client_id(client_id), m_state(std::move(state)),
+          m_weapon(std::move(weapon)), m_duration(duration)
+    {
+    }
+
+    ReadResult execute(ClientAPI&, ClientAPI::ClientAPIData& data) override
+    {
+        data.pushAnimationEvent({m_room_id, m_client_id, m_state, m_weapon, m_duration});
+        return ReadResult::success;
+    }
+
+private:
+    uint64_t m_room_id;
+    uint64_t m_client_id;
+    std::string m_state;
+    std::string m_weapon;
+    float m_duration;
+};
+
 } // namespace nexilis::client
 
 #endif

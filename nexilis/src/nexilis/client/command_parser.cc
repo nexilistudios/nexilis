@@ -240,6 +240,13 @@ std::unique_ptr<BaseAPICommand> CommandParser::parseRoomCommand(const boost::jso
                     getFloat(json, "x"), getFloat(json, "y"), getFloat(json, "z"));
         }
 
+        if (action == "animation")
+        {
+            return std::make_unique<RoomAnimationEventCommand>(
+                    room_id, client_id, getString(json, "state"),
+                    getString(json, "weapon"), getFloat(json, "duration"));
+        }
+
         return std::make_unique<RoomPlayer3DCommand>(
                 action, client_id,
                 getFloat(json, "x"), getFloat(json, "y"), getFloat(json, "z"),

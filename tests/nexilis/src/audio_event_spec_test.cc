@@ -233,4 +233,36 @@ TEST_F(AudioEventSpecTest, ClientParsesAndQueuesAudioEvent)
     EXPECT_FLOAT_EQ(events[0].z, 7.75f);
 }
 
+TEST_F(AudioEventSpecTest, ClientParsesServerAnimationEvent)
+{
+    client::ClientConfig config;
+    client::ClientAPI api(config);
+    api.setClientId(1);
+
+    boost::json::object json;
+    json["command"] = "room";
+    json["type"] = "player_3D";
+    json["callback"] = 0;
+    json["action"] = "animation";
+    json["room_id"] = ROOM_ID;
+    json["client_id"] = SENDER_ID;
+    json["state"] = "reloading";
+    json["weapon"] = "ak47";
+    json["duration"] = 2.5;
+
+    auto serialized = boost::json::serialize(json);
+    nx_data bytes(serialized.begin(), serialized.end());
+    bytes.emplace_back('\n');
+
+    ASSERT_EQ(api.readMessage(bytes), client::ReadResult::success);
+    auto events = api.consumeAnimationEvents();
+    ASSERT_EQ(events.size(), 1);
+    EXPECT_EQ(events[0].room_id, ROOM_ID);
+    EXPECT_EQ(events[0].client_id, SENDER_ID);
+    EXPECT_EQ(events[0].state, "reloading");
+    EXPECT_EQ(events[0].weapon, "ak47");
+    EXPECT_FLOAT_EQ(events[0].duration, 2.5f);
+    EXPECT_TRUE(api.consumeAnimationEvents().empty());
+}
+
 } // namespace

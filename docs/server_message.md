@@ -94,6 +94,14 @@ An application can send a server-authored JSON room response with `type: "match"
 
 Bomb snapshots include `round`, `terrorist_score`, `counter_terrorist_score`, `queue_position`, `phase`, `team`, `notice`, `seconds`, `bomb_planted`, `bomb_x/y/z`, `active`, `alive`, and `alive_players` (currently living player IDs). They are sent on state changes and about once per second. Deathmatch state messages include `player_id`, `alive`, and `respawn_seconds`; they are sent on death and respawn. This extension currently uses the Boost TCP sender used by nx-3D; other transports need an application sender before using these responses.
 
+An application server can send a `room/player_3D` JSON response with
+`action: "animation"`, `client_id`, `state`, `weapon`, and `duration`. Nexilis queues these
+as `ClientAPI::AnimationEvent` values for `consumeAnimationEvents()`. The server
+chooses the state; clients only use it to display the corresponding pose.
+The application can use existing `match_action` requests for visible slot changes;
+nx-3D uses action bytes 40 through 44 for slots one through five and validates
+the equipped weapon against its server inventory before broadcasting it.
+
 ## Response format
 
 `Get::Info::clients` replies as `info_general` with `client_amount`, the
