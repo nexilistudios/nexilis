@@ -226,7 +226,7 @@ void UDPServer::receiveFromClients()
                         break;
 
                     default:
-                        Log::error("UDPServer: Something FAILED");
+                        Log::error("UDPServer: Command failed with result: ", asString(passCommand));
                 }
             }
             else
