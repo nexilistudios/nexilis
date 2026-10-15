@@ -24,7 +24,6 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     permissions:
       contents: write
-      pages: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,10 +37,7 @@ jobs:
         run: |
           python -m pip install ./scripts
           sudo apt-get update
-          sudo apt-get install -y doxygen graphviz
-
-      - name: Check Pages configuration
-        uses: actions/configure-pages@v5
+          sudo apt-get install -y doxygen graphviz rsync
 
       - name: Prepare release version
         id: version
@@ -52,7 +48,6 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           if git show-ref --verify --quiet "refs/tags/$tag"; then
-            # A retry must reuse this run's release, never an unrelated tag.
             test "$(git rev-parse "$tag^")" = "$GITHUB_SHA"
             git log -1 --format=%B "$tag" | grep -Fx "Release-Run: $GITHUB_RUN_ID"
             git restore VERSION.txt nexilis/Doxyfile
@@ -73,16 +68,73 @@ jobs:
           doxygen Doxyfile
           test -s docs/html/index.html
 
-      - name: Upload documentation
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: nexilis/docs/html
+      - name: Push documentation to nexilistudios.github.io
+        env:
+          DEPLOY_KEY: ${{ secrets.NEXILIS_IO_DEPLOY_KEY }}
+          DEPLOY_TOKEN: ${{ secrets.NEXILIS_IO_TOKEN }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${DEPLOY_KEY:-}" ]]; then
+            mkdir -p ~/.ssh
+            echo "$DEPLOY_KEY" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            ssh-keyscan github.com >> ~/.ssh/known_hosts
+            remote="git@github.com:nexilistudios/nexilistudios.github.io.git"
+          else
+            token="${DEPLOY_TOKEN:-${{ github.token }}}"
+            remote="https://x-access-token:${token}@github.com/nexilistudios.github.io.git"
+          fi
+
+          git clone --depth 1 "$remote" site
+
+          # Sync generated docs into the website repo, preserving custom files and assets
+          rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='CNAME' \
+            --exclude='.nojekyll' \
+            --exclude='README*' \
+            --exclude='LICENSE*' \
+            --exclude='robots.txt' \
+            --exclude='sitemap*' \
+            --exclude='favicon*' \
+            --exclude='apple-touch-icon*' \
+            --exclude='logo*' \
+            --exclude='*.png' \
+            --exclude='*.jpg' \
+            --exclude='*.jpeg' \
+            --exclude='*.svg' \
+            --exclude='*.ico' \
+            --exclude='*.webp' \
+            --exclude='*.gif' \
+            --exclude='css/' \
+            --exclude='styles/' \
+            --exclude='assets/' \
+            --exclude='static/' \
+            --exclude='images/' \
+            --exclude='img/' \
+            --exclude='fonts/' \
+            --exclude='js/custom/' \
+            --exclude='theme/' \
+            nexilis/docs/html/ site/
+
+          cd site
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No documentation changes to publish"
+          else
+            git commit -m "docs: update for Nexilis ${RELEASE_VERSION} (${RELEASE_TAG})"
+            git push
+          fi
 
       - name: Push version commit and tag
         if: steps.version.outputs.existing != 'true'
         env:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        # Atomic, non-forced push rejects a main-branch change during the build.
         run: git push --atomic origin HEAD:refs/heads/main "refs/tags/$RELEASE_TAG"
 
       - name: Publish GitHub release
@@ -99,27 +151,3 @@ jobs:
             gh release create "$RELEASE_TAG" --verify-tag --generate-notes \
               --title "Nexilis $RELEASE_VERSION" "${flags[@]}"
           fi
-
-  documentation:
-    needs: release
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - name: Prevent publishing superseded documentation on a retry
-        env:
-          RELEASE_VERSION: ${{ needs.release.outputs.version }}
-        run: test "$(cat VERSION.txt)" = "$RELEASE_VERSION"
-
-      - name: Publish release documentation
-        id: deployment
-        uses: actions/deploy-pages@v4
