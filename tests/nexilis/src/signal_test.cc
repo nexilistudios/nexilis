@@ -54,3 +54,73 @@ TEST(SignalHandlerTest, WaitWakesAndDispatchesCallbackOncePerRequest)
     SignalHandler::clearShutdownRequested();
 }
 #endif
+
+#if defined(_WIN32)
+namespace
+{
+// On Windows the console control handler is the only thing that sets the shutdown
+// flag. Raising a real Ctrl+C/Ctrl+Break event with GenerateConsoleCtrlEvent would
+// also signal every other process attached to the console, so these tests drive the
+// public state directly. This covers the wait/callback dispatch and the event reset
+// performed by clearShutdownRequested(), which the POSIX branch does not exercise.
+class WindowsSignalHandlerTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        nexilis::server::SignalHandler::install();
+        nexilis::server::SignalHandler::setShutdownCallback(nullptr);
+        nexilis::server::SignalHandler::clearShutdownRequested();
+    }
+
+    void TearDown() override
+    {
+        nexilis::server::SignalHandler::setShutdownCallback(nullptr);
+        nexilis::server::SignalHandler::clearShutdownRequested();
+    }
+};
+} // namespace
+
+TEST_F(WindowsSignalHandlerTest, InstallIsIdempotent)
+{
+    EXPECT_NO_THROW(nexilis::server::SignalHandler::install());
+    EXPECT_FALSE(nexilis::server::SignalHandler::isShutdownRequested());
+}
+
+TEST_F(WindowsSignalHandlerTest, WaitForShutdownDispatchesCallbackOnce)
+{
+    int callbacks = 0;
+    nexilis::server::SignalHandler::setShutdownCallback([&callbacks]()
+                                                        { ++callbacks; });
+
+    nexilis::server::SignalHandler::s_shutdownRequested.store(true);
+
+    nexilis::server::SignalHandler::waitForShutdown();
+    EXPECT_TRUE(nexilis::server::SignalHandler::isShutdownRequested());
+    EXPECT_EQ(callbacks, 1);
+
+    // A second wait must not re-run the callback for the same request.
+    nexilis::server::SignalHandler::waitForShutdown();
+    EXPECT_EQ(callbacks, 1);
+}
+
+TEST_F(WindowsSignalHandlerTest, ClearShutdownRequestedAllowsNextCallback)
+{
+    int callbacks = 0;
+    nexilis::server::SignalHandler::setShutdownCallback([&callbacks]()
+                                                        { ++callbacks; });
+
+    nexilis::server::SignalHandler::s_shutdownRequested.store(true);
+    nexilis::server::SignalHandler::waitForShutdown();
+    ASSERT_EQ(callbacks, 1);
+
+    // Clearing resets the flag and the Windows event so a later request is
+    // delivered again.
+    nexilis::server::SignalHandler::clearShutdownRequested();
+    ASSERT_FALSE(nexilis::server::SignalHandler::isShutdownRequested());
+
+    nexilis::server::SignalHandler::s_shutdownRequested.store(true);
+    nexilis::server::SignalHandler::waitForShutdown();
+    EXPECT_EQ(callbacks, 2);
+}
+#endif
