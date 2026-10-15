@@ -86,7 +86,7 @@ protected:
     nexilis::ProtocolManager protocol_manager;
     nexilis::server::ServerConfig settings;
 
-    static constexpr uint16_t port = 54301;
+    static constexpr uint16_t port = 55211;
 
     std::unique_ptr<nexilis::client::ClientAPI> api;
     std::shared_ptr<nexilis::server::af_inet::UDPServer> server;

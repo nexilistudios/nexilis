@@ -22,6 +22,8 @@
 
 #include <nexilis/protocol_manager.hh>
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -36,6 +38,13 @@ typedef struct nexilis_ProtocolDataC nexilis_ProtocolDataC;
 // ProtocolManager
 nexilis_ProtocolManagerC* nexilis_protocol_manager_create();
 void nexilis_protocol_manager_destroy(nexilis_ProtocolManagerC* manager);
+
+uint16_t nexilis_get_boost_tcp_port();
+void nexilis_set_boost_tcp_port(uint16_t port);
+uint16_t nexilis_get_boost_udp_port();
+void nexilis_set_boost_udp_port(uint16_t port);
+uint16_t nexilis_get_boost_tcp_session_port();
+void nexilis_set_boost_tcp_session_port(uint16_t port);
 
 // ProtocolData
 nexilis_ProtocolDataC* nexilis_protocol_data_create(nexilis_ProtocolTypeC type);

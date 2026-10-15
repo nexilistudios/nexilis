@@ -4,6 +4,9 @@
 package.path = "bindings/lua/?.lua;" .. package.path
 local nexilis = require("nexilis")
 
+nexilis.native.nexilis_set_boost_tcp_port(55400)
+nexilis.native.nexilis_set_boost_udp_port(55401)
+
 assert(nexilis.id_string(nexilis.id("18446744073709551615")) == "18446744073709551615")
 local ok = pcall(nexilis.id, "18446744073709551616")
 assert(not ok)

@@ -73,10 +73,10 @@ TEST_F(ProtocolManagerTest, CreateProtocol_AFInetUDPServer)
     settings.setPassphrase("salasana");
     settings.setRootPassword("root");
 
-    auto inet_udp_server = manager.createProtocol<nexilis::server::af_inet::UDPServer>(settings, 54301);
+    auto inet_udp_server = manager.createProtocol<nexilis::server::af_inet::UDPServer>(settings, 55211);
 
     EXPECT_EQ(inet_udp_server.getType(), nexilis::NXProtocol::Type::AF_INET_UDP_SERVER);
-    EXPECT_EQ(inet_udp_server.getPort(), 54301);
+    EXPECT_EQ(inet_udp_server.getPort(), 55211);
     EXPECT_EQ(inet_udp_server.getSettings().getMode(), nexilis::server::AuthenticationMode::password_protected);
     EXPECT_EQ(inet_udp_server.getSettings().getPassphrase(), "salasana");
     EXPECT_EQ(inet_udp_server.getSettings().getRootPassword(), "root");
@@ -128,7 +128,7 @@ TEST_F(ProtocolManagerTest, CreateProtocol_AFInetUDPClient)
     nexilis::client::ClientConfig config;
     config.setPassword("salasana");
     config.setInetUDP("127.0.0.1");
-    config.setInetUDPServerPort(54301);
+    config.setInetUDPServerPort(55211);
     config.setMode(nexilis::server::AuthenticationMode::password_protected);
 
     nexilis::client::ClientAPI client_api(config);

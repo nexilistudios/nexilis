@@ -16,9 +16,14 @@
 
 #include <gtest/gtest.h>
 #include <nexilis/environment.hh>
+#include <nexilis/ports.hh>
 
 int main(int argc, char** argv)
 {
+    nexilis::Ports::setBoostTCPPort(55200);
+    nexilis::Ports::setBoostUDPPort(55201);
+    nexilis::Ports::setBoostTCPSessionPort(55202);
+
     auto env = nexilis::envToString(nexilis::detectRuntimeType());
     std::cout << "Running tests in " << env << " environment." << std::endl;
 

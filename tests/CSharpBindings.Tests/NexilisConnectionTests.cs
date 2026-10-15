@@ -15,6 +15,7 @@
    along with this file.  If not, see <https://gnu.org>. */
 
 using System;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Nexilis.Util;
 
@@ -26,6 +27,12 @@ namespace Nexilis.Tests
     /// </summary>
     public class NexilisConnectionTests
     {
+        [DllImport("nexilisc", CallingConvention = CallingConvention.Cdecl)]
+        static extern ushort nexilis_get_boost_tcp_port();
+
+        [DllImport("nexilisc", CallingConvention = CallingConvention.Cdecl)]
+        static extern void nexilis_set_boost_tcp_port(ushort port);
+
         public NexilisConnectionTests()
         {
             TestEnvironment.Initialize();
@@ -39,14 +46,17 @@ namespace Nexilis.Tests
             // here is that it fails *fast*: previously the native connect loop
             // waited forever for initialization when the connection failed,
             // which froze the caller (e.g. Unity) instead of surfacing an error.
-            var client = new NexilisClient
-            {
-                ServerAddress = "127.0.0.1",
-                Password = "password",
-            };
+            var originalPort = nexilis_get_boost_tcp_port();
+            nexilis_set_boost_tcp_port(55600);
+            NexilisClient? client = null;
 
             try
             {
+                client = new NexilisClient
+                {
+                    ServerAddress = "127.0.0.1",
+                    Password = "password",
+                };
                 var connectTask = client.ConnectAsync();
 
                 var completedTask = await Task.WhenAny(connectTask, Task.Delay(TimeSpan.FromSeconds(10)));
@@ -57,7 +67,8 @@ namespace Nexilis.Tests
             }
             finally
             {
-                client.Dispose();
+                client?.Dispose();
+                nexilis_set_boost_tcp_port(originalPort);
             }
         }
     }

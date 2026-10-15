@@ -19,6 +19,7 @@
 #include <thread>
 
 #include <nexilis/logger/log.hh>
+#include <nexilis/ports.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/client_storage.hh>
 
@@ -30,6 +31,10 @@
 
 int main()
 {
+    nexilis::Ports::setBoostTCPPort(55300);
+    nexilis::Ports::setBoostUDPPort(55301);
+    nexilis::Ports::setBoostTCPSessionPort(55302);
+
     nexilis::Log::startConsoleDebugging();
 
     nexilis::ProtocolManager protocol_manager;

@@ -54,3 +54,22 @@ TEST_F(ProtocolManagerExtendedTest_c, ProtocolDataIdUniqueness)
     nexilis_protocol_data_destroy(a);
     nexilis_protocol_data_destroy(b);
 }
+
+TEST(ProtocolPortsTest_c, BoostPortsCanBeOverridden)
+{
+    const auto tcp = nexilis_get_boost_tcp_port();
+    const auto udp = nexilis_get_boost_udp_port();
+    const auto session = nexilis_get_boost_tcp_session_port();
+
+    nexilis_set_boost_tcp_port(55700);
+    nexilis_set_boost_udp_port(55701);
+    nexilis_set_boost_tcp_session_port(55702);
+
+    EXPECT_EQ(nexilis_get_boost_tcp_port(), 55700);
+    EXPECT_EQ(nexilis_get_boost_udp_port(), 55701);
+    EXPECT_EQ(nexilis_get_boost_tcp_session_port(), 55702);
+
+    nexilis_set_boost_tcp_port(tcp);
+    nexilis_set_boost_udp_port(udp);
+    nexilis_set_boost_tcp_session_port(session);
+}

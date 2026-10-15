@@ -14,6 +14,7 @@
    You should have received a copy of the GNU Lesser General Public License
    along with this file.  If not, see <https://gnu.org>. */
 
+#include "../test_ports.hh"
 #include <nexilis/client/client_api.hh>
 #include <nexilis/client/packet.hh>
 #include <nexilis/client/protocol/nxboost/tcp_client.hh>
@@ -65,8 +66,9 @@ void printNewMessages(nexilis::client::ClientAPI& api, uint64_t room_id,
 
 } // namespace
 
-int main()
+int main(int argc, char** argv)
 {
+    useTestPortsIfRequested(argc, argv);
     nexilis::Log::startConsoleDebugging();
 
     nexilis::ProtocolManager protocol_manager;

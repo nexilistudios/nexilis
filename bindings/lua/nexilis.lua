@@ -6,6 +6,7 @@ local ffi = require("ffi")
 
 ffi.cdef[[
 typedef unsigned char uint8_t;
+typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
 typedef unsigned long long uint64_t;
 typedef struct nexilis_ClientConfigC nexilis_ClientConfigC;
@@ -23,6 +24,8 @@ int usleep(unsigned int usec);
 void free(void *ptr);
 void nexilis_log_start_console_debugging(void);
 void nexilis_log_stop_logging(void);
+void nexilis_set_boost_tcp_port(uint16_t);
+void nexilis_set_boost_udp_port(uint16_t);
 
 nexilis_ClientConfigC *nexilis_client_config_create(void);
 void nexilis_client_config_destroy(nexilis_ClientConfigC *);

@@ -157,7 +157,7 @@ class Example:
         self.log_file = open(self.build_dir / f"{self.name}_server.log", "w")
         print(f"==> Starting server example: {self.name}")
         self.process = subprocess.Popen(
-            [str(self.executable)],
+            [str(self.executable), "--test-ports"],
             cwd=self.build_dir,
             stdout=self.log_file,
             stderr=subprocess.STDOUT,
@@ -186,7 +186,7 @@ class Example:
         """Run this example to completion and require exit code 0."""
         try:
             result = subprocess.run(
-                [str(self.executable)],
+                [str(self.executable), "--test-ports"],
                 cwd=self.build_dir,
                 capture_output=True,
                 text=True,

@@ -14,6 +14,7 @@
    You should have received a copy of the GNU Lesser General Public License
    along with this file.  If not, see <https://gnu.org>. */
 
+#include <nexilis/ports.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilisc/protocol_manager_c.h>
 
@@ -40,6 +41,36 @@ void nexilis_protocol_manager_destroy(nexilis_ProtocolManagerC* manager)
         }
         delete manager;
     }
+}
+
+uint16_t nexilis_get_boost_tcp_port()
+{
+    return nexilis::Ports::getBoostTCPPort();
+}
+
+void nexilis_set_boost_tcp_port(uint16_t port)
+{
+    nexilis::Ports::setBoostTCPPort(port);
+}
+
+uint16_t nexilis_get_boost_udp_port()
+{
+    return nexilis::Ports::getBoostUDPPort();
+}
+
+void nexilis_set_boost_udp_port(uint16_t port)
+{
+    nexilis::Ports::setBoostUDPPort(port);
+}
+
+uint16_t nexilis_get_boost_tcp_session_port()
+{
+    return nexilis::Ports::getBoostTCPSessionPort();
+}
+
+void nexilis_set_boost_tcp_session_port(uint16_t port)
+{
+    nexilis::Ports::setBoostTCPSessionPort(port);
 }
 
 nexilis_ProtocolDataC* nexilis_protocol_data_create(nexilis_ProtocolTypeC type)

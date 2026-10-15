@@ -20,19 +20,19 @@
 
 using namespace nexilis;
 
-TEST(PortsTest, BoostDefaultsCanBeOverridden)
+TEST(PortsTest, BoostPortsCanBeOverridden)
 {
     const auto originalTCP = Ports::getBoostTCPPort();
     const auto originalUDP = Ports::getBoostUDPPort();
     const auto originalTCPSession = Ports::getBoostTCPSessionPort();
 
-    Ports::setBoostTCPPort(55200);
-    Ports::setBoostUDPPort(55201);
-    Ports::setBoostTCPSessionPort(55202);
+    Ports::setBoostTCPPort(55220);
+    Ports::setBoostUDPPort(55221);
+    Ports::setBoostTCPSessionPort(55222);
 
-    EXPECT_EQ(Ports::getBoostTCPPort(), 55200);
-    EXPECT_EQ(Ports::getBoostUDPPort(), 55201);
-    EXPECT_EQ(Ports::getBoostTCPSessionPort(), 55202);
+    EXPECT_EQ(Ports::getBoostTCPPort(), 55220);
+    EXPECT_EQ(Ports::getBoostUDPPort(), 55221);
+    EXPECT_EQ(Ports::getBoostTCPSessionPort(), 55222);
 
     Ports::setBoostTCPPort(originalTCP);
     Ports::setBoostUDPPort(originalUDP);

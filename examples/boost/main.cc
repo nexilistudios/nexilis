@@ -14,6 +14,7 @@
    You should have received a copy of the GNU Lesser General Public License
    along with this file.  If not, see <https://gnu.org>. */
 
+#include "../test_ports.hh"
 #include <nexilis/logger/log.hh>
 #include <nexilis/protocol_manager.hh>
 
@@ -29,8 +30,9 @@
 #include <iostream>
 #include <thread>
 
-int main()
+int main(int argc, char** argv)
 {
+    useTestPortsIfRequested(argc, argv);
     nexilis::Log::startConsoleDebugging();
 
     nexilis::ProtocolManager protocol_manager;

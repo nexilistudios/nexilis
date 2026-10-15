@@ -5,12 +5,17 @@
 #include <iostream>
 #include <thread>
 
+#include <nexilis/ports.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/client_storage.hh>
 #include <nexilis/server/protocol/nxboost/tcp_server.hh>
 
 int main()
 {
+    nexilis::Ports::setBoostTCPPort(55400);
+    nexilis::Ports::setBoostUDPPort(55401);
+    nexilis::Ports::setBoostTCPSessionPort(55402);
+
     nexilis::ProtocolManager manager;
     nexilis::server::ServerConfig config;
     config.setMode(nexilis::server::AuthenticationMode::password_protected);
