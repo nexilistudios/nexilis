@@ -16,12 +16,37 @@
 
 from env import get_nexilis_root
 
+import argparse
 import os
+import re
+import shutil
 import subprocess
 import sys
+from typing import Optional
 
 
-def format_all_files() -> int:
+def get_clang_format() -> Optional[str]:
+    for name in ("clang-format-23", "clang-format"):
+        executable = shutil.which(name)
+        if executable is None:
+            continue
+        result = subprocess.run(
+            [executable, "--version"], capture_output=True, text=True
+        )
+        if result.returncode == 0 and re.search(
+            r"\bversion 23\.1\.1\b", result.stdout
+        ):
+            return executable
+
+    print("Clang-format 23.1.1 is required (install clang-format==23.1.1).")
+    return None
+
+
+def format_all_files(apply_only: bool = False) -> int:
+    clang_format = get_clang_format()
+    if clang_format is None:
+        return 1
+
     # Define the directories to run Clang-Format recursively.
     directories = ["nexilis", "examples", "tests"]
     changes_detected = False
@@ -39,14 +64,17 @@ def format_all_files() -> int:
             rf'find "{target_dir}"'
             r' -not -path "*/third-party/*"'
             r' -type f \( -name "*.hh" -o -name "*.cc" \)'
-            r" -exec clang-format --dry-run --Werror {} +"
+            rf' -exec "{clang_format}" --dry-run --Werror {{}} +'
         )
         result = subprocess.run(
             find_check_command, shell=True, capture_output=True, text=True
         )
 
         if result.returncode != 0:
-            print("::error::Formatting changes required. Diff:")
+            if not apply_only:
+                print("::error::Formatting changes required. Diff:")
+            else:
+                print("Formatting changes needed:")
             print(result.stderr)
             changes_detected = True
 
@@ -55,18 +83,31 @@ def format_all_files() -> int:
                 rf'find "{target_dir}"'
                 r' -not -path "*/third-party/*"'
                 r' -type f \( -name "*.hh" -o -name "*.cc" \)'
-                r" -exec clang-format -i {} +"
+                rf' -exec "{clang_format}" -i {{}} +'
             )
             subprocess.run(find_apply_command, shell=True, check=True)
 
     if changes_detected:
-        print("::error::Formatting changes were required and have been applied")
-        return 1
+        if not apply_only:
+            print(
+                "::error::Formatting changes were required "
+                "and have been applied"
+            )
+            return 1
+        print("Formatting changes applied")
+        return 0
     else:
         print("No formatting changes needed")
         return 0
 
 
 if __name__ == "__main__":
-    f = format_all_files()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply formatting and exit successfully",
+    )
+    args = parser.parse_args()
+    f = format_all_files(apply_only=args.apply)
     sys.exit(f)

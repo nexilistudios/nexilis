@@ -151,3 +151,4 @@ jobs:
             gh release create "$RELEASE_TAG" --verify-tag --generate-notes \
               --title "Nexilis $RELEASE_VERSION" "${flags[@]}"
           fi
+

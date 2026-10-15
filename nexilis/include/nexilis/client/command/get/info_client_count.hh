@@ -17,7 +17,8 @@ namespace nexilis::client
 class GetInfoClientCountCommand : public BaseAPICommand
 {
 public:
-    explicit GetInfoClientCountCommand(uint64_t count) : m_count(count)
+    explicit GetInfoClientCountCommand(uint64_t count)
+        : m_count(count)
     {
     }
 

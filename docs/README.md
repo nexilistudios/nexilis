@@ -21,6 +21,10 @@ The native test suites need GoogleTest and a configured Nexilis build. After `ma
 
 The CI workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) shows the dependencies used for each check.
 
+`make format`, `make pre-commit`, and `make pre-commit-all` use clang-format
+23.1.1, the same version installed by CI. Install it with
+`python -m pip install clang-format==23.1.1` if needed.
+
 See [weekly releases](releases.md) for automated patch versioning and Doxygen
 website publishing.
 

@@ -87,7 +87,7 @@ lint-python:
 	cd $(PRE_COMMIT_DIR) && python3 flake8_check.py
 
 format:
-	cd $(PRE_COMMIT_DIR) && python3 format.py
+	cd $(PRE_COMMIT_DIR) && python3 format.py --apply
 
 cppcheck:
 	cd $(PRE_COMMIT_DIR) && python3 cppcheck.py
