@@ -32,6 +32,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -123,8 +124,11 @@ private:
     static ClientMsgType clientMessageMap(CommandType cmd, const std::string& type, uint64_t message_id, const ClientMsgType& params);
 
 private:
+    struct RootAuthState;
+
     /// The server side configuration.
     ServerConfig m_settings;
+    std::shared_ptr<RootAuthState> m_rootAuthState;
 };
 
 } // namespace nexilis::server

@@ -45,7 +45,6 @@ MessageHandler::MessageHandler()
 std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, const nx_data& payload, ServerConfig* authentication)
 {
     Log::debug(header(), "Payload size: ", payload.size());
-    Util::debugUint8Vector(payload);
 
     // In password_protected mode the very first message from an unidentified
     // client is the raw password, which may be shorter than 8 bytes. Only attempt
@@ -194,8 +193,7 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                 }
                 else
                 {
-                    Log::error(header(), "Authentication error, instead of password we got: \n");
-                    Util::debugUint8Vector(payload);
+                    Log::error(header(), "Authentication error: incorrect password");
                     return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::authentication_error);
                 }
             }

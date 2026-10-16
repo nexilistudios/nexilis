@@ -149,7 +149,7 @@ void ClientProtocol::start(NXProtocol::Type type)
         case server::AuthenticationMode::password_protected:
         {
             auto password = m_api->getClientPassword();
-            Log::debug(header(), "Trying server password: ", password);
+            Log::debug(header(), "Authenticating with server password");
             auto message = Util::convertToByteVector(password.c_str(), password.size());
             sendMessage(message);
             break;

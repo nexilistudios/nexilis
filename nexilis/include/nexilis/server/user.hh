@@ -17,6 +17,7 @@
 #ifndef NEXILIS_SERVER_USER_HH
 #define NEXILIS_SERVER_USER_HH
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <nexilis/base_client.hh>
@@ -61,24 +62,24 @@ public:
 
     void setRootAccess(bool hasAccess)
     {
-        m_hasRootAccess = hasAccess;
+        m_hasRootAccess.store(hasAccess);
     }
 
     bool hasRootAccess() const
     {
-        return m_hasRootAccess;
+        return m_hasRootAccess.load();
     }
 
     /// Access redeemed by the passphrase.
     void setCommonAccess(bool hasAccess)
     {
-        m_hasCommonAccess = hasAccess;
+        m_hasCommonAccess.store(hasAccess);
     }
 
     /// Passphrase has been initialized correctly for server.
     bool hasCommonAccess() const
     {
-        return m_hasCommonAccess;
+        return m_hasCommonAccess.load();
     }
 
     void setId(uint64_t id)
@@ -251,8 +252,8 @@ private:
 
 private:
     /// Access area.
-    bool m_hasRootAccess = false;
-    bool m_hasCommonAccess = false;
+    std::atomic<bool> m_hasRootAccess{false};
+    std::atomic<bool> m_hasCommonAccess{false};
 };
 
 } // namespace nexilis::server

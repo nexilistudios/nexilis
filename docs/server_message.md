@@ -130,6 +130,17 @@ Configuration details:
 
 ## Security notes
 
+Command-channel passphrase authentication (`authentication`, action `2`) is
+rejected; clients authenticate during the initial connection handshake. Root
+authentication (`authentication`, action `1`) requires an established
+`password_protected` session with common access over TLS-PSK Boost TCP and a
+configured root password. Five failed root attempts from one source address
+block further attempts from that address for ten minutes, including after a
+reconnect. The attempt state is scoped to the server protocol instance and
+resets when that instance is replaced. At most 4096 source addresses are tracked;
+new addresses are denied root attempts while that limit is full. This limiter
+does not cover the initial connection handshake.
+
 `ClientAPI::setMessageEncryption(true)` affects room broadcasts when the client has a nonempty password. It does not encrypt othercast or unicast messages. The message key is derived from that same password and the room ID; the server holds the password, so this feature does **not** hide message contents from the server.
 
 The current broadcast implementation also falls back to the plaintext payload if key derivation or encryption fails. Treat this option as experimental and do not rely on it for confidentiality until that behavior is changed and tested. TLS-PSK protects only the Boost TCP transport when both peers leave it enabled and use the same passphrase.

@@ -18,13 +18,16 @@
 
 #include <nexilis/auth_config.hh>
 #include <nexilis/command_type.hh>
+#include <nexilis/nx_protocol.hh>
 #include <nexilis/server/client_storage.hh>
+#include <nexilis/server/command/command.hh>
 #include <nexilis/server/message/auth_message.hh>
 #include <nexilis/server/message/base_message.hh>
 #include <nexilis/server/message/error_message.hh>
 #include <nexilis/server/message/message.hh>
 #include <nexilis/server/message/message_handler.hh>
 #include <nexilis/server/server_config.hh>
+#include <nexilis/server/user.hh>
 #include <nexilis/util.hh>
 
 #include <string>
@@ -94,6 +97,134 @@ TEST(ServerConfig, IsRootPasswordMatches)
     EXPECT_FALSE(config.isRootPassword("rootsec"));
     EXPECT_FALSE(config.isRootPassword("rootsecretpassword"));
     EXPECT_FALSE(config.isRootPassword("rootsecr"));
+}
+
+class AuthTestProtocol : public NXProtocol
+{
+public:
+    explicit AuthTestProtocol(Type type)
+        : m_type(type)
+    {
+    }
+
+    void start() override
+    {
+    }
+    void stop() override
+    {
+    }
+    Type getType() override
+    {
+        return m_type;
+    }
+
+private:
+    Type m_type;
+};
+
+nx_data authCommand(uint8_t action, const std::string& password)
+{
+    nx_data command{static_cast<uint8_t>(CommandType::authentication), action};
+    command.insert(command.end(), password.begin(), password.end());
+    return command;
+}
+
+server::ServerConfig rootAuthSettings()
+{
+    server::ServerConfig config;
+    config.setMode(AuthenticationMode::password_protected);
+    config.setPassphrase("session-secret");
+    config.setRootPassword("root-secret");
+    return config;
+}
+
+TEST(AuthCommand, PassphraseCommandCannotGrantCommonAccess)
+{
+    server::Command command(rootAuthSettings());
+    server::User user(1, "test-address");
+    AuthTestProtocol protocol(NXProtocol::Type::BOOST_TCP_SERVER);
+
+    EXPECT_EQ(command.read(authCommand(2, "session-secret"), user, protocol, 1),
+              server::CommandResult::unauthorized);
+    EXPECT_FALSE(user.hasCommonAccess());
+}
+
+TEST(AuthCommand, RootCommandRequiresAuthenticatedTlsTcpSession)
+{
+    auto config = rootAuthSettings();
+    server::Command command(config);
+    server::User user(1, "test-address");
+    AuthTestProtocol tcp(NXProtocol::Type::BOOST_TCP_SERVER);
+    AuthTestProtocol udp(NXProtocol::Type::BOOST_UDP_SERVER);
+    const auto correct = authCommand(1, "root-secret");
+
+    EXPECT_EQ(command.read(correct, user, tcp, 1), server::CommandResult::unauthorized);
+    user.setCommonAccess(true);
+    EXPECT_EQ(command.read(correct, user, udp, 2), server::CommandResult::unauthorized);
+
+    config.setTls(false);
+    server::Command plaintext(config);
+    EXPECT_EQ(plaintext.read(correct, user, tcp, 3), server::CommandResult::unauthorized);
+
+    config.setTls(true);
+    config.setMode(AuthenticationMode::skip);
+    server::Command skip(config);
+    EXPECT_EQ(skip.read(correct, user, tcp, 4), server::CommandResult::unauthorized);
+    EXPECT_FALSE(user.hasRootAccess());
+}
+
+TEST(AuthCommand, RootCommandAllowsAuthenticatedClient)
+{
+    server::Command command(rootAuthSettings());
+    server::User user(1, "test-address");
+    user.setCommonAccess(true);
+    AuthTestProtocol tcp(NXProtocol::Type::BOOST_TCP_SERVER);
+
+    EXPECT_EQ(command.read(authCommand(1, "wrong"), user, tcp, 1), server::CommandResult::unauthorized);
+    EXPECT_EQ(command.read(authCommand(1, "root-secret"), user, tcp, 2), server::CommandResult::success);
+    EXPECT_TRUE(user.hasRootAccess());
+}
+
+TEST(AuthCommand, RootCommandRejectsUnsetRootPassword)
+{
+    auto config = rootAuthSettings();
+    config.setRootPassword("");
+    server::Command command(config);
+    server::User user(1, "test-address");
+    user.setCommonAccess(true);
+    AuthTestProtocol tcp(NXProtocol::Type::BOOST_TCP_SERVER);
+
+    EXPECT_EQ(command.read(authCommand(1, ""), user, tcp, 1), server::CommandResult::unauthorized);
+    EXPECT_FALSE(user.hasRootAccess());
+}
+
+TEST(AuthCommand, RootFailuresLockOutAddressAcrossSessions)
+{
+    server::Command command(rootAuthSettings());
+    server::User user(1, "test-address");
+    user.setCommonAccess(true);
+    AuthTestProtocol tcp(NXProtocol::Type::BOOST_TCP_SERVER);
+
+    for (uint64_t messageId = 1; messageId <= 5; ++messageId)
+    {
+        EXPECT_EQ(command.read(authCommand(1, "wrong"), user, tcp, messageId),
+                  server::CommandResult::unauthorized);
+    }
+    EXPECT_EQ(command.read(authCommand(1, "root-secret"), user, tcp, 6),
+              server::CommandResult::unauthorized);
+    EXPECT_FALSE(user.hasRootAccess());
+
+    server::User reconnected(2, "test-address");
+    reconnected.setCommonAccess(true);
+    EXPECT_EQ(command.read(authCommand(1, "root-secret"), reconnected, tcp, 7),
+              server::CommandResult::unauthorized);
+    EXPECT_FALSE(reconnected.hasRootAccess());
+
+    server::User otherAddress(3, "other-address");
+    otherAddress.setCommonAccess(true);
+    EXPECT_EQ(command.read(authCommand(1, "root-secret"), otherAddress, tcp, 8),
+              server::CommandResult::success);
+    EXPECT_TRUE(otherAddress.hasRootAccess());
 }
 
 class MessageHandlerPasswordProtectedTest : public ::testing::Test

@@ -28,19 +28,43 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <mutex>
+#include <unordered_map>
 
 namespace nexilis::server
 {
 
+namespace
+{
+constexpr unsigned kMaxRootAuthFailures = 5;
+constexpr auto kRootAuthWindow = std::chrono::minutes(10);
+constexpr size_t kMaxTrackedRootAuthAddresses = 4096;
+} // namespace
+
+struct Command::RootAuthState
+{
+    struct Attempt
+    {
+        std::chrono::steady_clock::time_point firstFailure;
+        unsigned failures;
+    };
+
+    std::mutex mutex;
+    std::unordered_map<std::string, Attempt> byAddress;
+};
+
 Command::Command(const ServerConfig& settings)
     : NxClass("server::Command"),
-      m_settings(settings)
+      m_settings(settings),
+      m_rootAuthState(std::make_shared<RootAuthState>())
 {
 }
 
 Command::Command(Command&& other)
     : NxClass(std::move(other)),
-      m_settings(std::move(other.m_settings))
+      m_settings(std::move(other.m_settings)),
+      m_rootAuthState(std::move(other.m_rootAuthState))
 {
 }
 
@@ -49,6 +73,7 @@ Command& Command::operator=(Command&& other)
     if (this != &other)
     {
         m_settings = std::move(other.m_settings);
+        m_rootAuthState = std::move(other.m_rootAuthState);
         NxClass::operator=(std::move(other));
     }
     return *this;
@@ -63,9 +88,6 @@ CommandResult Command::read(const nx_data& command, User& user, NXProtocol& prot
 {
     assert(user.getId() != 0);
 
-    Log::debug("Command: Nexilis command sequence");
-    Util::debugUint8Vector(command);
-
     if (command.size() < 2)
     {
         return CommandResult::invalid_input;
@@ -79,6 +101,17 @@ CommandResult Command::read(const nx_data& command, User& user, NXProtocol& prot
     auto arg = static_cast<CommandType>(commandBytes[0]);
     auto arg2 = commandBytes[1];
     auto arg3 = commandBytes[2];
+
+    // Authentication payloads contain credentials, so do not dump their bytes.
+    if (arg == CommandType::authentication)
+    {
+        Log::debug("Command: authentication payload redacted");
+    }
+    else
+    {
+        Log::debug("Command: Nexilis command sequence");
+        Util::debugUint8Vector(command);
+    }
 
     // DefaultArgs from Commands.
     DefaultArgs args(user, protocol, command, messageId);
@@ -453,59 +486,75 @@ CommandResult Command::read(const nx_data& command, User& user, NXProtocol& prot
                     return CommandResult::not_found;
                 }
 
-                // Check authentication for root access.
+                // Root access is available only on an authenticated TLS-PSK
+                // Boost TCP session. Failed attempts are shared by source
+                // address across reconnects to this server instance.
                 case 1:
                 {
-                    auto payload = Util::removeAmountOfBytesFromVector(command, 2);
-                    std::string password = Util::convertToString(payload);
-
-                    if (m_settings.hasPassphrase())
+                    if (m_settings.getMode() != AuthenticationMode::password_protected ||
+                        !m_settings.isTlsEnabled() ||
+                        protocol.getType() != NXProtocol::Type::BOOST_TCP_SERVER ||
+                        !user.hasCommonAccess() || !m_settings.hasRootPassword())
                     {
-                        if (m_settings.isRootPassword(password))
+                        return CommandResult::unauthorized;
+                    }
+
+                    if (user.hasRootAccess())
+                    {
+                        return CommandResult::success;
+                    }
+
+                    const auto now = std::chrono::steady_clock::now();
+                    std::lock_guard lock(m_rootAuthState->mutex);
+                    auto& attempts = m_rootAuthState->byAddress;
+                    auto it = attempts.find(user.getIPAddress());
+                    if (it != attempts.end() && now - it->second.firstFailure >= kRootAuthWindow)
+                    {
+                        it = attempts.erase(it);
+                    }
+                    if (it != attempts.end() && it->second.failures >= kMaxRootAuthFailures)
+                    {
+                        return CommandResult::unauthorized;
+                    }
+                    if (it == attempts.end() && attempts.size() >= kMaxTrackedRootAuthAddresses)
+                    {
+                        std::erase_if(attempts, [now](const auto& entry)
+                                      { return now - entry.second.firstFailure >= kRootAuthWindow; });
+                        if (attempts.size() >= kMaxTrackedRootAuthAddresses)
                         {
-                            user.setRootAccess(true);
-                            Log::info("Client ", user.getIPAddress(), " has root access!");
-                            return CommandResult::success;
+                            return CommandResult::unauthorized;
                         }
-                        else
+                    }
+
+                    auto payload = Util::removeAmountOfBytesFromVector(command, 2);
+                    const std::string password = Util::convertToString(payload);
+                    if (m_settings.isRootPassword(password))
+                    {
+                        if (it != attempts.end())
                         {
-                            Log::error("Wrong password!");
-                            return CommandResult::invalid_input;
+                            attempts.erase(it);
                         }
+                        user.setRootAccess(true);
+                        Log::info("Client ", user.getIPAddress(), " has root access!");
+                        return CommandResult::success;
+                    }
+
+                    if (it != attempts.end())
+                    {
+                        ++it->second.failures;
                     }
                     else
                     {
-                        Log::error("Trying to set password for server without auth!");
-                        return CommandResult::unauthorized;
+                        attempts.emplace(user.getIPAddress(), RootAuthState::Attempt{now, 1});
                     }
+                    return CommandResult::unauthorized;
                 }
 
-                // Passphrase authentication.
-                // (Access to join nexilis session)
+                // Passphrase authentication belongs to the initial handshake,
+                // not a command on an established session.
                 case 2:
                 {
-                    auto payload = Util::removeAmountOfBytesFromVector(command, 2);
-                    std::string password = Util::convertToString(payload);
-
-                    if (m_settings.hasPassphrase())
-                    {
-                        if (m_settings.isPassphrase(password))
-                        {
-                            user.setCommonAccess(true);
-                            Log::info("Client ", user.getIPAddress(), " has common access!");
-                            return CommandResult::success;
-                        }
-                        else
-                        {
-                            Log::error("Wrong password!");
-                            return CommandResult::invalid_input;
-                        }
-                    }
-                    else
-                    {
-                        Log::error("Trying to set password for server without auth!");
-                        return CommandResult::unauthorized;
-                    }
+                    return CommandResult::unauthorized;
                 }
             }
             return CommandResult::not_found;

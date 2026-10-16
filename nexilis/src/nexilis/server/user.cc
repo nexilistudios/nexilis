@@ -37,8 +37,8 @@ User::User(User&& other) noexcept
       m_unixDgramSendToClient(std::move(other.m_unixDgramSendToClient)),
       m_inetTCPSendToClient(std::move(other.m_inetTCPSendToClient)),
       m_inetUDPSendToClient(std::move(other.m_inetUDPSendToClient)),
-      m_hasRootAccess(std::move(other.m_hasRootAccess)),
-      m_hasCommonAccess(std::move(other.m_hasCommonAccess))
+      m_hasRootAccess(other.m_hasRootAccess.load()),
+      m_hasCommonAccess(other.m_hasCommonAccess.load())
 {
 }
 
@@ -57,8 +57,8 @@ User& User::operator=(User&& other) noexcept
         m_unixDgramSendToClient = std::move(other.m_unixDgramSendToClient);
         m_inetTCPSendToClient = std::move(other.m_inetTCPSendToClient);
         m_inetUDPSendToClient = std::move(other.m_inetUDPSendToClient);
-        m_hasRootAccess = std::move(other.m_hasRootAccess);
-        m_hasCommonAccess = std::move(other.m_hasCommonAccess);
+        m_hasRootAccess.store(other.m_hasRootAccess.load());
+        m_hasCommonAccess.store(other.m_hasCommonAccess.load());
 
         BaseClient::operator=(std::move(other));
     }
