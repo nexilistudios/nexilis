@@ -19,6 +19,7 @@
 
 #include <nexilis/client/base_api_command.hh>
 #include <nexilis/client/packet.hh>
+#include <nexilis/udp_auth.hh>
 
 #include <mutex>
 
@@ -28,19 +29,28 @@ namespace nexilis::client
 class GetClientIdCommand : public BaseAPICommand
 {
 public:
-    explicit GetClientIdCommand(uint64_t client_id)
-        : m_client_id(client_id)
+    explicit GetClientIdCommand(uint64_t client_id, std::string udp_token = {})
+        : m_client_id(client_id),
+          m_udp_token(std::move(udp_token))
     {
     }
 
     ReadResult execute(ClientAPI& api, ClientAPI::ClientAPIData& data) override
     {
+        if (!m_udp_token.empty())
+        {
+            std::array<uint8_t, udp_auth::token_size> parsed{};
+            if (!udp_auth::fromHex(m_udp_token, parsed))
+                return ReadResult::invalid_input;
+        }
         auto& mtx = data.getRoomsMutex();
         if (!mtx)
             return ReadResult::command_execution;
         std::lock_guard<std::mutex> lock(*mtx);
 
         api.setClientId(m_client_id);
+        if (!m_udp_token.empty())
+            api.setUdpToken(m_udp_token);
         data.initialize();
 
         assert(api.getClientId() == m_client_id);
@@ -55,6 +65,7 @@ public:
 
 private:
     uint64_t m_client_id;
+    std::string m_udp_token;
 };
 
 } // namespace nexilis::client

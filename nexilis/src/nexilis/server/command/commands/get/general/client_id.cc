@@ -26,6 +26,8 @@ CommandResult ServerImpl::get_general_clientId(const DefaultArgs& args)
 
     std::map<std::string, boost::json::value> params{
             {"client_id", boost::json::value(args.getUser().getId())}};
+    if (args.getUser().claimInitialUdpToken())
+        params.emplace("udp_token", args.getUser().getUdpToken());
 
     auto data = Command::clientMessageData(CommandType::getting, "client_id", args.getMessageId(), params);
     Command::sendMessageToClient(data, args.getUser(), args.getProtocol());

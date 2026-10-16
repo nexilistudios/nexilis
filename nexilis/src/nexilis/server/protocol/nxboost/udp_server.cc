@@ -16,9 +16,13 @@
 
 #include <nexilis/logger/log.hh>
 #include <nexilis/ports.hh>
+#include <nexilis/server/client_storage.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/message/auth_message.hh>
 #include <nexilis/server/protocol/nxboost/udp_server.hh>
+#include <nexilis/udp_auth.hh>
+
+#include <openssl/rand.h>
 
 #include <boost/asio/ip/address.hpp>
 #include <boost/system/system_error.hpp>
@@ -39,6 +43,8 @@ UDPServer::UDPServer(const ServerConfig& settings)
     // Set socket option to allow address reuse
     boost::asio::ip::udp::socket::reuse_address reuse(true);
     m_socket.set_option(reuse);
+    if (RAND_bytes(m_cookieKey.data(), m_cookieKey.size()) != 1)
+        throw std::runtime_error("Failed to create UDP cookie key");
 }
 
 UDPServer::~UDPServer()
@@ -60,6 +66,8 @@ UDPServer::UDPServer(UDPServer&& other)
       m_ioContextThread(std::move(other.m_ioContextThread)),
       m_receiveThread(std::move(other.m_receiveThread))
 {
+    m_cookieKey = other.m_cookieKey;
+    m_clientEndpoints = std::move(other.m_clientEndpoints);
 }
 
 UDPServer& UDPServer::operator=(UDPServer&& other)
@@ -82,6 +90,8 @@ UDPServer& UDPServer::operator=(UDPServer&& other)
         m_receiveBuffer = std::move(other.m_receiveBuffer);
         m_ioContextThread = std::move(other.m_ioContextThread);
         m_receiveThread = std::move(other.m_receiveThread);
+        m_cookieKey = other.m_cookieKey;
+        m_clientEndpoints = std::move(other.m_clientEndpoints);
     }
     return *this;
 }
@@ -175,12 +185,47 @@ void UDPServer::receiveFromClients()
             }
 
             std::string address = m_remoteEndpoint.address().to_string();
-            Log::debug("Received from ", address, bytes_received, " bytes.", " Data: ", m_receiveBuffer.data());
-
             // Create a new buffer containing only the received bytes.
             nx_data received_message(m_receiveBuffer.begin(), m_receiveBuffer.begin() + bytes_received);
 
-            auto handledMessage = getMessageHandler().readMessage(address, received_message, &getSettings());
+            const auto senderEndpoint = m_remoteEndpoint;
+            const auto endpointKey = address + ":" + std::to_string(senderEndpoint.port());
+            nx_data payload;
+            if (udp_auth::hasPrefix(received_message, udp_auth::hello))
+            {
+                if (received_message.size() == udp_auth::makeHello().size())
+                {
+                    auto challenge = udp_auth::makeChallenge(m_cookieKey, endpointKey);
+                    if (!challenge.empty())
+                        m_socket.send_to(boost::asio::buffer(challenge), senderEndpoint);
+                }
+                continue;
+            }
+            if (udp_auth::hasPrefix(received_message, udp_auth::authentication))
+            {
+                if (!udp_auth::checkAuthentication(received_message, m_cookieKey, endpointKey, payload))
+                    continue;
+                if (payload.size() >= 8 && ClientStorage::getClientById(Util::uint64FromFront(payload)))
+                    continue;
+            }
+            else if (udp_auth::hasPrefix(received_message, udp_auth::session))
+            {
+                if (received_message.size() < 4 + 8)
+                    continue;
+                nx_data idBytes(received_message.begin() + 4, received_message.begin() + 12);
+                auto* user = ClientStorage::getClientById(Util::uint64FromFront(idBytes));
+                if (!user || !udp_auth::readSession(received_message, user->getUdpToken(), payload))
+                    continue;
+                auto bound = m_clientEndpoints.find(user->getId());
+                if (bound != m_clientEndpoints.end() && bound->second != senderEndpoint)
+                    continue;
+            }
+            else
+            {
+                continue;
+            }
+
+            auto handledMessage = getMessageHandler().readMessage(address, payload, &getSettings());
 
             if (!handledMessage || !handledMessage->getUser())
             {
@@ -190,7 +235,7 @@ void UDPServer::receiveFromClients()
 
             if (!handledMessage->getUser()->isBoostUDPSet())
             {
-                auto senderEndpoint = m_remoteEndpoint;
+                m_clientEndpoints[handledMessage->getUser()->getId()] = senderEndpoint;
                 // clang-format off
                 handledMessage->getUser()->setBoostUDPSend([this, senderEndpoint](const nx_data& bytes)
                 {

@@ -39,6 +39,7 @@
 #include <cassert>
 #include <cstdint>
 #include <future>
+#include <mutex>
 #include <string>
 
 namespace nexilis::client
@@ -54,7 +55,8 @@ public:
 
         ClientData(ClientData&& other) noexcept
             : m_clientId(other.m_clientId.load()),
-              m_roomId(other.m_roomId.load())
+              m_roomId(other.m_roomId.load()),
+              m_udpToken(other.getUdpToken())
         {
         }
 
@@ -64,6 +66,7 @@ public:
             {
                 m_clientId.store(other.m_clientId.load());
                 m_roomId.store(other.m_roomId.load());
+                setUdpToken(other.getUdpToken());
             }
             return *this;
         }
@@ -91,9 +94,23 @@ public:
             m_roomId.store(id);
         }
 
+        std::string getUdpToken() const
+        {
+            std::lock_guard<std::mutex> lock(m_udpTokenMutex);
+            return m_udpToken;
+        }
+
+        void setUdpToken(std::string token)
+        {
+            std::lock_guard<std::mutex> lock(m_udpTokenMutex);
+            m_udpToken = std::move(token);
+        }
+
     private:
         std::atomic<uint64_t> m_clientId = 0;
         std::atomic<uint64_t> m_roomId = 0;
+        mutable std::mutex m_udpTokenMutex;
+        std::string m_udpToken;
     };
 
     struct DamageEvent
@@ -506,6 +523,16 @@ public:
     void setClientId(uint64_t id)
     {
         m_clientData.setClientId(id);
+    }
+
+    std::string getUdpToken() const
+    {
+        return m_clientData.getUdpToken();
+    }
+
+    void setUdpToken(std::string token)
+    {
+        m_clientData.setUdpToken(std::move(token));
     }
 
     void setRoomId(uint64_t id)

@@ -24,7 +24,9 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/udp.hpp>
 
+#include <array>
 #include <thread>
+#include <unordered_map>
 
 namespace nexilis::server::nxboost
 {
@@ -83,6 +85,8 @@ private:
     std::thread m_ioContextThread;
     std::thread m_receiveThread;
     uint16_t m_serverPort;
+    std::array<uint8_t, 32> m_cookieKey{};
+    std::unordered_map<uint64_t, boost::asio::ip::udp::endpoint> m_clientEndpoints;
 };
 
 } // namespace nexilis::server::nxboost

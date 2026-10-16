@@ -23,10 +23,12 @@
 
 #include <netinet/in.h>
 
+#include <array>
 #include <atomic>
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <unordered_map>
 
 namespace nexilis::server::af_inet
 {
@@ -88,6 +90,8 @@ private:
     std::thread m_receiveThread;
     std::unique_ptr<std::mutex> m_mutex;
     std::unique_ptr<std::atomic<bool>> m_stopped;
+    std::array<uint8_t, 32> m_cookieKey{};
+    std::unordered_map<uint64_t, sockaddr_in> m_clientEndpoints;
 };
 
 } // namespace nexilis::server::af_inet

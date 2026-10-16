@@ -90,6 +90,7 @@ private:
     std::thread m_receiveThread;
     std::unique_ptr<std::mutex> m_mutex;
     std::unique_ptr<std::atomic<bool>> m_stopped;
+    nx_data m_pendingAuth;
 };
 
 } // namespace nexilis::client::af_inet

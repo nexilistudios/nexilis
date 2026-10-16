@@ -18,6 +18,7 @@
 #include <nexilis/logger/log.hh>
 #include <nexilis/nexilis_constants.hh>
 #include <nexilis/ports.hh>
+#include <nexilis/udp_auth.hh>
 
 #include <boost/asio/ip/udp.hpp>
 
@@ -56,6 +57,7 @@ UDPClient::UDPClient(UDPClient&& other)
       m_receiveBuffer(std::move(other.m_receiveBuffer)),
       m_remoteEndpoint(std::move(other.m_remoteEndpoint)),
       m_sendEndpoint(std::move(other.m_sendEndpoint)),
+      m_pendingAuth(std::move(other.m_pendingAuth)),
       m_pendingSends(std::move(other.m_pendingSends)),
       m_pendingSendsMutex(std::move(other.m_pendingSendsMutex))
 {
@@ -84,6 +86,7 @@ UDPClient& UDPClient::operator=(UDPClient&& other)
         m_receiveBuffer = std::move(other.m_receiveBuffer);
         m_remoteEndpoint = std::move(other.m_remoteEndpoint);
         m_sendEndpoint = std::move(other.m_sendEndpoint);
+        m_pendingAuth = std::move(other.m_pendingAuth);
         m_pendingSends = std::move(other.m_pendingSends);
         m_pendingSendsMutex = std::move(other.m_pendingSendsMutex);
 
@@ -201,7 +204,8 @@ void UDPClient::receiveLoop()
     while (m_socket.is_open())
     {
         boost::system::error_code recvEc;
-        std::size_t receivedBytes = m_socket.receive_from(boost::asio::buffer(m_receiveBuffer), m_remoteEndpoint, 0, recvEc);
+        boost::asio::ip::udp::endpoint senderEndpoint;
+        std::size_t receivedBytes = m_socket.receive_from(boost::asio::buffer(m_receiveBuffer), senderEndpoint, 0, recvEc);
 
         if (recvEc)
         {
@@ -219,7 +223,7 @@ void UDPClient::receiveLoop()
             break;
         }
 
-        if (receivedBytes == 0)
+        if (receivedBytes == 0 || senderEndpoint != m_sendEndpoint)
         {
             continue;
         }
@@ -227,6 +231,24 @@ void UDPClient::receiveLoop()
         Log::info("Received bytes: ", receivedBytes);
 
         auto byteVector = Util::convertToByteVector(m_receiveBuffer.data(), receivedBytes);
+        if (udp_auth::hasPrefix(byteVector, udp_auth::challenge))
+        {
+            if (byteVector.size() == 4 + udp_auth::cookie_size)
+            {
+                nx_data pending;
+                {
+                    std::lock_guard<std::mutex> lock(*m_mutex);
+                    pending = m_pendingAuth;
+                }
+                if (!pending.empty())
+                {
+                    nx_data cookie(byteVector.begin() + 4, byteVector.end());
+                    auto auth = udp_auth::makeAuthentication(cookie, pending);
+                    m_socket.send_to(boost::asio::buffer(auth), m_sendEndpoint);
+                }
+            }
+            continue;
+        }
         auto result = ClientProtocol::getClientAPI()->readMessage(byteVector);
         if (result == ReadResult::success)
         {
@@ -256,7 +278,21 @@ void UDPClient::sendMessage(const nx_data& payload)
 
     try
     {
-        size_t bytes_sent = m_socket.send_to(boost::asio::buffer(payload), m_sendEndpoint);
+        nx_data packet;
+        auto token = getClientAPI()->getUdpToken();
+        if (token.empty())
+        {
+            std::lock_guard<std::mutex> lock(*m_mutex);
+            m_pendingAuth = payload;
+            packet = udp_auth::makeHello();
+        }
+        else
+        {
+            packet = udp_auth::makeSession(payload, token);
+        }
+        if (packet.empty())
+            return;
+        size_t bytes_sent = m_socket.send_to(boost::asio::buffer(packet), m_sendEndpoint);
         Log::debug("Sent ", bytes_sent, " bytes to server");
     }
     catch (const boost::system::system_error& e)
@@ -302,14 +338,18 @@ std::future<void> UDPClient::sendMessageAsync(const nx_data& message)
     auto promise = std::make_shared<std::promise<void>>();
     auto future = promise->get_future();
 
+    auto packet = udp_auth::makeSession(message, getClientAPI()->getUdpToken());
+    if (packet.empty())
+    {
+        promise->set_exception(std::make_exception_ptr(std::runtime_error("UDP session is not authenticated")));
+        return future;
+    }
     if (messageId != 0)
     {
         std::lock_guard<std::mutex> lock(*m_pendingSendsMutex);
         m_pendingSends[messageId] = promise;
     }
-
-    // Capture a copy of the message for the thread.
-    auto messageCopy = std::make_shared<nx_data>(message);
+    auto messageCopy = std::make_shared<nx_data>(std::move(packet));
 
     std::thread([this, messageCopy, messageId]()
                 {

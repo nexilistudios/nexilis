@@ -33,7 +33,7 @@ class User : public BaseClient
 {
 public:
     /// Constructor.
-    User(uint64_t id, std::string ip_address) noexcept;
+    User(uint64_t id, std::string ip_address);
 
     /// Move constructor.
     User(User&& other) noexcept;
@@ -50,7 +50,7 @@ public:
     /// Operator overload for comparison operator.
     bool operator==(const User& other) const
     {
-        return m_ip_address == other.getIPAddress();
+        return getId() == other.getId();
     }
 
     /// Getter for the ip address.
@@ -58,6 +58,19 @@ public:
     const std::string& getIPAddress() const
     {
         return m_ip_address;
+    }
+
+    /// Random per-session capability used to authenticate UDP datagrams.
+    const std::string& getUdpToken() const
+    {
+        return m_udpToken;
+    }
+
+    /// The UDP capability is disclosed only by the initial ID response.
+    bool claimInitialUdpToken()
+    {
+        bool expected = false;
+        return m_udpTokenSent.compare_exchange_strong(expected, true);
     }
 
     void setRootAccess(bool hasAccess)
@@ -238,6 +251,8 @@ public:
 private:
     // General
     std::string m_ip_address;
+    std::string m_udpToken;
+    std::atomic<bool> m_udpTokenSent{false};
     std::string m_username;
     uint64_t m_roomId = 0;
     std::chrono::steady_clock::time_point m_lastShotTime{};

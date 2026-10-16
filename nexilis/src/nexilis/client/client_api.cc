@@ -382,7 +382,7 @@ std::vector<ClientAPI::RemotePlayerSnapshot> ClientAPI::getRemotePlayersSnapshot
 
 bool ClientAPI::IsInetUDPReady()
 {
-    return getClientData().getClientId() && !getInetUDPServerAddress().empty();
+    return getClientData().getClientId() && !getInetUDPServerAddress().empty() && !getUdpToken().empty();
 }
 
 bool ClientAPI::isInetTCPReady()
@@ -397,7 +397,7 @@ bool ClientAPI::isBoostTCPReady()
 
 bool ClientAPI::isBoostUDPReady()
 {
-    return getClientData().getClientId() && !getBoostUDPServerAddress().empty();
+    return getClientData().getClientId() && !getBoostUDPServerAddress().empty() && !getUdpToken().empty();
 }
 
 bool ClientAPI::isUnixDgramReady()

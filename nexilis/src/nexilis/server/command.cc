@@ -47,7 +47,7 @@ struct Command::RootAuthState
     struct Attempt
     {
         std::chrono::steady_clock::time_point firstFailure;
-        unsigned failures;
+        unsigned failures = 0;
     };
 
     std::mutex mutex;

@@ -16,6 +16,22 @@ Each TCP request is prefixed with a **4-byte big-endian uint32_t length prefix**
 The receiver reads exactly 4 bytes for the length, then exactly that many bytes for the payload.
 
 UDP messages do not use a length prefix — each datagram is a single message.
+The Boost UDP and af_inet UDP transports add an authentication envelope. A
+new client sends a 20-byte `NXUH` hello and receives a 20-byte `NXUC` cookie
+challenge. It then sends `NXUA`, the 16-byte cookie, and its normal initial
+authentication payload. The cookie is bound to the source IP and port and
+expires after roughly one to two minutes. The server sends no application
+response until the cookie has been returned. A valid authentication response
+contains a random 16-byte `udp_token` alongside `client_id`.
+
+Later requests use `NXUS`, the 8-byte client ID, the 16-byte token, then the
+normal message ID and command bytes. The server checks the token and source
+IP/port before dispatching a command. A client authenticated over another
+transport obtains its token in the `client_id` response and can use it for UDP.
+The 1024-byte receive buffer leaves up to 1004 bytes for the normal request
+payload. Legacy UDP datagrams without this envelope are dropped. UDP remains
+plaintext: an on-path observer can capture a token sent over UDP and replay
+packets, so use Boost TCP with TLS-PSK for security-sensitive traffic.
 
 ## Identification (uint64_t)
 

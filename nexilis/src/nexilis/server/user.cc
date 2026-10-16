@@ -15,19 +15,31 @@
    along with this file.  If not, see <https://gnu.org>. */
 
 #include <nexilis/server/user.hh>
+#include <nexilis/udp_auth.hh>
+
+#include <openssl/rand.h>
+
+#include <array>
+#include <stdexcept>
 
 namespace nexilis::server
 {
 
-User::User(uint64_t id, std::string ip_address) noexcept
+User::User(uint64_t id, std::string ip_address)
     : BaseClient(id),
       m_ip_address(ip_address)
 {
+    std::array<uint8_t, udp_auth::token_size> token{};
+    if (RAND_bytes(token.data(), token.size()) != 1)
+        throw std::runtime_error("Failed to create UDP session token");
+    m_udpToken = udp_auth::toHex(token.data(), token.size());
 }
 
 User::User(User&& other) noexcept
     : BaseClient(std::move(other)),
       m_ip_address(std::move(other.m_ip_address)),
+      m_udpToken(std::move(other.m_udpToken)),
+      m_udpTokenSent(other.m_udpTokenSent.load()),
       m_username(std::move(other.m_username)),
       m_roomId(std::move(other.m_roomId)),
       m_lastShotTime(other.m_lastShotTime),
@@ -48,6 +60,8 @@ User& User::operator=(User&& other) noexcept
     if (this != &other)
     {
         m_ip_address = std::move(other.m_ip_address);
+        m_udpToken = std::move(other.m_udpToken);
+        m_udpTokenSent.store(other.m_udpTokenSent.load());
         m_username = std::move(other.m_username);
         m_roomId = std::move(other.m_roomId);
         m_lastShotTime = other.m_lastShotTime;

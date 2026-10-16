@@ -21,12 +21,17 @@
 #include <nexilis/ports.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/client_storage.hh>
+#include <nexilis/server/room_storage.hh>
+#include <nexilis/udp_auth.hh>
 
 #include <nexilis/client/protocol/af_inet/udp_client.hh>
 #include <nexilis/server/protocol/af_inet/udp_server.hh>
 
+#include <arpa/inet.h>
 #include <chrono>
+#include <sys/socket.h>
 #include <thread>
+#include <unistd.h>
 
 class AFInetUDPTest : public ::testing::Test
 {
@@ -158,4 +163,38 @@ TEST_F(AFInetUDPTest, SendMessageAsyncDeliversMessage)
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     EXPECT_EQ(api->getActiveRooms().size(), 1);
+}
+
+TEST_F(AFInetUDPTest, RejectsClientIdFromAnotherEndpoint)
+{
+    startClientAndConnect();
+    ASSERT_FALSE(api->getUdpToken().empty());
+
+    auto before = nexilis::server::RoomStorage::getAllRooms().size();
+    auto beforeClients = nexilis::server::ClientStorage::getAllClients().size();
+    auto command = nexilis::client::Packet::Room::Management::create(*api, "forged_inet_room");
+    int attacker = socket(AF_INET, SOCK_DGRAM, 0);
+    ASSERT_GE(attacker, 0);
+    sockaddr_in target{};
+    target.sin_family = AF_INET;
+    target.sin_port = htons(port);
+    ASSERT_EQ(inet_pton(AF_INET, "127.0.0.1", &target.sin_addr), 1);
+
+    auto send = [&](const nexilis::nx_data& packet)
+    {
+        EXPECT_EQ(sendto(attacker, packet.data(), packet.size(), 0,
+                         reinterpret_cast<sockaddr*>(&target), sizeof(target)),
+                  static_cast<ssize_t>(packet.size()));
+    };
+    send(command);
+    send(nexilis::udp_auth::makeSession(command, std::string(32, '0')));
+    send(nexilis::udp_auth::makeSession(command, api->getUdpToken()));
+    nexilis::nx_data badCookie(nexilis::udp_auth::cookie_size, 0);
+    nexilis::nx_data password{'s', 'a', 'l', 'a', 's', 'a', 'n', 'a'};
+    send(nexilis::udp_auth::makeAuthentication(badCookie, password));
+    close(attacker);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    EXPECT_EQ(nexilis::server::RoomStorage::getAllRooms().size(), before);
+    EXPECT_EQ(nexilis::server::ClientStorage::getAllClients().size(), beforeClients);
 }

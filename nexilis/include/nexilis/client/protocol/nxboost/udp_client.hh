@@ -89,6 +89,7 @@ private:
     std::vector<char> m_receiveBuffer;
     boost::asio::ip::udp::endpoint m_remoteEndpoint;
     boost::asio::ip::udp::endpoint m_sendEndpoint;
+    nx_data m_pendingAuth;
 
     std::unordered_map<uint64_t, std::shared_ptr<std::promise<void>>> m_pendingSends;
     std::shared_ptr<std::mutex> m_pendingSendsMutex;

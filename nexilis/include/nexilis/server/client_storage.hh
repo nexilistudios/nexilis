@@ -36,6 +36,7 @@ public:
 
     static User* getClientById(uint64_t id);
 
+    /// Diagnostic lookup only. IP addresses are not session identities.
     static std::vector<User*> getClientsByIpAddress(const std::string& ip_address);
 
     static bool remove(uint64_t id);

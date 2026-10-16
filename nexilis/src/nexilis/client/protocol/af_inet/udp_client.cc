@@ -18,6 +18,7 @@
 #include <nexilis/logger/log.hh>
 #include <nexilis/nexilis_constants.hh>
 #include <nexilis/ports.hh>
+#include <nexilis/udp_auth.hh>
 #include <nexilis/util.hh>
 
 #include <arpa/inet.h>
@@ -55,7 +56,8 @@ UDPClient::UDPClient(UDPClient&& other)
       m_serverAddr(std::move(other.m_serverAddr)),
       m_receiveThread(std::move(other.m_receiveThread)),
       m_mutex(std::move(other.m_mutex)),
-      m_stopped(std::move(other.m_stopped))
+      m_stopped(std::move(other.m_stopped)),
+      m_pendingAuth(std::move(other.m_pendingAuth))
 {
     other.m_clientSocket = -1;
     if (!m_mutex)
@@ -81,6 +83,7 @@ UDPClient& UDPClient::operator=(UDPClient&& other)
         m_receiveThread = std::move(other.m_receiveThread);
         m_mutex = std::move(other.m_mutex);
         m_stopped = std::move(other.m_stopped);
+        m_pendingAuth = std::move(other.m_pendingAuth);
 
         other.m_clientSocket = -1;
         if (!m_mutex)
@@ -203,8 +206,31 @@ void UDPClient::receiveLoop()
 
         if (bytesRead > 0)
         {
+            if (srcAddr.sin_addr.s_addr != m_serverAddr.sin_addr.s_addr ||
+                srcAddr.sin_port != m_serverAddr.sin_port)
+                continue;
             buffer.resize(bytesRead);
             Log::info("UDPClient received ", bytesRead, " bytes");
+
+            if (udp_auth::hasPrefix(buffer, udp_auth::challenge))
+            {
+                if (buffer.size() == 4 + udp_auth::cookie_size)
+                {
+                    nx_data pending;
+                    {
+                        std::lock_guard<std::mutex> lock(*m_mutex);
+                        pending = m_pendingAuth;
+                    }
+                    if (!pending.empty())
+                    {
+                        nx_data cookie(buffer.begin() + 4, buffer.end());
+                        auto auth = udp_auth::makeAuthentication(cookie, pending);
+                        std::lock_guard<std::mutex> lock(*m_mutex);
+                        sendData(reinterpret_cast<const char*>(auth.data()), auth.size());
+                    }
+                }
+                continue;
+            }
 
             auto result = ClientProtocol::getClientAPI()->readMessage(buffer);
             if (result == ReadResult::success)
@@ -263,8 +289,22 @@ void UDPClient::sendMessage(const nx_data& message)
         return;
     }
 
+    nx_data packet;
+    auto token = getClientAPI()->getUdpToken();
+    if (token.empty())
+    {
+        packet = udp_auth::makeHello();
+    }
+    else
+    {
+        packet = udp_auth::makeSession(message, token);
+    }
+    if (packet.empty())
+        return;
     std::lock_guard<std::mutex> lock(*m_mutex);
-    sendData(reinterpret_cast<const char*>(message.data()), message.size());
+    if (token.empty())
+        m_pendingAuth = message;
+    sendData(reinterpret_cast<const char*>(packet.data()), packet.size());
 }
 
 void UDPClient::sendMessage(const nx_data& message, const std::function<void()>& callback)
@@ -291,7 +331,13 @@ std::future<void> UDPClient::sendMessageAsync(const nx_data& message)
     auto promise = std::make_shared<std::promise<void>>();
     auto future = promise->get_future();
 
-    auto messageCopy = std::make_shared<nx_data>(message);
+    auto packet = udp_auth::makeSession(message, getClientAPI()->getUdpToken());
+    if (packet.empty())
+    {
+        promise->set_exception(std::make_exception_ptr(std::runtime_error("UDP session is not authenticated")));
+        return future;
+    }
+    auto messageCopy = std::make_shared<nx_data>(std::move(packet));
 
     std::thread([this, messageCopy, promise]()
                 {

@@ -20,6 +20,10 @@
 #include <nexilis/logger/log.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/client_storage.hh>
+#include <nexilis/server/room_storage.hh>
+#include <nexilis/udp_auth.hh>
+
+#include <boost/asio/ip/udp.hpp>
 
 #include <nexilis/client/protocol/nxboost/udp_client.hh>
 #include <nexilis/server/protocol/nxboost/udp_server.hh>
@@ -157,4 +161,36 @@ TEST_F(BoostUDPTest, SendMessageAsyncDeliversMessage)
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     EXPECT_EQ(api->getActiveRooms().size(), 1);
+}
+
+TEST_F(BoostUDPTest, RejectsClientIdFromAnotherEndpoint)
+{
+    client->start();
+    ASSERT_TRUE(client->isConnected());
+    ASSERT_FALSE(api->getUdpToken().empty());
+
+    auto before = nexilis::server::RoomStorage::getAllRooms().size();
+    auto beforeClients = nexilis::server::ClientStorage::getAllClients().size();
+    auto command = nexilis::client::Packet::Room::Management::create(*api, "forged_boost_room");
+
+    boost::asio::io_context context;
+    boost::asio::ip::udp::socket attacker(context, boost::asio::ip::udp::v4());
+    auto target = boost::asio::ip::udp::endpoint(
+            boost::asio::ip::make_address_v4("127.0.0.1"), server->getPort());
+
+    // A bare client ID is never enough, including from a different socket on
+    // the same IP. A captured token must not permit rebinding the endpoint.
+    attacker.send_to(boost::asio::buffer(command), target);
+    auto wrongToken = nexilis::udp_auth::makeSession(command, std::string(32, '0'));
+    attacker.send_to(boost::asio::buffer(wrongToken), target);
+    auto stolenToken = nexilis::udp_auth::makeSession(command, api->getUdpToken());
+    attacker.send_to(boost::asio::buffer(stolenToken), target);
+    nexilis::nx_data badCookie(nexilis::udp_auth::cookie_size, 0);
+    nexilis::nx_data password{'s', 'a', 'l', 'a', 's', 'a', 'n', 'a'};
+    auto fakeAuthentication = nexilis::udp_auth::makeAuthentication(badCookie, password);
+    attacker.send_to(boost::asio::buffer(fakeAuthentication), target);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    EXPECT_EQ(nexilis::server::RoomStorage::getAllRooms().size(), before);
+    EXPECT_EQ(nexilis::server::ClientStorage::getAllClients().size(), beforeClients);
 }

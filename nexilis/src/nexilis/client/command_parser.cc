@@ -123,7 +123,7 @@ std::unique_ptr<BaseAPICommand> CommandParser::parseGettingCommand(const boost::
     if (type == "client_id")
     {
         uint64_t client_id = Util::toUint64(json.at("client_id"));
-        return std::make_unique<GetClientIdCommand>(client_id);
+        return std::make_unique<GetClientIdCommand>(client_id, getString(json, "udp_token"));
     }
 
     else if (type == "room_id")

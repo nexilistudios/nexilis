@@ -19,10 +19,14 @@
 #include <nexilis/logger/log.hh>
 #include <nexilis/nexilis_constants.hh>
 #include <nexilis/ports.hh>
+#include <nexilis/server/client_storage.hh>
 #include <nexilis/server/command/command_result.hh>
 #include <nexilis/server/message/auth_message.hh>
 #include <nexilis/server/message/message.hh>
+#include <nexilis/udp_auth.hh>
 #include <nexilis/util.hh>
+
+#include <openssl/rand.h>
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -43,6 +47,8 @@ UDPServer::UDPServer(const ServerConfig& settings, uint16_t port)
 {
     createSocket();
     bindSocket();
+    if (RAND_bytes(m_cookieKey.data(), m_cookieKey.size()) != 1)
+        throw std::runtime_error("Failed to create UDP cookie key");
 }
 
 UDPServer::~UDPServer()
@@ -61,6 +67,8 @@ UDPServer::UDPServer(UDPServer&& other)
       m_mutex(std::move(other.m_mutex)),
       m_stopped(std::move(other.m_stopped))
 {
+    m_cookieKey = other.m_cookieKey;
+    m_clientEndpoints = std::move(other.m_clientEndpoints);
     other.m_serverSocket = -1;
     if (!m_mutex)
     {
@@ -85,6 +93,8 @@ UDPServer& UDPServer::operator=(UDPServer&& other)
         m_receiveThread = std::move(other.m_receiveThread);
         m_mutex = std::move(other.m_mutex);
         m_stopped = std::move(other.m_stopped);
+        m_cookieKey = other.m_cookieKey;
+        m_clientEndpoints = std::move(other.m_clientEndpoints);
 
         other.m_serverSocket = -1;
         if (!m_mutex)
@@ -244,7 +254,45 @@ void UDPServer::receiveFromClients()
         std::string clientAddressString = address ? address : "";
         Log::info("UDPServer received from ", clientAddressString, " ", bytesReceived, " bytes");
 
-        auto handledMessage = getMessageHandler().readMessage(clientAddressString, buffer, &getSettings());
+        const auto endpointKey = clientAddressString + ":" + std::to_string(ntohs(clientAddress.sin_port));
+        nx_data payload;
+        if (udp_auth::hasPrefix(buffer, udp_auth::hello))
+        {
+            if (buffer.size() == udp_auth::makeHello().size())
+            {
+                auto challenge = udp_auth::makeChallenge(m_cookieKey, endpointKey);
+                if (!challenge.empty())
+                    sendToClient(clientAddress, challenge);
+            }
+            continue;
+        }
+        if (udp_auth::hasPrefix(buffer, udp_auth::authentication))
+        {
+            if (!udp_auth::checkAuthentication(buffer, m_cookieKey, endpointKey, payload))
+                continue;
+            if (payload.size() >= 8 && ClientStorage::getClientById(Util::uint64FromFront(payload)))
+                continue;
+        }
+        else if (udp_auth::hasPrefix(buffer, udp_auth::session))
+        {
+            if (buffer.size() < 4 + 8)
+                continue;
+            nx_data idBytes(buffer.begin() + 4, buffer.begin() + 12);
+            auto* user = ClientStorage::getClientById(Util::uint64FromFront(idBytes));
+            if (!user || !udp_auth::readSession(buffer, user->getUdpToken(), payload))
+                continue;
+            auto bound = m_clientEndpoints.find(user->getId());
+            if (bound != m_clientEndpoints.end() &&
+                (bound->second.sin_addr.s_addr != clientAddress.sin_addr.s_addr ||
+                 bound->second.sin_port != clientAddress.sin_port))
+                continue;
+        }
+        else
+        {
+            continue;
+        }
+
+        auto handledMessage = getMessageHandler().readMessage(clientAddressString, payload, &getSettings());
 
         if (!handledMessage || !handledMessage->getUser())
         {
@@ -255,6 +303,7 @@ void UDPServer::receiveFromClients()
         auto* user = handledMessage->getUser();
         if (!user->isInetUDPSet())
         {
+            m_clientEndpoints[user->getId()] = clientAddress;
             auto senderAddress = clientAddress;
             user->setInetUDPSend([this, senderAddress](const nx_data& bytes)
                                  { sendToClient(senderAddress, bytes); });
