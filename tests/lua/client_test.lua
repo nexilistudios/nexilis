@@ -19,6 +19,14 @@ local client = nexilis.new({
     on_ready = function() ready_count = ready_count + 1 end,
     on_left_room = function() leave_count = leave_count + 1 end,
 })
+assert(nexilis.native.nexilis_client_config_get_tls(client.state.config) == 1)
+
+local plaintext_client = nexilis.new({tls = false})
+assert(nexilis.native.nexilis_client_config_get_tls(plaintext_client.state.config) == 0)
+plaintext_client:close()
+
+local missing_password_ok = pcall(nexilis.new, {password = ""})
+assert(not missing_password_ok)
 
 assert(#client:packet("info_rooms") > 0)
 assert(#client:rooms() == 0)

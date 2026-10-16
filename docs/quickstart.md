@@ -32,13 +32,14 @@ cmake --build examples/skip_auth/build
 
 You should see Alice create a chat room, Bob discover and join it, and both
 print every broadcast. The example accepts clients without a password
-(`AuthenticationMode::skip`), so use it only for local experimentation.
+(`AuthenticationMode::skip`) and explicitly disables TLS-PSK, so use it only
+for local experimentation.
 
 Other examples in [`examples/`](../examples/):
 
 | Example | Shows |
 | --- | --- |
-| `messaging` | Password authentication, optional TLS, optional message encryption |
+| `messaging` | Password authentication, default TLS-PSK, optional message encryption |
 | `boost` | Boost TCP and UDP transports side by side |
 | `unix_stream_server`, `unix_stream_client` | Unix stream transport with a TOML config |
 
@@ -76,6 +77,7 @@ nexilis::ProtocolManager protocol_manager;
 // Server: skip authentication for a local experiment.
 nexilis::server::ServerConfig settings;
 settings.setMode(nexilis::server::AuthenticationMode::skip);
+settings.setTls(false); // This local example has no shared passphrase.
 auto server = protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
 server.start();
 
@@ -83,6 +85,7 @@ server.start();
 nexilis::client::ClientConfig config;
 config.setBoostTCPAddress("127.0.0.1");
 config.setMode(nexilis::server::AuthenticationMode::skip);
+config.setTls(false);
 
 nexilis::client::ClientAPI api(config);
 auto client = protocol_manager.createProtocol<nexilis::client::nxboost::TCPClient>(api);
@@ -109,9 +112,11 @@ Things worth knowing before you go further:
   `nullptr` if unknown; `getUsername()` gives its name.
 - **Broadcasts reach the sender too.** Everyone in the room, including you,
   receives the message.
-- **TLS and encryption are opt-in.** Traffic is plaintext by default. TLS needs
-  `setTls(true)` on both the server and client configs. Room message encryption
-  is enabled per client with `api.setMessageEncryption(true)`. Read the
+- **TLS-PSK is on by default for Boost TCP.** Set the same nonempty passphrase on
+  the server and client. A passwordless local example must explicitly call
+  `setTls(false)` on both sides. Other transports do not support TLS-PSK.
+  Room message encryption is enabled per client with
+  `api.setMessageEncryption(true)`. Read the
   [security notes](server_message.md#security-notes) before deploying outside a
   trusted environment.
 - **Authentication modes.** `AuthenticationMode::skip` accepts anyone;

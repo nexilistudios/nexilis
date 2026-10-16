@@ -165,8 +165,8 @@ public:
 
     /// Whether the TCP connection to the server is encrypted with TLS-PSK.
     /// \note The pre-shared key is derived from the password, so the client
-    ///       can only connect to a server that knows the same password. Off
-    ///       by default so plaintext traffic stays plaintext unless enabled.
+    ///       can only connect to a server that knows the same password. On
+    ///       by default for Boost TCP; a password is required unless disabled.
     bool isTlsEnabled() const
     {
         return m_tls;
@@ -204,7 +204,7 @@ private:
     bool m_messageEncryption = false;
 
     /// TLS-PSK transport encryption toggle for TCP connections.
-    bool m_tls = false;
+    bool m_tls = true;
 };
 
 } // namespace nexilis::client

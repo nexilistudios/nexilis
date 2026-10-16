@@ -19,6 +19,7 @@
 #include <nexilisc/client/protocol/boost_tcp_client_c.h>
 
 #include <chrono>
+#include <memory>
 #include <thread>
 
 struct nexilis_BoostTCPClient
@@ -30,10 +31,16 @@ nexilis_BoostTCPClient* nexilis_boost_tcp_client_create(nexilis_ProtocolManagerC
 {
     if (manager && manager->manager && client_api && client_api->api)
     {
-        auto client = new nexilis_BoostTCPClient();
-        client->client = new nexilis::client::nxboost::TCPClient(
-                manager->manager->createProtocol<nexilis::client::nxboost::TCPClient>(*client_api->api));
-        return client;
+        try
+        {
+            auto client = std::make_unique<nexilis::client::nxboost::TCPClient>(
+                    manager->manager->createProtocol<nexilis::client::nxboost::TCPClient>(*client_api->api));
+            return new nexilis_BoostTCPClient{client.release()};
+        }
+        catch (...)
+        {
+            return nullptr;
+        }
     }
     return nullptr;
 }

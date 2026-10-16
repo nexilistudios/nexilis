@@ -77,6 +77,7 @@ int main(int argc, char** argv)
     // may connect and is identified immediately by the server.
     nexilis::server::ServerConfig settings;
     settings.setMode(nexilis::server::AuthenticationMode::skip);
+    settings.setTls(false); // No shared passphrase is available for TLS-PSK.
 
     auto server = protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
     server.start();
@@ -87,6 +88,7 @@ int main(int argc, char** argv)
     nexilis::client::ClientConfig alice_data;
     alice_data.setBoostTCPAddress("127.0.0.1");
     alice_data.setMode(nexilis::server::AuthenticationMode::skip);
+    alice_data.setTls(false);
 
     nexilis::client::ClientAPI alice_api(alice_data);
     auto alice = protocol_manager.createProtocol<nexilis::client::nxboost::TCPClient>(alice_api);
@@ -118,6 +120,7 @@ int main(int argc, char** argv)
     nexilis::client::ClientConfig bob_data;
     bob_data.setBoostTCPAddress("127.0.0.1");
     bob_data.setMode(nexilis::server::AuthenticationMode::skip);
+    bob_data.setTls(false);
 
     nexilis::client::ClientAPI bob_api(bob_data);
     auto bob = protocol_manager.createProtocol<nexilis::client::nxboost::TCPClient>(bob_api);

@@ -99,8 +99,8 @@ namespace Nexilis.Client
 
         /// <summary>
         /// Enables or disables TLS-PSK protection of the transport connection
-        /// to the server. Off by default. Both the client and the server must
-        /// enable TLS for a connection to succeed.
+        /// to the server. On by default for Boost TCP. Both the client and the
+        /// server must use the same TLS setting for a connection to succeed.
         /// </summary>
         /// <param name="enabled">True to enable TLS-PSK transport encryption.</param>
         public void SetTls(bool enabled)

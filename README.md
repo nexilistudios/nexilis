@@ -14,7 +14,7 @@ cmake --build examples/skip_auth/build
 ./examples/skip_auth/build/skip_auth
 ```
 
-For an existing clone, run `git submodule update --init --recursive` first. The `skip_auth` example starts a server and two clients on localhost and shows room messaging. It deliberately accepts clients without a password; use it only for local experimentation. See [examples/messaging](examples/messaging/main.cc) for password authentication and optional TLS on the Boost TCP transport.
+For an existing clone, run `git submodule update --init --recursive` first. The `skip_auth` example starts a server and two clients on localhost and shows room messaging. It deliberately accepts clients without a password and disables TLS-PSK; use it only for local experimentation. See [examples/messaging](examples/messaging/main.cc) for password authentication and default TLS-PSK on the Boost TCP transport.
 
 To build the native libraries directly:
 
@@ -39,7 +39,7 @@ On Linux with the MinGW-w64 cross compiler and Windows OpenSSL development libra
 
 ## Security
 
-Network traffic is plaintext by default. TLS with a pre-shared key is optional for the Boost TCP client/server pair and must be enabled on both sides. The optional encrypted room broadcast uses a key derived from the server authentication password, which the server also knows; it does not provide confidentiality from the server. See [protocol and security notes](docs/server_message.md#security-notes) before deploying outside a trusted environment.
+Boost TCP uses TLS with a password-derived pre-shared key by default on both client and server. Configure the same nonempty passphrase on both sides; connections fail if TLS-PSK cannot be established. Applications can explicitly call `setTls(false)` on both sides for plaintext TCP, as the passwordless `skip_auth` example does. Other transports do not implement TLS-PSK and may send plaintext. The optional encrypted room broadcast uses a key derived from the server authentication password, which the server also knows; it does not provide confidentiality from the server. See [protocol and security notes](docs/server_message.md#security-notes) before deploying outside a trusted environment.
 
 ## License
 

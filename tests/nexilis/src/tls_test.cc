@@ -16,11 +16,14 @@
 
 #include <gtest/gtest.h>
 
+#include <nexilis/client/client_api.hh>
 #include <nexilis/client/client_config.hh>
+#include <nexilis/client/protocol/nxboost/tcp_client.hh>
 #include <nexilis/crypto.hh>
 #include <nexilis/server/server_config.hh>
 #include <nexilis/tls.hh>
 
+#include <stdexcept>
 #include <string>
 
 using namespace nexilis;
@@ -28,10 +31,10 @@ using namespace nexilis;
 namespace
 {
 
-TEST(TLS, ClientConfigOffByDefault)
+TEST(TLS, ClientConfigOnByDefault)
 {
     client::ClientConfig config;
-    EXPECT_FALSE(config.isTlsEnabled());
+    EXPECT_TRUE(config.isTlsEnabled());
 }
 
 TEST(TLS, ClientConfigToggleFlipsState)
@@ -43,10 +46,10 @@ TEST(TLS, ClientConfigToggleFlipsState)
     EXPECT_FALSE(config.isTlsEnabled());
 }
 
-TEST(TLS, ServerConfigOffByDefault)
+TEST(TLS, ServerConfigOnByDefault)
 {
     server::ServerConfig config;
-    EXPECT_FALSE(config.isTlsEnabled());
+    EXPECT_TRUE(config.isTlsEnabled());
 }
 
 TEST(TLS, ServerConfigToggleFlipsState)
@@ -100,6 +103,13 @@ TEST(TLS, CreatePskContextClient)
 {
     auto ctx = tls::createPskContext("salasana", false);
     EXPECT_NE(ctx, nullptr);
+}
+
+TEST(TLS, BoostTcpClientRequiresPasswordByDefault)
+{
+    client::ClientConfig config;
+    client::ClientAPI api(config);
+    EXPECT_THROW(client::nxboost::TCPClient tcpClient(api), std::runtime_error);
 }
 
 } // namespace

@@ -31,6 +31,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 
 namespace nexilis::client::nxboost
 {
@@ -232,19 +233,16 @@ bool TCPClient::connectToSwitchedPort(uint16_t port)
 
 std::shared_ptr<boost::asio::ssl::context> TCPClient::createTlsContext(ClientAPI& api)
 {
-    auto ctx = std::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::tls);
     if (api.isTlsEnabled())
     {
         auto pskCtx = tls::createPskContext(api.getClientPassword(), false);
         if (!pskCtx)
         {
-            Log::error("client::nxboost::TCPClient", "TLS-PSK context creation failed (is the password set?), "
-                                                     "connecting without TLS");
-            return ctx;
+            throw std::runtime_error("TLS-PSK context creation failed (is the password set?)");
         }
         return pskCtx;
     }
-    return ctx;
+    return std::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::tls);
 }
 
 void TCPClient::stop()

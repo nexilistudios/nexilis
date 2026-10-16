@@ -15,6 +15,7 @@
     along with this file.  If not, see <https://gnu.org>. */
 
 using Xunit;
+using Nexilis;
 using Nexilis.Client;
 
 namespace Nexilis.Tests
@@ -83,14 +84,35 @@ namespace Nexilis.Tests
         {
             using var config = new ClientConfig();
 
-            // Optional feature: off by default.
-            Assert.False(config.IsTlsEnabled());
+            Assert.True(config.IsTlsEnabled());
 
             config.SetTls(true);
             Assert.True(config.IsTlsEnabled());
 
             config.SetTls(false);
             Assert.False(config.IsTlsEnabled());
+        }
+
+        [Fact]
+        public void BoostTcpClientRequiresPasswordByDefault()
+        {
+            using var config = new ClientConfig();
+            using var api = new ClientAPI(config);
+            using var manager = new ProtocolManager();
+
+            Assert.Throws<System.InvalidOperationException>(() => new BoostTCPClient(manager, api));
+        }
+
+        [Fact]
+        public void BoostTcpClientCanExplicitlyDisableTls()
+        {
+            using var config = new ClientConfig();
+            config.SetTls(false);
+            using var api = new ClientAPI(config);
+            using var manager = new ProtocolManager();
+            using var client = new BoostTCPClient(manager, api);
+
+            Assert.NotEqual(System.IntPtr.Zero, client.BoostTcpClientPtr);
         }
 
         [Fact]

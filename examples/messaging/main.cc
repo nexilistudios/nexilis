@@ -95,7 +95,6 @@ int main(int argc, char** argv)
     settings.setMode(nexilis::server::AuthenticationMode::password_protected);
     settings.setPassphrase("salasana");
     settings.setRootPassword("root");
-    settings.setTls(true);
 
     auto server = protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
     server.start();
@@ -107,7 +106,6 @@ int main(int argc, char** argv)
     server_data.setPassword("salasana");
     server_data.setBoostTCPAddress("127.0.0.1");
     server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
-    server_data.setTls(true);
 
     nexilis::client::ClientAPI alice_api(server_data);
     auto alice = protocol_manager.createProtocol<nexilis::client::nxboost::TCPClient>(alice_api);
@@ -139,7 +137,6 @@ int main(int argc, char** argv)
     bob_data.setPassword("salasana");
     bob_data.setBoostTCPAddress("127.0.0.1");
     bob_data.setMode(nexilis::server::AuthenticationMode::password_protected);
-    bob_data.setTls(true);
 
     nexilis::client::ClientAPI bob_api(bob_data);
     auto bob = protocol_manager.createProtocol<nexilis::client::nxboost::TCPClient>(bob_api);

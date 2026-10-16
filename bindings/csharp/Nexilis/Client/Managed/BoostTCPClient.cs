@@ -43,6 +43,11 @@ namespace Nexilis.Client
 
             _boostTcpClientPtr = BoostTCPClientNative.nexilis_boost_tcp_client_create(
                     protocolManager.ProtocolManagerPtr, clientApi.ClientApiPtr);
+            if (_boostTcpClientPtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException(
+                    "Boost TCP client creation failed. Configure a TLS-PSK password or disable TLS on both peers.");
+            }
         }
 
         /// <summary>

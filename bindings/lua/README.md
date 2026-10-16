@@ -83,5 +83,9 @@ pointers after closing the client. `nexilis.native` exposes the declared C
 functions for advanced uses, but resource ownership remains the caller's
 responsibility.
 
+Boost TCP uses TLS-PSK by default. Set `password` to the server's nonempty
+passphrase; set `tls = false` only when connecting to a server that explicitly
+disables TLS-PSK. UDP traffic does not use TLS-PSK.
+
 Run the smoke and live server tests with `make test-lua`. This target is part of
 `make test`; `make unit-test` remains C++, C, and C# only.

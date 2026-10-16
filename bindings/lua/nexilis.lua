@@ -33,6 +33,7 @@ void nexilis_client_config_set_password(nexilis_ClientConfigC *, const char *);
 void nexilis_client_config_set_mode(nexilis_ClientConfigC *, int);
 void nexilis_client_config_set_message_encryption(nexilis_ClientConfigC *, int);
 void nexilis_client_config_set_tls(nexilis_ClientConfigC *, int);
+int nexilis_client_config_get_tls(const nexilis_ClientConfigC *);
 void nexilis_client_config_set_inet_udp(nexilis_ClientConfigC *, const char *);
 void nexilis_client_config_set_inet_tcp(nexilis_ClientConfigC *, const char *);
 void nexilis_client_config_set_boost_tcp_address(nexilis_ClientConfigC *, const char *);
@@ -206,7 +207,9 @@ function Client.new(options)
         state.config = check_ptr(native.nexilis_client_config_create(), "client config creation")
         native.nexilis_client_config_set_password(state.config, options.password or "password")
         native.nexilis_client_config_set_mode(state.config, options.authentication_mode or 2)
-        native.nexilis_client_config_set_tls(state.config, options.tls and 1 or 0)
+        if options.tls ~= nil then
+            native.nexilis_client_config_set_tls(state.config, options.tls and 1 or 0)
+        end
         native.nexilis_client_config_set_message_encryption(state.config, options.message_encryption and 1 or 0)
         local address = options.server_address or "127.0.0.1"
         native.nexilis_client_config_set_boost_tcp_address(state.config, options.tcp_address or address)
