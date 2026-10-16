@@ -16,6 +16,7 @@
 
 #include <nexilis/client/client_session.hh>
 #include <nexilis/logger/file_log.hh>
+#include <nexilis/types/vector2.hh>
 
 namespace nexilis::client
 {
@@ -62,6 +63,23 @@ void ClientSession::setPosition3D(float x, float y, float z)
     ss << "Setting new position in ClientSessionCPP x: " << x << " y:" << y << " z:" << z;
     FileLog::debug(ss.str());
     BaseClient::getObject3D().setPosition(Vector3<float>(x, y, z));
+}
+
+void ClientSession::setPosition2D(float x, float y)
+{
+    std::stringstream ss;
+    ss << "Setting new 2D position in ClientSessionCPP x: " << x << " y:" << y;
+    FileLog::debug(ss.str());
+    BaseClient::getObject2D().setPosition(Vector2<float>(x, y));
+}
+
+Vector2<float> ClientSession::getPosition2D()
+{
+    auto pos = BaseClient::getObject2D().getPosition();
+    std::stringstream ss;
+    ss << "Position in ClientSessionCPP2D x: " << pos.x << " y:" << pos.y;
+    FileLog::debug(ss.str());
+    return pos;
 }
 
 } // namespace nexilis::client

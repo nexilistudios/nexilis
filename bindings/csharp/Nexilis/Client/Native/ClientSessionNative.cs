@@ -27,6 +27,9 @@ namespace Nexilis.Client
         public static extern void nexilis_client_session_destroy(IntPtr client);
 
         [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void nexilis_client_session_free_wrapper(IntPtr session);
+
+        [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
         public static extern ulong nexilis_client_session_get_id(IntPtr client);
 
         [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]

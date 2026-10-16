@@ -58,10 +58,18 @@ public:
         return m_api;
     }
 
-    /// TODO add check that getProtocolStatus value is connected as well.
+    /// Whether the client protocol is fully connected: the ClientAPI must be
+    /// initialized and the protocol status must reflect an active connection.
+    /// Transports that do not track ProtocolStatus leave it at `undefined`, in
+    /// which case initialization alone is sufficient.
     bool isConnected() const
     {
-        return m_api->isInitialized();
+        if (!m_api->isInitialized())
+        {
+            return false;
+        }
+        auto status = m_protocolStatus ? m_protocolStatus->load() : ProtocolStatus::undefined;
+        return status == ProtocolStatus::connected || status == ProtocolStatus::undefined;
     }
 
     /// Get the connection status of client protocol.

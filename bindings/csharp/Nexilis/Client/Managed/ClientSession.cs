@@ -81,8 +81,6 @@ namespace Nexilis.Client
             return _nativePointer;
         }
 
-        // TODO implement move semantics
-
         public void SetUsername(string username)
         {
             ThrowIfDisposed();

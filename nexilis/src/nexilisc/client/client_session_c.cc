@@ -42,6 +42,13 @@ void nexilis_client_session_release_borrowed(nexilis_ClientSession* session)
     delete session;
 }
 
+void nexilis_client_session_free_wrapper(nexilis_ClientSession* session)
+{
+    // Free only the wrapper struct. The underlying ClientSession is
+    // owned by the ClientAPI and must not be destroyed here.
+    delete session;
+}
+
 uint64_t nexilis_client_session_get_id(nexilis_ClientSession* session)
 {
     if (session && session->client)

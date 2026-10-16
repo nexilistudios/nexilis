@@ -384,7 +384,10 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
 
                     auto clientAddress = socket_wrapper->getRemoteAddress();
 
-                    // TODO This is the passwd message
+                    // The first message from an unidentified client is the
+                    // password (or a client_id handshake in skip mode). The
+                    // MessageHandler parses it and returns an AuthMessage
+                    // whose payload carries the first command byte.
                     auto handled_message = getMessageHandler().readMessage(clientAddress, data, &getSettings());
 
                     if (!handled_message)
@@ -392,7 +395,9 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
                         continue;
                     }
 
-                    // TODO fix this as well
+                    // Bind the socket's send function to the user so that
+                    // subsequent room commands can reach the client over the
+                    // same Boost TCP socket used for the handshake.
                     handled_message->getUser()->setBoostTCPSend([socket_wrapper](const nx_data& bytes)
                     {
                         socket_wrapper->send(bytes);
@@ -404,7 +409,8 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
                     {
                         auto msgPtr = static_cast<AuthMessage*>(handled_message.get());
 
-                        // TODO fix this also
+                        // The first byte of the auth payload is the command
+                        // type; the rest is the password or client_id data.
                         CommandResult passCommand = getCommand().read(msgPtr->getData()[0], *msgPtr->getUser(), *this, msgPtr->getMessageId());
 
                         if (passCommand == CommandResult::success)

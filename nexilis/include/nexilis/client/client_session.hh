@@ -18,6 +18,7 @@
 #define NEXILIS_CLIENT_CLIENT_SESSION_HH
 
 #include <nexilis/base_client.hh>
+#include <nexilis/types/vector2.hh>
 
 namespace nexilis::client
 {
@@ -65,7 +66,9 @@ public:
     void setPosition3D(float x, float y, float z);
     Vector3<float> getPosition3D();
 
-    // TODO setter and getter for 2D position.
+    void setPosition2D(float x, float y);
+    Vector2<float> getPosition2D();
+
 private:
     /// ClientAPI instance what the client is using.
     ClientAPI* const m_clientAPI = nullptr;

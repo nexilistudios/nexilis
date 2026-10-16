@@ -71,7 +71,10 @@ namespace Nexilis.Client
             {
                 Marshal.Copy(clientsArrayPtr, clientPointers, 0, (int)numClients);
 
-                // Create managed wrappers.
+                // Create managed wrappers. Each wrapper borrows its native
+                // ClientSession handle from the room's client array; the
+                // underlying ClientSession is owned by the ClientAPI and
+                // must not be destroyed here.
                 foreach (var ptr in clientPointers)
                 {
                     if (ptr != IntPtr.Zero)
@@ -83,10 +86,11 @@ namespace Nexilis.Client
             }
             finally
             {
-                // Pass 0 to only free the outer array, not the individual wrappers.
-                // The wrappers are owned by the returned ClientSession objects.
-                // TODO: add nexilis_client_session_free_wrapper to properly free wrappers on ClientSession disposal.
-                RoomNative.nexilis_room_free_client_array(clientsArrayPtr, 0);
+                // Free the outer array and the per-element nexilis_ClientSession
+                // wrapper structs (which only hold a pointer to the live
+                // ClientSession owned by the ClientAPI). The underlying
+                // ClientSession objects are untouched.
+                RoomNative.nexilis_room_free_client_array(clientsArrayPtr, numClients);
             }
 
         }

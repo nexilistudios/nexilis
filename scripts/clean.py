@@ -75,19 +75,36 @@ def prompt_for_env_deletion(base_dir):
             print(".env file was not deleted.")
 
 
-def main():
-    # Locale nexilis root .gitignore, TODO add support for other .gitignore files.
-    base_dir = get_nexilis_root()
-    gitignore_path = os.path.join(base_dir, ".gitignore")
+def find_all_gitignore_files(base_dir):
+    """Find all .gitignore files in the directory tree."""
+    gitignore_files = []
+    for root, dirs, files in os.walk(base_dir):
+        # Skip .git directory
+        if '.git' in root.split(os.sep):
+            continue
+        if '.gitignore' in files:
+            gitignore_files.append(os.path.join(root, '.gitignore'))
+    return gitignore_files
 
-    # Read .gitignore patterns.
-    patterns = read_gitignore(gitignore_path)
-    if not patterns:
-        print("No patterns found in .gitignore.")
+
+def main():
+    base_dir = get_nexilis_root()
+
+    # Collect patterns from all .gitignore files in the repository.
+    all_patterns = []
+    gitignore_files = find_all_gitignore_files(base_dir)
+    for gitignore_path in gitignore_files:
+        patterns = read_gitignore(gitignore_path)
+        if patterns:
+            print(f"Found {len(patterns)} patterns in {gitignore_path}")
+            all_patterns.extend(patterns)
+
+    if not all_patterns:
+        print("No patterns found in any .gitignore files.")
         return
 
     # Delete files and directories matching the patterns.
-    delete_ignored_files(base_dir, patterns)
+    delete_ignored_files(base_dir, all_patterns)
 
     # Prompt the user to delete the .env file.
     prompt_for_env_deletion(base_dir)

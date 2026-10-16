@@ -39,6 +39,11 @@ void nexilis_client_session_destroy(nexilis_ClientSession* session);
 // Release a wrapper returned by nexilis_client_api_get_client_from_room.
 // Its ClientSession belongs to the ClientAPI and must not be deleted here.
 void nexilis_client_session_release_borrowed(nexilis_ClientSession* session);
+// Free a nexilis_ClientSession wrapper struct without destroying the
+// underlying ClientSession it points to. Use this when a wrapper was
+// allocated by the caller (e.g. from nexilis_room_get_clients) and the
+// underlying ClientSession is owned by someone else.
+void nexilis_client_session_free_wrapper(nexilis_ClientSession* session);
 
 uint64_t nexilis_client_session_get_id(nexilis_ClientSession* session);
 

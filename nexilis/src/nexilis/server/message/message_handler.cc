@@ -117,7 +117,8 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
 
             // This message is equal to Packet::getId (without client id):
             // a "getting" / "client_id" command that delivers the assigned id.
-            // TODO add other data such as port number.
+            // The session port is negotiated separately by the transport
+            // (e.g. Boost TCP opens a switched session port after auth).
             nx_data message{1, 0, 0};
             auto idBytes = Util::convertToByteVector(user->getId());
             for (auto&& byte : idBytes)
@@ -176,7 +177,9 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                     assert(user->getId() == realNewClient->getId());
 
                     // This message is equal to Packet::getId (without client id).
-                    // TODO add other data such as port number.
+                    // The session port is negotiated separately by the
+                    // transport (e.g. Boost TCP opens a switched session
+                    // port after auth completes).
                     nx_data message{1, 0, 0};
                     auto idBytes = Util::convertToByteVector(user->getId());
                     for (auto&& byte : idBytes)
