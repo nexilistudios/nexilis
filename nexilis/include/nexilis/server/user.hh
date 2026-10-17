@@ -18,8 +18,11 @@
 #define NEXILIS_SERVER_USER_HH
 
 #include <atomic>
+#include <bitset>
 #include <chrono>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <nexilis/base_client.hh>
 #include <nexilis/nexilis_constants.hh>
 #include <nexilis/object/object_2d.hh>
@@ -72,6 +75,9 @@ public:
         bool expected = false;
         return m_udpTokenSent.compare_exchange_strong(expected, true);
     }
+
+    /// Accept a fresh request ID in the bounded, out-of-order replay window.
+    bool acceptMessageId(uint64_t id);
 
     void setRootAccess(bool hasAccess)
     {
@@ -249,10 +255,18 @@ public:
     bool inetUDPSend(const nx_data& data);
 
 private:
+    struct ReplayWindow
+    {
+        std::mutex mutex;
+        uint64_t highest = 0;
+        std::bitset<1024> seen;
+    };
+
     // General
     std::string m_ip_address;
     std::string m_udpToken;
     std::atomic<bool> m_udpTokenSent{false};
+    std::shared_ptr<ReplayWindow> m_replayWindow = std::make_shared<ReplayWindow>();
     std::string m_username;
     uint64_t m_roomId = 0;
     std::chrono::steady_clock::time_point m_lastShotTime{};

@@ -40,6 +40,7 @@ User::User(User&& other) noexcept
       m_ip_address(std::move(other.m_ip_address)),
       m_udpToken(std::move(other.m_udpToken)),
       m_udpTokenSent(other.m_udpTokenSent.load()),
+      m_replayWindow(std::move(other.m_replayWindow)),
       m_username(std::move(other.m_username)),
       m_roomId(std::move(other.m_roomId)),
       m_lastShotTime(other.m_lastShotTime),
@@ -62,6 +63,7 @@ User& User::operator=(User&& other) noexcept
         m_ip_address = std::move(other.m_ip_address);
         m_udpToken = std::move(other.m_udpToken);
         m_udpTokenSent.store(other.m_udpTokenSent.load());
+        m_replayWindow = std::move(other.m_replayWindow);
         m_username = std::move(other.m_username);
         m_roomId = std::move(other.m_roomId);
         m_lastShotTime = other.m_lastShotTime;
@@ -77,6 +79,37 @@ User& User::operator=(User&& other) noexcept
         BaseClient::operator=(std::move(other));
     }
     return *this;
+}
+
+bool User::acceptMessageId(uint64_t id)
+{
+    if (id == 0 || !m_replayWindow)
+        return false;
+
+    std::lock_guard<std::mutex> lock(m_replayWindow->mutex);
+    auto& window = *m_replayWindow;
+    if (window.highest == 0)
+    {
+        window.highest = id;
+        window.seen.set(0);
+        return true;
+    }
+    if (id > window.highest)
+    {
+        uint64_t delta = id - window.highest;
+        if (delta >= window.seen.size())
+            window.seen.reset();
+        else
+            window.seen <<= delta;
+        window.highest = id;
+        window.seen.set(0);
+        return true;
+    }
+    uint64_t behind = window.highest - id;
+    if (behind >= window.seen.size() || window.seen.test(behind))
+        return false;
+    window.seen.set(behind);
+    return true;
 }
 
 bool User::boostTCPSend(const nx_data& data)

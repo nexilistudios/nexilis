@@ -112,22 +112,30 @@ void StreamClient::connectToServer()
     }
 }
 
-void StreamClient::sendMsg(const std::string& message)
+void StreamClient::sendMsg(const nx_data& message)
 {
     Log::debug("Sending message to: ", m_serverAddr.sun_path);
-
-    std::string readyMessage = message + '\0';
-    ssize_t sentBytes = send(m_clientSocket, readyMessage.c_str(), readyMessage.size(), 0);
-
-    if (sentBytes == -1)
+    auto framed = ClientProtocol::frame(message);
+    std::lock_guard<std::mutex> lock(*m_mutex);
+    size_t offset = 0;
+    while (offset < framed.size())
     {
-        Log::error("Error sending message");
+        ssize_t sentBytes = send(m_clientSocket, framed.data() + offset,
+                                 framed.size() - offset, MSG_NOSIGNAL);
+        if (sentBytes <= 0)
+        {
+            Log::error("Error sending message");
+            return;
+        }
+        offset += static_cast<size_t>(sentBytes);
     }
 }
 
 void StreamClient::sendMessage(const nx_data& message)
 {
-    sendMsg(Util::convertToString(message));
+    auto request = authenticate(message);
+    if (!request.empty())
+        sendMsg(request);
 }
 
 void StreamClient::sendMessage(const nx_data& message, const std::function<void()>& callback)
@@ -188,25 +196,18 @@ void StreamClient::stop()
 
 nx_data StreamClient::receiveMessage()
 {
-    std::lock_guard<std::mutex> lock(*m_mutex);
-
-    if (!m_running->load())
+    int socket;
     {
-        return nx_data{};
+        std::lock_guard<std::mutex> lock(*m_mutex);
+        if (!m_running->load() || m_clientSocket == -1)
+            return {};
+        socket = m_clientSocket;
     }
 
-    if (m_clientSocket == -1)
-    {
-        // Connection is gone; let the receive thread exit instead of spinning
-        // on recv(-1).
-        return nx_data{};
-    }
-
-    // Receive buffer.
+    // Do not hold the send mutex while waiting for a server response: the
+    // initial authentication request must be able to use the same socket.
     nx_data receivedData(NEXILIS_BUFFER);
-
-    // Receive data into buffer.
-    ssize_t bytesRead = recv(m_clientSocket, receivedData.data(), receivedData.size(), 0);
+    ssize_t bytesRead = recv(socket, receivedData.data(), receivedData.size(), 0);
 
     if (bytesRead <= 0)
     {
@@ -215,9 +216,10 @@ nx_data StreamClient::receiveMessage()
             perror("recv");
         }
 
-        if (m_clientSocket != -1)
+        std::lock_guard<std::mutex> lock(*m_mutex);
+        if (m_clientSocket == socket)
         {
-            close(m_clientSocket);
+            close(socket);
             m_clientSocket = -1;
         }
 

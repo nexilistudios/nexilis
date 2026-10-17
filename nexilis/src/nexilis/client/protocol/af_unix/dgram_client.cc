@@ -280,9 +280,12 @@ void DgramClient::sendMessage(const nx_data& message)
         return;
     }
 
+    auto request = authenticate(message);
+    if (request.empty())
+        return;
     std::lock_guard<std::mutex> lock(*m_mutex);
 
-    ssize_t sentBytes = sendto(m_clientSocket, message.data(), message.size(), 0,
+    ssize_t sentBytes = sendto(m_clientSocket, request.data(), request.size(), 0,
                                reinterpret_cast<const sockaddr*>(&m_serverAddr),
                                sizeof(m_serverAddr));
 
@@ -320,7 +323,13 @@ std::future<void> DgramClient::sendMessageAsync(const nx_data& message)
     auto promise = std::make_shared<std::promise<void>>();
     auto future = promise->get_future();
 
-    auto messageCopy = std::make_shared<nx_data>(message);
+    auto request = authenticate(message);
+    if (request.empty())
+    {
+        promise->set_exception(std::make_exception_ptr(std::runtime_error("Cannot authenticate request")));
+        return future;
+    }
+    auto messageCopy = std::make_shared<nx_data>(std::move(request));
 
     std::thread([this, messageCopy, promise]()
                 {

@@ -18,6 +18,7 @@
 
 #include <nexilis/auth_config.hh>
 #include <nexilis/command_type.hh>
+#include <nexilis/message_auth.hh>
 #include <nexilis/nx_protocol.hh>
 #include <nexilis/server/client_storage.hh>
 #include <nexilis/server/command/command.hh>
@@ -30,6 +31,7 @@
 #include <nexilis/server/user.hh>
 #include <nexilis/util.hh>
 
+#include <algorithm>
 #include <string>
 
 using namespace nexilis;
@@ -97,6 +99,76 @@ TEST(ServerConfig, IsRootPasswordMatches)
     EXPECT_FALSE(config.isRootPassword("rootsec"));
     EXPECT_FALSE(config.isRootPassword("rootsecretpassword"));
     EXPECT_FALSE(config.isRootPassword("rootsecr"));
+}
+
+TEST(MessageAuthentication, RejectsTamperingAndReplaysBeforeDispatch)
+{
+    server::ClientStorage::clear();
+    struct ClearClients
+    {
+        ~ClearClients()
+        {
+            server::ClientStorage::clear();
+        }
+    } cleanup;
+    auto user = std::make_unique<server::User>(42, "127.0.0.1");
+    const auto key = user->getUdpToken();
+    server::ClientStorage::add(std::move(user));
+
+    server::ServerConfig config;
+    config.setMode(AuthenticationMode::skip);
+    server::MessageHandler handler;
+    auto request = [](uint64_t id)
+    {
+        auto bytes = Util::convertToByteVector(uint64_t{42});
+        auto messageId = Util::convertToByteVector(id);
+        bytes.insert(bytes.end(), messageId.begin(), messageId.end());
+        bytes.push_back(static_cast<uint8_t>(CommandType::getting));
+        bytes.push_back(0);
+        return bytes;
+    };
+
+    auto first = request(1);
+    auto signedFirst = message_auth::sign(first, key);
+    ASSERT_FALSE(signedFirst.empty());
+    ASSERT_EQ(signedFirst.size(), first.size() + message_auth::tag_size);
+    EXPECT_TRUE(std::equal(first.begin(), first.begin() + message_auth::request_header_size,
+                           signedFirst.begin()));
+    EXPECT_TRUE(std::equal(first.begin() + message_auth::request_header_size, first.end(),
+                           signedFirst.begin() + message_auth::request_header_size +
+                                   message_auth::tag_size));
+    EXPECT_EQ(handler.readMessage("127.0.0.1", first, &config), nullptr);
+    EXPECT_EQ(handler.readMessage("127.0.0.1", message_auth::sign(first, std::string(32, '0')), &config), nullptr);
+    auto tamperedTag = signedFirst;
+    tamperedTag[message_auth::request_header_size] ^= 1;
+    EXPECT_EQ(handler.readMessage("127.0.0.1", tamperedTag, &config), nullptr);
+    auto tamperedCommand = signedFirst;
+    tamperedCommand[message_auth::request_header_size + message_auth::tag_size] ^= 1;
+    EXPECT_EQ(handler.readMessage("127.0.0.1", tamperedCommand, &config), nullptr);
+
+    ASSERT_NE(handler.readMessage("127.0.0.1", signedFirst, &config), nullptr);
+    EXPECT_EQ(handler.readMessage("127.0.0.1", signedFirst, &config), nullptr);
+    ASSERT_NE(handler.readMessage("127.0.0.1", message_auth::sign(request(3), key), &config), nullptr);
+    ASSERT_NE(handler.readMessage("127.0.0.1", message_auth::sign(request(2), key), &config), nullptr);
+    EXPECT_EQ(handler.readMessage("127.0.0.1", message_auth::sign(request(2), key), &config), nullptr);
+    ASSERT_NE(handler.readMessage("127.0.0.1", message_auth::sign(request(2000), key), &config), nullptr);
+    EXPECT_EQ(handler.readMessage("127.0.0.1", signedFirst, &config), nullptr);
+}
+
+TEST(MessageAuthentication, KeepsVariableLengthCommandAtEnd)
+{
+    const std::string key(32, 'a');
+    nx_data request(16, 0);
+    request.insert(request.end(), {static_cast<uint8_t>(CommandType::setting), 0, 'a', 'b', 'c'});
+
+    const auto signedRequest = message_auth::sign(request, key);
+    ASSERT_EQ(signedRequest.size(), request.size() + message_auth::tag_size);
+    EXPECT_EQ(nx_data(signedRequest.end() - 5, signedRequest.end()),
+              nx_data({static_cast<uint8_t>(CommandType::setting), 0, 'a', 'b', 'c'}));
+
+    nx_data verified;
+    EXPECT_TRUE(message_auth::verify(signedRequest, key, verified));
+    EXPECT_EQ(verified, request);
 }
 
 class AuthTestProtocol : public NXProtocol
@@ -340,7 +412,9 @@ TEST_F(MessageHandlerSkipTest, SecondMessageFromSameClientIsHandledAsCommand)
     payload.emplace_back(0);
     payload.emplace_back(0);
 
-    auto second = handler.readMessage("test_address", payload, &config);
+    auto signedPayload = message_auth::sign(payload, stored[0]->getUdpToken());
+    ASSERT_FALSE(signedPayload.empty());
+    auto second = handler.readMessage("test_address", signedPayload, &config);
     ASSERT_NE(second, nullptr);
     EXPECT_EQ(second->getType(), server::BaseMessage::Type::message);
 

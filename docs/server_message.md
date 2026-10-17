@@ -2,18 +2,19 @@
 
 A client request to the Nexilis server consists of several parts. This page describes the current binary request format and the Boost TCP JSON response format; it is not a versioned compatibility specification.
 
-## Framing (TCP only)
+## Framing and request authentication
 
-Each TCP request is prefixed with a **4-byte big-endian uint32_t length prefix** containing the size of the remaining payload. This preserves request boundaries over the TCP stream.
+Each TCP and Unix stream request is prefixed with a **4-byte big-endian uint32_t length prefix** containing the size of the remaining payload. This preserves request boundaries over the stream.
 
 ```
 [4 bytes: payload length (big-endian uint32_t)]
 [8 bytes: client ID]
 [8 bytes: message ID]
+[16 bytes: HMAC-SHA-256 tag]
 [remaining: command bytes + parameters]
 ```
 
-The receiver reads exactly 4 bytes for the length, then exactly that many bytes for the payload.
+The receiver reads exactly 4 bytes for the length, then exactly that many bytes for the payload. The tag authenticates the client ID, message ID, and complete command using the random per-session `udp_token` key delivered in the initial `client_id` response. The key is never included in later requests. Initial password or `skip` authentication has no session key yet and is the only unsigned request. The server rejects unsigned or incorrectly signed commands before dispatch.
 
 UDP messages do not use a length prefix — each datagram is a single message.
 The Boost UDP and af_inet UDP transports add an authentication envelope. A
@@ -24,14 +25,14 @@ expires after roughly one to two minutes. The server sends no application
 response until the cookie has been returned. A valid authentication response
 contains a random 16-byte `udp_token` alongside `client_id`.
 
-Later requests use `NXUS`, the 8-byte client ID, the 16-byte token, then the
-normal message ID and command bytes. The server checks the token and source
+Later requests use `NXUS`, the 8-byte client ID, message ID, a 16-byte MAC tag,
+and command bytes. The server checks the MAC and source
 IP/port before dispatching a command. A client authenticated over another
 transport obtains its token in the `client_id` response and can use it for UDP.
 The 1024-byte receive buffer leaves up to 1004 bytes for the normal request
 payload. Legacy UDP datagrams without this envelope are dropped. UDP remains
-plaintext: an on-path observer can capture a token sent over UDP and replay
-packets, so use Boost TCP with TLS-PSK for security-sensitive traffic.
+plaintext: an on-path observer of the initial UDP authentication can capture
+the session key. Use Boost TCP with TLS-PSK for security-sensitive traffic.
 
 ## Identification (uint64_t)
 
@@ -40,10 +41,14 @@ The first 8 bytes of the payload identify the client. A value of 0 indicates an 
 ## Message ID (uint64_t)
 
 The unique identifier for the message (8 bytes), used for correlating responses.
+Clients issue IDs in increasing order, starting at 1. The server tracks a
+1024-ID window per session across all transports. It accepts a valid signed
+request once, including limited out-of-order delivery, and rejects duplicates
+and IDs outside the window. The initial authentication exchange is exempt.
 
 ## Command bytes (std::vector<uint8_t>)
 
-The command bytes come after the client and message IDs. The command hierarchy varies by operation:
+For signed requests, the command bytes come after the client ID, message ID, and MAC tag. The command hierarchy varies by operation:
 
 - First byte: main command type (`nexilis/include/nexilis/command_type.hh`)
 - Second byte: sub-command type; both the first and second bytes are required

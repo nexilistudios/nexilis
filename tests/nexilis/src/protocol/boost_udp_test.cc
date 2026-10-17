@@ -194,3 +194,17 @@ TEST_F(BoostUDPTest, RejectsClientIdFromAnotherEndpoint)
     EXPECT_EQ(nexilis::server::RoomStorage::getAllRooms().size(), before);
     EXPECT_EQ(nexilis::server::ClientStorage::getAllClients().size(), beforeClients);
 }
+
+TEST_F(BoostUDPTest, ReplayedSignedCommandRunsOnce)
+{
+    client->start();
+    ASSERT_TRUE(client->isConnected());
+
+    auto before = nexilis::server::RoomStorage::getAllRooms().size();
+    auto command = nexilis::client::Packet::Room::Management::create(*api, "replay_room");
+    client->sendMessage(command);
+    client->sendMessage(command);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    EXPECT_EQ(nexilis::server::RoomStorage::getAllRooms().size(), before + 1);
+}

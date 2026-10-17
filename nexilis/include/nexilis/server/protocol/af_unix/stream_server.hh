@@ -66,7 +66,7 @@ private:
     void createSocket();
     void bindSocket();
     void handleMessages();
-    std::string receiveMessage(int socket);
+    nx_data receiveMessage(int socket);
     void sendMessage(int clientSocket, const nx_data& message);
 
 private:

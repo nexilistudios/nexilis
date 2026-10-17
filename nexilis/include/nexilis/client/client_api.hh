@@ -40,6 +40,7 @@
 #include <cstdint>
 #include <future>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 
 namespace nexilis::client
@@ -53,20 +54,25 @@ public:
     public:
         ClientData() = default;
 
-        ClientData(ClientData&& other) noexcept
+        ClientData(ClientData&& other)
             : m_clientId(other.m_clientId.load()),
               m_roomId(other.m_roomId.load()),
-              m_udpToken(other.getUdpToken())
+              m_nextMessageId(other.m_nextMessageId.load()),
+              m_udpTokenMutex()
         {
+            std::lock_guard<std::mutex> lock(other.m_udpTokenMutex);
+            m_udpToken = std::move(other.m_udpToken);
         }
 
-        ClientData& operator=(ClientData&& other) noexcept
+        ClientData& operator=(ClientData&& other)
         {
             if (this != &other)
             {
+                std::scoped_lock lock(m_udpTokenMutex, other.m_udpTokenMutex);
                 m_clientId.store(other.m_clientId.load());
                 m_roomId.store(other.m_roomId.load());
-                setUdpToken(other.getUdpToken());
+                m_nextMessageId.store(other.m_nextMessageId.load());
+                m_udpToken = std::move(other.m_udpToken);
             }
             return *this;
         }
@@ -94,6 +100,17 @@ public:
             m_roomId.store(id);
         }
 
+        uint64_t nextMessageId()
+        {
+            uint64_t id = m_nextMessageId.load();
+            do
+            {
+                if (id == 0 || id == NEXILIS_MAX)
+                    throw std::overflow_error("Client message ID sequence exhausted");
+            } while (!m_nextMessageId.compare_exchange_weak(id, id + 2));
+            return id;
+        }
+
         std::string getUdpToken() const
         {
             std::lock_guard<std::mutex> lock(m_udpTokenMutex);
@@ -109,6 +126,7 @@ public:
     private:
         std::atomic<uint64_t> m_clientId = 0;
         std::atomic<uint64_t> m_roomId = 0;
+        std::atomic<uint64_t> m_nextMessageId = 1;
         mutable std::mutex m_udpTokenMutex;
         std::string m_udpToken;
     };
@@ -233,7 +251,7 @@ public:
 
         /// Move constructor.
         ClientAPIData(ClientAPIData&& other)
-            : m_isInitialized(std::move(other.m_isInitialized)),
+            : m_isInitialized(other.m_isInitialized.load()),
               m_isOverLappingAllowed2D(std::move(other.m_isOverLappingAllowed2D)),
               m_serverClientCount(other.m_serverClientCount.load()),
               m_currentlyActiveRooms(std::move(other.m_currentlyActiveRooms)),
@@ -260,7 +278,7 @@ public:
         {
             if (this != &other)
             {
-                m_isInitialized = std::move(other.m_isInitialized);
+                m_isInitialized.store(other.m_isInitialized.load());
                 m_isOverLappingAllowed2D = std::move(other.m_isOverLappingAllowed2D);
                 m_serverClientCount.store(other.m_serverClientCount.load());
                 m_currentlyActiveRooms = std::move(other.m_currentlyActiveRooms);
@@ -292,12 +310,12 @@ public:
 
         void initialize()
         {
-            m_isInitialized = true;
+            m_isInitialized.store(true);
         }
 
         bool isInitialized() const
         {
-            return m_isInitialized;
+            return m_isInitialized.load();
         }
 
         bool isOverlappingAllowed2D() const
@@ -446,7 +464,7 @@ public:
 
     private:
         /// Is the server aware of the client, is "Packet" initialized.
-        bool m_isInitialized = false;
+        std::atomic<bool> m_isInitialized{false};
 
         /// Can the 2D elements overlap each other.
         bool m_isOverLappingAllowed2D = false;
@@ -861,8 +879,10 @@ public:
 private:
     /// The initialization data for the ClientAPI.
     ClientConfig m_serverData;
-
     ClientData m_clientData;
+
+    // Kinda antipattern but we need to have this.
+    std::mutex m_messageIdsMutex;
 
     ClientAPIData m_clientAPIData;
 };

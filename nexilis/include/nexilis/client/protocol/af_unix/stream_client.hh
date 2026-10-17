@@ -84,7 +84,7 @@ private:
     void connectToServer();
 
     /// Internal function for sending messages to the server.
-    void sendMsg(const std::string& message);
+    void sendMsg(const nx_data& message);
 
     /// Receive messages from the server.
     nx_data receiveMessage();

@@ -18,6 +18,7 @@
 #include <nexilis/client/packet.hh>
 #include <nexilis/command_type.hh>
 #include <nexilis/logger/log.hh>
+#include <nexilis/message_auth.hh>
 #include <nexilis/util.hh>
 
 namespace nexilis::client
@@ -94,6 +95,13 @@ nx_data ClientProtocol::frame(const nx_data& payload)
     framed.push_back(static_cast<uint8_t>(net_len & 0xFF));
     framed.insert(framed.end(), payload.begin(), payload.end());
     return framed;
+}
+
+nx_data ClientProtocol::authenticate(const nx_data& message) const
+{
+    if (!m_api->isInitialized())
+        return message;
+    return message_auth::sign(message, m_api->getUdpToken());
 }
 
 void ClientProtocol::sendMessageWithCallback(const nx_data& message, const std::function<void()>& callback)

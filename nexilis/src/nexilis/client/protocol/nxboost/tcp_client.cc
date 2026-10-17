@@ -440,7 +440,10 @@ bool TCPClient::send(const nx_data& data)
 
     try
     {
-        auto framed = std::make_shared<nx_data>(ClientProtocol::frame(data));
+        auto request = authenticate(data);
+        if (request.empty())
+            return false;
+        auto framed = std::make_shared<nx_data>(ClientProtocol::frame(request));
 
         const bool tlsOn = getClientAPI()->isTlsEnabled();
 

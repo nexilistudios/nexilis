@@ -29,6 +29,30 @@
 
 using namespace nexilis;
 
+TEST(ClientDataTest, TokenRemainsUsableAfterMove)
+{
+    client::ClientAPI::ClientData source;
+    const std::string firstToken = "first";
+    source.setUdpToken(firstToken);
+    EXPECT_EQ(source.getUdpToken(), firstToken);
+    EXPECT_EQ(source.nextMessageId(), 1);
+
+    client::ClientAPI::ClientData moved(std::move(source));
+    EXPECT_EQ(moved.getUdpToken(), firstToken);
+    EXPECT_EQ(moved.nextMessageId(), 3);
+
+    source.setUdpToken("second");
+    EXPECT_EQ(source.getUdpToken(), "second");
+
+    client::ClientAPI::ClientData assigned;
+    assigned = std::move(moved);
+    EXPECT_EQ(assigned.getUdpToken(), firstToken);
+    EXPECT_EQ(assigned.nextMessageId(), 5);
+
+    moved.setUdpToken("third");
+    EXPECT_EQ(moved.getUdpToken(), "third");
+}
+
 class CommandSpecTest : public ::testing::Test
 {
 protected:

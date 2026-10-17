@@ -17,7 +17,7 @@
 workspace("nexilis")
 configurations({ "Debug", "Release" })
 architecture("x64")
-cppdialect("C++17")
+cppdialect("C++20")
 staticruntime("Off")
 systemversion("latest")
 

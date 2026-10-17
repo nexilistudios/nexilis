@@ -87,6 +87,8 @@ public:
 protected:
     void start(NXProtocol::Type type);
     void sendMessageWithCallback(const nx_data& message, const std::function<void()>& callback);
+    /// Sign an established request; initial authentication has no session key.
+    nx_data authenticate(const nx_data& message) const;
 
 private:
     /// Create a pair that contains the id of the message and the callback itself.

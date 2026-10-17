@@ -3,6 +3,7 @@
 
 package.path = "bindings/lua/?.lua;" .. package.path
 local nexilis = require("nexilis")
+nexilis.native.nexilis_log_start_console_debugging()
 
 nexilis.native.nexilis_set_boost_tcp_port(55400)
 nexilis.native.nexilis_set_boost_udp_port(55401)

@@ -135,46 +135,33 @@ void StreamServer::sendMessage(int clientSocket, const nx_data& message)
     }
 }
 
-std::string StreamServer::receiveMessage(int socket)
+nx_data StreamServer::receiveMessage(int socket)
 {
-    std::string message;
-    char buffer[NEXILIS_BUFFER];
-
-    while (true)
+    auto readExact = [socket](uint8_t* data, size_t length)
     {
-        auto bytesRead = recv(socket, buffer, sizeof(buffer), 0);
-
-        if (bytesRead > 0)
+        size_t offset = 0;
+        while (offset < length)
         {
-            message.append(buffer, bytesRead);
-
-            // Check if the message contains the null terminator.
-            size_t nullPos = message.find('\0');
-
-            if (nullPos != std::string::npos)
-            {
-                return message.substr(0, nullPos);
-            }
-            else
-            {
-                Log::error("Received message that does",
-                           " not contain the null-termination character");
-                break;
-            }
+            ssize_t count = recv(socket, data + offset, length - offset, 0);
+            if (count <= 0)
+                return false;
+            offset += static_cast<size_t>(count);
         }
+        return true;
+    };
 
-        else if (bytesRead == 0)
-        {
-            Log::info("Connection closed by peer");
-            break;
-        }
-        else
-        {
-            Log::error("Error receiving message");
-            break;
-        }
-    }
-    return "";
+    uint8_t header[4]{};
+    if (!readExact(header, sizeof(header)))
+        return {};
+    uint32_t length = (static_cast<uint32_t>(header[0]) << 24) |
+                      (static_cast<uint32_t>(header[1]) << 16) |
+                      (static_cast<uint32_t>(header[2]) << 8) | header[3];
+    if (length == 0 || length > NEXILIS_BUFFER)
+        return {};
+    nx_data message(length);
+    if (!readExact(message.data(), message.size()))
+        return {};
+    return message;
 }
 
 void StreamServer::handleMessages()
@@ -188,17 +175,16 @@ void StreamServer::handleMessages()
 
     while (true)
     {
-        std::string message = receiveMessage(clientSocket);
+        nx_data message = receiveMessage(clientSocket);
 
-        if (message == "")
+        if (message.empty())
         {
             break;
         }
 
-        nx_data payload = Util::convertToByteVector(message);
-        auto handledMessage = getMessageHandler().readMessage("127.0.0.1", payload, &getSettings());
+        auto handledMessage = getMessageHandler().readMessage("127.0.0.1", message, &getSettings());
 
-        if (!handledMessage->getUser())
+        if (!handledMessage || !handledMessage->getUser())
         {
             Log::error("Message from unauthorized client!");
             break;

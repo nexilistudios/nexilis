@@ -148,7 +148,9 @@ bool TCPClient::connectToServer()
 
 void TCPClient::sendMessage(const nx_data& message)
 {
-    sendFrame(reinterpret_cast<const char*>(message.data()), message.size());
+    auto request = authenticate(message);
+    if (!request.empty())
+        sendFrame(reinterpret_cast<const char*>(request.data()), request.size());
 }
 
 void TCPClient::sendMessage(const nx_data& message, const std::function<void()>& callback)
@@ -168,7 +170,13 @@ std::future<void> TCPClient::sendMessageAsync(const nx_data& message)
     auto promise = std::make_shared<std::promise<void>>();
     auto future = promise->get_future();
 
-    auto messageCopy = std::make_shared<nx_data>(message);
+    auto request = authenticate(message);
+    if (request.empty())
+    {
+        promise->set_exception(std::make_exception_ptr(std::runtime_error("Cannot authenticate request")));
+        return future;
+    }
+    auto messageCopy = std::make_shared<nx_data>(std::move(request));
 
     std::thread([this, messageCopy, promise]()
                 {

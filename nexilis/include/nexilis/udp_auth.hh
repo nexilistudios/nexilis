@@ -17,6 +17,7 @@
 #ifndef NEXILIS_UDP_AUTH_HH
 #define NEXILIS_UDP_AUTH_HH
 
+#include <nexilis/message_auth.hh>
 #include <nexilis/nx_data.hh>
 
 #include <openssl/crypto.h>
@@ -100,25 +101,23 @@ inline nx_data makeAuthentication(const nx_data& cookie, const nx_data& payload)
 
 inline nx_data makeSession(const nx_data& payload, std::string_view token)
 {
-    std::array<uint8_t, token_size> bytes{};
-    if (!fromHex(token, bytes) || payload.size() < 8)
+    auto signedPayload = message_auth::sign(payload, token);
+    if (signedPayload.empty())
         return {};
     nx_data packet(session.begin(), session.end());
-    packet.insert(packet.end(), payload.begin(), payload.begin() + 8);
-    packet.insert(packet.end(), bytes.begin(), bytes.end());
-    packet.insert(packet.end(), payload.begin() + 8, payload.end());
+    packet.insert(packet.end(), signedPayload.begin(), signedPayload.end());
     return packet;
 }
 
 inline bool readSession(const nx_data& packet, std::string_view token, nx_data& payload)
 {
-    std::array<uint8_t, token_size> expected{};
-    if (!hasPrefix(packet, session) || packet.size() < 4 + 8 + token_size + 8 + 2 ||
-        !fromHex(token, expected) ||
-        CRYPTO_memcmp(expected.data(), packet.data() + 4 + 8, token_size) != 0)
+    if (!hasPrefix(packet, session) || packet.size() < 4 + 8 + 8 + 2 + message_auth::tag_size)
         return false;
-    payload.assign(packet.begin() + 4, packet.begin() + 4 + 8);
-    payload.insert(payload.end(), packet.begin() + 4 + 8 + token_size, packet.end());
+    nx_data signedPayload(packet.begin() + 4, packet.end());
+    nx_data verified;
+    if (!message_auth::verify(signedPayload, token, verified))
+        return false;
+    payload = std::move(signedPayload);
     return true;
 }
 

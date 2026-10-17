@@ -26,6 +26,7 @@
 #include <nexilis/server/server_json.hh>
 
 #include <nexilis/logger/log.hh>
+#include <nexilis/message_auth.hh>
 
 #include <nexilis/util.hh>
 
@@ -85,6 +86,23 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
     }
     assert(user);
 
+    auto authenticatedMessage = [&]() -> std::unique_ptr<BaseMessage>
+    {
+        nx_data verified;
+        if (!message_auth::verify(payload, user->getUdpToken(), verified))
+        {
+            Log::warning(header(), "Rejected request with an invalid session MAC");
+            return nullptr;
+        }
+        nx_data idBytes(verified.begin() + 8, verified.begin() + 16);
+        if (!user->acceptMessageId(Util::uint64FromFront(idBytes)))
+        {
+            Log::warning(header(), "Rejected duplicate or stale message ID");
+            return nullptr;
+        }
+        return std::make_unique<Message>(handlePayload(verified, user, address));
+    };
+
     switch (authentication->getMode())
     {
         case AuthenticationMode::empty:
@@ -96,7 +114,7 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
             if (!newUser)
             {
                 // Registered client: process the payload as a normal command.
-                return std::make_unique<Message>(handlePayload(payload, user, address));
+                return authenticatedMessage();
             }
 
             // Brand new client. Register it so its client id stays stable and
@@ -143,7 +161,7 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                 if (user->hasCommonAccess())
                 {
                     Log::debug(header(), "Message from known user");
-                    return std::make_unique<Message>(handlePayload(payload, user, address));
+                    return authenticatedMessage();
                 }
                 // Message from verified client that has no access.
                 else

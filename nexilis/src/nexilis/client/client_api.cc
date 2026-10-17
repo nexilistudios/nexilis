@@ -98,18 +98,10 @@ uint64_t ClientAPI::clientRoomId()
 
 uint64_t ClientAPI::getNewMessageId()
 {
-    uint64_t newId = Util::getRandomUint64();
-    auto& messageIds = m_clientAPIData.getMessageIds();
-
-    if (std::find(messageIds.begin(), messageIds.end(), newId) != messageIds.end())
-    {
-        return getNewMessageId();
-    }
-    else
-    {
-        messageIds.emplace_back(newId);
-        return newId;
-    }
+    uint64_t id = m_clientData.nextMessageId();
+    std::lock_guard<std::mutex> lock(m_messageIdsMutex);
+    m_clientAPIData.getMessageIds().emplace_back(id);
+    return id;
 }
 
 void ClientAPI::addCallback(const std::pair<uint64_t, const std::function<void()>>& callback)
@@ -382,32 +374,32 @@ std::vector<ClientAPI::RemotePlayerSnapshot> ClientAPI::getRemotePlayersSnapshot
 
 bool ClientAPI::IsInetUDPReady()
 {
-    return getClientData().getClientId() && !getInetUDPServerAddress().empty() && !getUdpToken().empty();
+    return isInitialized() && getClientData().getClientId() && !getInetUDPServerAddress().empty() && !getUdpToken().empty();
 }
 
 bool ClientAPI::isInetTCPReady()
 {
-    return getClientData().getClientId() && !getInetTCPServerAddress().empty();
+    return isInitialized() && getClientData().getClientId() && !getInetTCPServerAddress().empty() && !getUdpToken().empty();
 }
 
 bool ClientAPI::isBoostTCPReady()
 {
-    return getClientData().getClientId() && !getBoostTCPServerAddress().empty();
+    return isInitialized() && getClientData().getClientId() && !getBoostTCPServerAddress().empty() && !getUdpToken().empty();
 }
 
 bool ClientAPI::isBoostUDPReady()
 {
-    return getClientData().getClientId() && !getBoostUDPServerAddress().empty() && !getUdpToken().empty();
+    return isInitialized() && getClientData().getClientId() && !getBoostUDPServerAddress().empty() && !getUdpToken().empty();
 }
 
 bool ClientAPI::isUnixDgramReady()
 {
-    return getClientData().getClientId() && !m_serverData.getUnixDgramServerPath().empty();
+    return isInitialized() && getClientData().getClientId() && !m_serverData.getUnixDgramServerPath().empty() && !getUdpToken().empty();
 }
 
 bool ClientAPI::isUnixStreamReady()
 {
-    return getClientData().getClientId() != 0 && !getUnixStreamPath().empty();
+    return isInitialized() && getClientData().getClientId() != 0 && !getUnixStreamPath().empty() && !getUdpToken().empty();
 }
 
 void ClientAPI::waitUntilInetUDPReady()
