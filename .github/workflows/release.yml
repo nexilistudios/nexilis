@@ -90,35 +90,10 @@ jobs:
 
           git clone --depth 1 "$remote" site
 
-          # Sync generated docs into the website repo, preserving custom files and assets
-          rsync -a --delete \
-            --exclude='.git/' \
-            --exclude='CNAME' \
-            --exclude='.nojekyll' \
-            --exclude='README*' \
-            --exclude='LICENSE*' \
-            --exclude='robots.txt' \
-            --exclude='sitemap*' \
-            --exclude='favicon*' \
-            --exclude='apple-touch-icon*' \
-            --exclude='logo*' \
-            --exclude='*.png' \
-            --exclude='*.jpg' \
-            --exclude='*.jpeg' \
-            --exclude='*.svg' \
-            --exclude='*.ico' \
-            --exclude='*.webp' \
-            --exclude='*.gif' \
-            --exclude='css/' \
-            --exclude='styles/' \
-            --exclude='assets/' \
-            --exclude='static/' \
-            --exclude='images/' \
-            --exclude='img/' \
-            --exclude='fonts/' \
-            --exclude='js/custom/' \
-            --exclude='theme/' \
-            nexilis/docs/html/ site/
+          # Keep the website root intact and replace only its Doxygen directory.
+          mkdir -p site/docs
+          rsync -a --delete nexilis/docs/html/ site/docs/
+          test -s site/docs/index.html
 
           cd site
           git config user.name "github-actions[bot]"
