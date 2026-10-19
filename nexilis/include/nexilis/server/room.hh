@@ -154,6 +154,10 @@ public:
     bool canDamage(uint64_t shooterId, uint64_t targetId) const;
     void setTeamSelectionHandler(TeamSelectionHandler handler);
     bool canSelectTeam(uint64_t playerId) const;
+    /// Allow or disallow direct client position requests
+    /// (`room/player_3D/position`). Disallowed by default: a game must
+    /// explicitly opt in to client-authoritative position, or install a
+    /// movement input handler for server-authoritative movement.
     void setClientPositionAllowed(bool allowed);
     bool isClientPositionAllowed() const;
     void setMovementInputHandler(MovementInputHandler handler);
@@ -210,7 +214,7 @@ private:
     ShotHandler m_shotHandler;
     SpawnHandler m_spawnHandler;
     GameItemPickupHandler m_gameItemPickupHandler;
-    bool m_clientPositionAllowed = true;
+    bool m_clientPositionAllowed = false;
     bool m_clientGameItemCreationAllowed = true;
 
     /// Guards per-player game state (health, kills, deaths, teams). The server

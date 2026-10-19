@@ -39,11 +39,11 @@ CommandResult ServerImpl::room_player3d_position(const DefaultArgs& args)
     if (payload.size() != 12 && payload.size() != 16)
         return CommandResult::invalid_input;
     auto vector = Util::convertToVector3(payload);
-    const float yaw = payload.size() == 16
-                              ? Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 12))
-                              : 0.0f;
+    const float rawYaw = payload.size() == 16
+                                 ? Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 12))
+                                 : 0.0f;
     if (!std::isfinite(vector.x) || !std::isfinite(vector.y) ||
-        !std::isfinite(vector.z) || !std::isfinite(yaw))
+        !std::isfinite(vector.z) || !std::isfinite(rawYaw))
         return CommandResult::invalid_input;
 
     // Keep the position inside the configured world limits: the
@@ -59,6 +59,14 @@ CommandResult ServerImpl::room_player3d_position(const DefaultArgs& args)
                      ") clamped to (", position.x, ", ", position.y, ", ", position.z, ")");
     }
     Log::debug("Position x:", position.x, " y:", position.y, " z:", position.z);
+
+    // Normalize yaw into [-pi, pi] so a client cannot store or broadcast
+    // unbounded angles (which break client-side orientation math).
+    const float yaw = GameplayLimits::normalizeYaw(rawYaw);
+    if (yaw != rawYaw)
+    {
+        Log::warning("Yaw ", rawYaw, " normalized to ", yaw);
+    }
 
     auto currentRoom = RoomStorage::getRoomById(user.getRoomId());
 

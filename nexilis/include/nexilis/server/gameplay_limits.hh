@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 
 namespace nexilis::server
 {
@@ -116,6 +117,34 @@ public:
     float clampDamage(float value) const
     {
         return std::clamp(value, 0.0f, m_maxDamagePerShot);
+    }
+
+    /// Normalize a yaw angle (radians) into [-pi, pi]. Non-finite input
+    /// normalizes to zero so callers cannot propagate NaN or infinity.
+    static float normalizeYaw(float yaw)
+    {
+        if (!std::isfinite(yaw))
+        {
+            return 0.0f;
+        }
+
+        constexpr float kPi = 3.14159265358979323846f;
+        constexpr float kTwoPi = 2.0f * kPi;
+
+        // Values already inside the range pass through unchanged so their
+        // exact bit pattern is preserved instead of picking up rounding from
+        // the wrap arithmetic below.
+        if (yaw >= -kPi && yaw <= kPi)
+        {
+            return yaw;
+        }
+
+        float wrapped = std::fmod(yaw + kPi, kTwoPi);
+        if (wrapped < 0.0f)
+        {
+            wrapped += kTwoPi;
+        }
+        return wrapped - kPi;
     }
 
     /// Minimum interval between two accepted shots. Zero when the

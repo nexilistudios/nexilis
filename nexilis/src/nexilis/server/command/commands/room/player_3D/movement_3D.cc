@@ -40,12 +40,20 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
     auto vec_y = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 4));
     auto vec_z = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 8));
     auto delta = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 12));
-    const float yaw = payload.size() == 20
-                              ? Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 16))
-                              : 0.0f;
+    const float rawYaw = payload.size() == 20
+                                 ? Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 16))
+                                 : 0.0f;
     if (!std::isfinite(vec_x) || !std::isfinite(vec_y) || !std::isfinite(vec_z) ||
-        !std::isfinite(delta) || !std::isfinite(yaw))
+        !std::isfinite(delta) || !std::isfinite(rawYaw))
         return CommandResult::invalid_input;
+
+    // Normalize yaw into [-pi, pi] so a client cannot store or broadcast
+    // unbounded angles (which break client-side orientation math).
+    const float yaw = GameplayLimits::normalizeYaw(rawYaw);
+    if (yaw != rawYaw && payload.size() == 20)
+    {
+        Log::warning("Movement yaw ", rawYaw, " normalized to ", yaw);
+    }
 
     auto* inputRoom = RoomStorage::getRoomById(user.getRoomId());
     if (inputRoom && inputRoom->hasMovementInputHandler())

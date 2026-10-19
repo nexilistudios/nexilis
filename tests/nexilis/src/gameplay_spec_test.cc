@@ -392,6 +392,10 @@ protected:
         room->joinRoom(TARGET_ID);
         m_target->setRoomId(ROOM_ID);
         m_target->setBoostTCPSend([](const nx_data&) {});
+
+        // Client position requests are disabled by default, so the legacy
+        // position tests must opt in explicitly.
+        room->setClientPositionAllowed(true);
     }
 
     /// Put the shooter and the target on opposing teams. The shoot command only

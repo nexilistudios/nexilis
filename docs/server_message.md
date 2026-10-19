@@ -66,7 +66,8 @@ The `room/player_3D/position` request carries three floats (`x`, `y`, `z`) and
 may append one float yaw in radians. The server accepts both 12-byte legacy
 positions and 16-byte positions with yaw, then relays `yaw` in its JSON position
 message. Legacy packets use yaw zero. Yaw is measured about the vertical Y axis;
-zero faces world -Z. The C, C#, and Lua position helpers keep sending the legacy
+zero faces world -Z. Yaw is normalized into `[-pi, pi]` before it is stored or
+broadcast. The C, C#, and Lua position helpers keep sending the legacy
 12-byte form. When a client joins a room, the initial position messages for
 existing players include their current yaw.
 
@@ -78,7 +79,10 @@ An application room can disable client position requests and install a movement
 input handler. In that room, the three movement floats are input direction and
 jump intent, the client delta time is ignored, and the application updates and
 broadcasts positions on its server tick. The application must validate speed,
-collisions, and input age. Other rooms retain the legacy movement behavior.
+collisions, and input age. Client position requests (`room/player_3D/position`)
+are disabled by default; a room that wants client-authoritative positions must
+explicitly call `setClientPositionAllowed(true)`. Other rooms retain the legacy
+movement behavior.
 
 An application room can install a shot handler. In that room,
 `room/player_3D/shoot` requires three floats for aim direction followed by one

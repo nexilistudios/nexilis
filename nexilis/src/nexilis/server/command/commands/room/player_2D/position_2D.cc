@@ -17,7 +17,10 @@
 #include <nexilis/server/command/commands.hh>
 
 #include <nexilis/server/command/command.hh>
+#include <nexilis/server/gameplay_limits.hh>
 #include <nexilis/server/room_storage.hh>
+
+#include <cmath>
 
 namespace nexilis::server
 {
@@ -36,6 +39,9 @@ CommandResult ServerImpl::room_player2d_position(const DefaultArgs& args)
     auto vector = Util::convertToVector2(payload);
     Log::debug("Position x:", vector.x, " y:", vector.y);
 
+    if (!std::isfinite(vector.x) || !std::isfinite(vector.y))
+        return CommandResult::invalid_input;
+
     auto currentRoom = RoomStorage::getRoomById(user.getRoomId());
 
     if (!currentRoom)
@@ -43,6 +49,9 @@ CommandResult ServerImpl::room_player2d_position(const DefaultArgs& args)
         Log::warning("Client not currently in room.");
         return CommandResult::failure;
     }
+
+    if (!currentRoom->isClientPositionAllowed())
+        return CommandResult::invalid_input;
 
     user.getObject2D().setPosition(vector);
 
