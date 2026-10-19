@@ -351,6 +351,51 @@ TEST_F(MessageHandlerPasswordProtectedTest, EmptyPasswordReturnsAuthError)
     EXPECT_EQ(result->getType(), server::BaseMessage::Type::error_message);
 }
 
+TEST_F(MessageHandlerPasswordProtectedTest, RepeatedFailuresLockOutAddress)
+{
+    for (int i = 0; i < 5; ++i)
+    {
+        auto result = sendPassword("wrong");
+        ASSERT_NE(result, nullptr);
+        EXPECT_EQ(result->getType(), server::BaseMessage::Type::error_message);
+    }
+
+    // The correct passphrase is rejected while the source address is locked out.
+    auto blocked = sendPassword("secret");
+    ASSERT_NE(blocked, nullptr);
+    EXPECT_EQ(blocked->getType(), server::BaseMessage::Type::error_message);
+
+    // A different source address is unaffected by the lockout.
+    auto other = handler.readMessage("other_address", Util::convertToByteVector("secret"), &config);
+    ASSERT_NE(other, nullptr);
+    EXPECT_EQ(other->getType(), server::BaseMessage::Type::auth_message);
+}
+
+TEST_F(MessageHandlerPasswordProtectedTest, SuccessfulAuthClearsFailureState)
+{
+    for (int i = 0; i < 4; ++i)
+    {
+        auto result = sendPassword("wrong");
+        ASSERT_NE(result, nullptr);
+        EXPECT_EQ(result->getType(), server::BaseMessage::Type::error_message);
+    }
+
+    auto result = sendPassword("secret");
+    ASSERT_NE(result, nullptr);
+    EXPECT_EQ(result->getType(), server::BaseMessage::Type::auth_message);
+
+    // Another user from the same address starts with a fresh counter.
+    for (int i = 0; i < 4; ++i)
+    {
+        auto retry = handler.readMessage("test_address", Util::convertToByteVector("wrong"), &config);
+        ASSERT_NE(retry, nullptr);
+        EXPECT_EQ(retry->getType(), server::BaseMessage::Type::error_message);
+    }
+    auto stillAllowed = sendPassword("secret");
+    ASSERT_NE(stillAllowed, nullptr);
+    EXPECT_EQ(stillAllowed->getType(), server::BaseMessage::Type::auth_message);
+}
+
 class MessageHandlerSkipTest : public ::testing::Test
 {
 protected:

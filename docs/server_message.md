@@ -159,8 +159,16 @@ configured root password. Five failed root attempts from one source address
 block further attempts from that address for ten minutes, including after a
 reconnect. The attempt state is scoped to the server protocol instance and
 resets when that instance is replaced. At most 4096 source addresses are tracked;
-new addresses are denied root attempts while that limit is full. This limiter
-does not cover the initial connection handshake.
+new addresses are denied root attempts while that limit is full.
+
+The initial connection handshake for `password_protected` mode is separately
+rate-limited: five failed passphrase attempts from one source address block
+further handshake attempts from that address for ten minutes, including after a
+reconnect. At most 4096 source addresses are tracked; while that limit is full,
+new addresses are denied handshake attempts. A successful authentication clears
+the recorded failures for the address. Like the root limiter, this state is
+scoped to the server protocol instance and resets when that instance is
+replaced.
 
 `ClientAPI::setMessageEncryption(true)` affects room broadcasts when the client has a nonempty password. It does not encrypt othercast or unicast messages. The message key is derived from that same password and the room ID; the server holds the password, so this feature does **not** hide message contents from the server.
 

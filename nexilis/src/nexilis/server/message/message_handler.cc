@@ -30,8 +30,18 @@
 
 #include <nexilis/util.hh>
 
+#include <algorithm>
+#include <chrono>
+
 namespace nexilis::server
 {
+
+namespace
+{
+constexpr unsigned kMaxPassphraseAuthFailures = 5;
+constexpr auto kPassphraseAuthWindow = std::chrono::minutes(10);
+constexpr size_t kMaxTrackedPassphraseAuthAddresses = 4096;
+} // namespace
 
 MessageHandler::MessageHandler()
     : NxClass("server::MessageHandler")
@@ -173,11 +183,56 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
             else
             {
                 // Only accept the password as a message from unidentified clients.
+                // Failed attempts are shared by source address across reconnects to
+                // this server instance so the shared passphrase cannot be
+                // brute-forced at line speed.
+                bool blocked = false;
+                {
+                    const auto now = std::chrono::steady_clock::now();
+                    std::lock_guard lock(m_passphraseAuthState->mutex);
+                    auto& attempts = m_passphraseAuthState->byAddress;
+                    auto it = attempts.find(address);
+                    if (it != attempts.end() && now - it->second.firstFailure >= kPassphraseAuthWindow)
+                    {
+                        attempts.erase(it);
+                        it = attempts.end();
+                    }
+                    if (it != attempts.end() && it->second.failures >= kMaxPassphraseAuthFailures)
+                    {
+                        blocked = true;
+                    }
+                    else if (it == attempts.end() &&
+                             attempts.size() >= kMaxTrackedPassphraseAuthAddresses)
+                    {
+                        std::erase_if(attempts,
+                                      [now](const auto& entry)
+                                      {
+                                          return now - entry.second.firstFailure >= kPassphraseAuthWindow;
+                                      });
+                        if (attempts.size() >= kMaxTrackedPassphraseAuthAddresses)
+                        {
+                            blocked = true;
+                        }
+                    }
+                }
+
+                if (blocked)
+                {
+                    Log::warning(header(), "Too many failed passphrase attempts from ", address);
+                    return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::authentication_error);
+                }
+
                 // The comparison runs over the stored password length only, so the
                 // response does not reveal the length of the correct password.
                 if (Util::constantTimeEquals(authentication->getPassphrase(), payload))
                 {
                     Log::info(header(), "Correct password by user ", user->getId());
+
+                    {
+                        std::lock_guard lock(m_passphraseAuthState->mutex);
+                        m_passphraseAuthState->byAddress.erase(address);
+                    }
+
                     user->setCommonAccess(true);
 
                     // Add to storage only if this was a new user.
@@ -211,6 +266,20 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                 }
                 else
                 {
+                    const auto now = std::chrono::steady_clock::now();
+                    {
+                        std::lock_guard lock(m_passphraseAuthState->mutex);
+                        auto& attempts = m_passphraseAuthState->byAddress;
+                        auto it = attempts.find(address);
+                        if (it != attempts.end())
+                        {
+                            ++it->second.failures;
+                        }
+                        else
+                        {
+                            attempts.emplace(address, PassphraseAuthState::Attempt{now, 1});
+                        }
+                    }
                     Log::error(header(), "Authentication error: incorrect password");
                     return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::authentication_error);
                 }

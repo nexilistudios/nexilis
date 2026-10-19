@@ -22,6 +22,12 @@
 
 #include <nexilis/server/message/message.hh>
 
+#include <chrono>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+
 namespace nexilis::server
 {
 
@@ -47,6 +53,24 @@ public:
 
 private:
     Message handlePayload(const nx_data& payload, User* user, const std::string& address);
+
+    /// Failed passphrase attempts for the initial handshake, tracked per source
+    /// address so a client cannot brute-force the shared passphrase. The state is
+    /// shared through a shared_ptr so it survives moves of the owning protocol.
+    struct PassphraseAuthState
+    {
+        struct Attempt
+        {
+            std::chrono::steady_clock::time_point firstFailure;
+            unsigned failures = 0;
+        };
+
+        std::mutex mutex;
+        std::unordered_map<std::string, Attempt> byAddress;
+    };
+
+    std::shared_ptr<PassphraseAuthState> m_passphraseAuthState =
+            std::make_shared<PassphraseAuthState>();
 };
 
 } // namespace nexilis::server
