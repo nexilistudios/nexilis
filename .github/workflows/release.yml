@@ -93,6 +93,7 @@ jobs:
           # Keep the website root intact and replace only its Doxygen directory.
           mkdir -p site/docs
           rsync -a --delete nexilis/docs/html/ site/docs/
+          node site/scripts/apply-docs-theme.mjs site/docs
           test -s site/docs/index.html
 
           cd site
@@ -126,4 +127,3 @@ jobs:
             gh release create "$RELEASE_TAG" --verify-tag --generate-notes \
               --title "Nexilis $RELEASE_VERSION" "${flags[@]}"
           fi
-
