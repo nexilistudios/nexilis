@@ -89,6 +89,10 @@ nx_data ClientProtocol::frame(const nx_data& payload)
 {
     nx_data framed;
     uint32_t net_len = static_cast<uint32_t>(payload.size());
+    // Allocate the 4-byte length prefix plus the payload up front so the
+    // push_back/insert sequence below never reallocates. GCC 13 otherwise
+    // warns about a possible overflow in the inlined vector internals.
+    framed.reserve(4 + payload.size());
     framed.push_back(static_cast<uint8_t>((net_len >> 24) & 0xFF));
     framed.push_back(static_cast<uint8_t>((net_len >> 16) & 0xFF));
     framed.push_back(static_cast<uint8_t>((net_len >> 8) & 0xFF));

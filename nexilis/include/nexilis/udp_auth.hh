@@ -24,6 +24,7 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -154,8 +155,15 @@ inline nx_data makeChallenge(const std::array<uint8_t, 32>& key, std::string_vie
     auto cookie = cookieFor(key, endpoint, currentBucket());
     if (!cookie)
         return {};
-    nx_data packet(challenge.begin(), challenge.end());
-    packet.insert(packet.end(), cookie->begin(), cookie->end());
+    // Copy the cookie out of the optional and assemble the packet in a single
+    // exactly sized buffer. Deriving the copy source through
+    // std::optional::operator-> inside vector::insert makes GCC 13 emit a
+    // false-positive -Warray-bounds warning when this is inlined into
+    // UDPServer::receiveFromClients.
+    const std::array<uint8_t, cookie_size> cookieBytes = *cookie;
+    nx_data packet(challenge.size() + cookie_size, 0);
+    std::copy(challenge.begin(), challenge.end(), packet.begin());
+    std::copy(cookieBytes.begin(), cookieBytes.end(), packet.begin() + challenge.size());
     return packet;
 }
 
