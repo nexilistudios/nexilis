@@ -163,6 +163,7 @@ public:
     void setMovementInputHandler(MovementInputHandler handler);
     bool onMovementInput(uint64_t playerId, const Vector3f& input, float yaw);
     bool hasMovementInputHandler() const;
+    /// Required to accept 3D shots; resolves aim requests from server state.
     void setShotHandler(ShotHandler handler);
     bool hasShotHandler() const;
     std::optional<ShotHit> resolveShot(uint64_t shooterId, const Vector3f& direction,

@@ -49,33 +49,34 @@ CommandResult ServerImpl::room_player3d_shoot(const DefaultArgs& args)
 
     uint64_t targetId = 0;
     float damage = 0.0f;
-    if (room->hasShotHandler())
+    // A client cannot decide whom it hit or how much damage it dealt.
+    if (!room->hasShotHandler() || payload.size() != 14)
+        return CommandResult::invalid_input;
+    const auto direction = Util::vector3fFromFront(payload);
+    if (!std::isfinite(direction.x) || !std::isfinite(direction.y) ||
+        !std::isfinite(direction.z))
+        return CommandResult::invalid_input;
+
+    const auto& limits = GameplayLimits::get();
+    // Reserve the cooldown before invoking the application callback. A miss
+    // still consumes a shot; reload requests do not.
+    const auto interval = limits.shotInterval();
+    if (payload[13] == 0 && interval.count() > 0.0f &&
+        !user.acceptShot(std::chrono::steady_clock::now(), interval))
     {
-        // Authoritative rooms accept only aim requests. Legacy target/damage
-        // packets cannot bypass the server's hit and weapon checks.
-        if (payload.size() != 14)
-            return CommandResult::invalid_input;
-        const auto direction = Util::vector3fFromFront(payload);
-        if (!std::isfinite(direction.x) || !std::isfinite(direction.y) ||
-            !std::isfinite(direction.z))
-            return CommandResult::invalid_input;
-        const auto hit = room->resolveShot(user.getId(), direction, payload[12], payload[13]);
-        if (!hit)
-            return CommandResult::success;
-        targetId = hit->targetId;
-        damage = hit->damage;
+        Log::warning("Shoot: player ", user.getId(),
+                     " exceeded the shooting rate limit of ",
+                     limits.getMaxShootingRate(), " shots per second");
+        return CommandResult::invalid_input;
     }
-    else
-    {
-        if (payload.size() != 12)
-            return CommandResult::invalid_input;
-        targetId = Util::uint64FromFront(payload);
-        damage = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 8));
-    }
+    const auto hit = room->resolveShot(user.getId(), direction, payload[12], payload[13]);
+    if (!hit)
+        return CommandResult::success;
+    targetId = hit->targetId;
+    damage = hit->damage;
 
     if (targetId == user.getId() || !std::isfinite(damage) || damage <= 0.0f)
         return CommandResult::invalid_input;
-    const auto& limits = GameplayLimits::get();
     damage = limits.clampDamage(damage);
 
     bool targetFound = std::any_of(room->getClients().begin(), room->getClients().end(),
@@ -95,24 +96,6 @@ CommandResult ServerImpl::room_player3d_shoot(const DefaultArgs& args)
         return CommandResult::invalid_input;
     if (room->getPlayerHealth(user.getId()) <= 0.0f)
         return CommandResult::invalid_input;
-
-    // Shooting rate limit: a shot that arrives before the minimum
-    // interval since the last accepted shot is dropped, so the
-    // effective rate never exceeds the configured maximum.
-    auto interval = room->hasShotHandler() ? std::chrono::duration<float>::zero()
-                                           : limits.shotInterval();
-    if (interval.count() > 0.0f)
-    {
-        auto now = std::chrono::steady_clock::now();
-        if (now - user.getLastShotTime() < interval)
-        {
-            Log::warning("Shoot: player ", user.getId(),
-                         " exceeded the shooting rate limit of ",
-                         limits.getMaxShootingRate(), " shots per second");
-            return CommandResult::invalid_input;
-        }
-        user.setLastShotTime(now);
-    }
 
     // Only triggers a death when this hit actually brought the target from
     // alive to dead. Shots that land on an already-dead (not yet respawned)

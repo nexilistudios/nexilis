@@ -84,12 +84,12 @@ are disabled by default; a room that wants client-authoritative positions must
 explicitly call `setClientPositionAllowed(true)`. Other rooms retain the legacy
 movement behavior.
 
-An application room can install a shot handler. In that room,
+An application room must install a shot handler to accept shots.
 `room/player_3D/shoot` requires three floats for aim direction followed by one
 byte for weapon slot (1 primary, 2 secondary, 3 knife) and one action byte
-(0 fire, 1 reload). Legacy target ID and damage requests are rejected. The
-handler computes the hit and damage from server state; a request with no valid
-hit does not damage anyone. Other rooms retain the legacy target/damage format.
+(0 fire, 1 reload). Target ID and damage requests are rejected in every room.
+The handler computes the hit and damage from server state; a request with no
+valid hit does not damage anyone. Rooms without a handler reject shot requests.
 
 An application room can also disable client game item creation and deletion
 and install a pickup handler. Pickup requests use `room/game_item/update`
@@ -111,7 +111,9 @@ default and is configurable through `nexilis::server::ServerConfig::getGameplayL
 Positions outside their limits are clamped to the nearest allowed value (the
 clamped position is applied and broadcast), movement speeds above the maximum
 are scaled down, damage above the per-shot cap is reduced to it, and shots
-that arrive sooner than the shooting rate allows are dropped.
+that arrive sooner than the shooting rate allows are dropped. The shooting
+rate applies to fire requests before the room's shot handler runs, including
+misses. Reload requests do not consume this cooldown.
 
 `Packet::Room::Player3D::matchAction(api, action)` sends room/player_3D action byte `8` followed by exactly one byte: `0` cancels, `1` begins planting, and `2` begins defusing. The room's application-installed action handler validates the request; rooms without a handler reject it. The server's combat callback can also deny hits by participants who are outside an active round. These callbacks are optional and do not change normal rooms.
 

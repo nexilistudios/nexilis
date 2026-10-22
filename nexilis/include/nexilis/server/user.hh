@@ -117,16 +117,15 @@ public:
         return m_roomId;
     }
 
-    /// Time of the last accepted shot. Used to enforce the
-    /// shooting rate limit.
-    std::chrono::steady_clock::time_point getLastShotTime() const
+    /// Atomically check and record the last accepted shot across transports.
+    bool acceptShot(std::chrono::steady_clock::time_point now,
+                    std::chrono::duration<float> interval)
     {
-        return m_lastShotTime;
-    }
-
-    void setLastShotTime(std::chrono::steady_clock::time_point time)
-    {
-        m_lastShotTime = time;
+        std::lock_guard<std::mutex> lock(m_shotMutex);
+        if (now - m_lastShotTime < interval)
+            return false;
+        m_lastShotTime = now;
+        return true;
     }
 
     void setUsername(const std::string& username)
@@ -269,6 +268,7 @@ private:
     std::shared_ptr<ReplayWindow> m_replayWindow = std::make_shared<ReplayWindow>();
     std::string m_username;
     uint64_t m_roomId = 0;
+    mutable std::mutex m_shotMutex;
     std::chrono::steady_clock::time_point m_lastShotTime{};
 
 private:

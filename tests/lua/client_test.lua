@@ -48,7 +48,7 @@ if arg[1] == "integration" then
     assert(client:room(client:room_id()).name == "Lua test room")
     assert(#client:room_clients(client:room_id()) >= 1)
     assert(client:remote_client(client:client_id()) ~= nil)
-    assert(#client:packet("shoot", client:client_id(), 1) > 0)
+    assert(#client:packet("fire", 0, 0, -1, 1) > 0)
     local room_id = client:room_id()
     assert(client:leave_room(), "initial leave failed; room ID is " .. nexilis.id_string(client:room_id()))
     assert(client:join_room(room_id))

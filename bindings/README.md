@@ -23,3 +23,6 @@ dependencies. On Linux, add `dist/Linux/<arch>/` to the runtime library search
 path if a copied Boost library has further shared-library dependencies.
 
 To run the C# test project after the native libraries are available, use `make test-csharp`.
+
+For server-authoritative 3D shots, use `NexilisClient.Fire(x, y, z, slot)`.
+The former `Shoot(targetId, damage)` request is rejected by servers.

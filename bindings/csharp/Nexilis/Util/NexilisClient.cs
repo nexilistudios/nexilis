@@ -649,10 +649,19 @@ namespace Nexilis.Util
                 SendPacket(packet, PacketTransport.Tcp);
         }
 
+        [Obsolete("Servers reject client-selected target and damage. Use Fire instead.")]
         public void Shoot(ulong targetId, float damage)
         {
             ThrowIfNotReady();
             using (var packet = Packet.Player3DShoot(ClientApi!.ClientApiPtr, targetId, damage))
+                SendPacket(packet, PacketTransport.Tcp);
+        }
+
+        /// <summary>Sends aim direction and weapon slot for server-side hit resolution.</summary>
+        public void Fire(float x, float y, float z, byte slot)
+        {
+            ThrowIfNotReady();
+            using (var packet = Packet.Player3DFire(ClientApi!.ClientApiPtr, x, y, z, slot))
                 SendPacket(packet, PacketTransport.Tcp);
         }
 

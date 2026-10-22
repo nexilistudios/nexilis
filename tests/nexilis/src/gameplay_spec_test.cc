@@ -27,6 +27,11 @@
 #include <boost/json/serialize.hpp>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <optional>
+#include <thread>
+#include <vector>
 
 using namespace nexilis;
 
@@ -57,8 +62,8 @@ public:
     }
 };
 
-/// Room command bytes: room / player_3D / shoot / targetId / damage.
-nx_data shootBytes(uint64_t targetId, float damage)
+/// Deprecated client-selected target/damage packet, used to test rejection.
+nx_data legacyShootBytes(uint64_t targetId, float damage)
 {
     nx_data bytes{static_cast<uint8_t>(CommandType::room),
                   static_cast<uint8_t>(RoomCommandType::Root::player_3D),
@@ -378,6 +383,21 @@ protected:
 
     server::User* m_sender = nullptr;
     server::User* m_target = nullptr;
+    std::optional<server::Room::ShotHit> m_nextHit;
+
+    /// The test handler resolves a fixed aim packet to the requested server hit.
+    nx_data shootBytes(uint64_t targetId, float damage)
+    {
+        m_nextHit = server::Room::ShotHit{targetId, damage};
+        nx_data bytes{static_cast<uint8_t>(CommandType::room),
+                      static_cast<uint8_t>(RoomCommandType::Root::player_3D),
+                      static_cast<uint8_t>(RoomCommandType::PlayerType::shoot)};
+        auto direction = Util::convertToByteVector(Vector3f{0.0f, 0.0f, -1.0f});
+        bytes.insert(bytes.end(), direction.begin(), direction.end());
+        bytes.emplace_back(1); // weapon slot
+        bytes.emplace_back(0); // fire
+        return bytes;
+    }
 
     /// Put both clients in a stored room. Every member gets a no-op outbound
     /// callback so broadcasts report success.
@@ -396,6 +416,8 @@ protected:
         // Client position requests are disabled by default, so the legacy
         // position tests must opt in explicitly.
         room->setClientPositionAllowed(true);
+        room->setShotHandler([this](uint64_t, const Vector3f&, uint8_t, uint8_t)
+                             { return m_nextHit; });
     }
 
     /// Put the shooter and the target on opposing teams. The shoot command only
@@ -447,6 +469,31 @@ TEST_F(GameplaySpecTest, ShootInsufficientPayloadFails)
                   static_cast<uint8_t>(RoomCommandType::Root::player_3D),
                   static_cast<uint8_t>(RoomCommandType::PlayerType::shoot)};
     EXPECT_EQ(read(bytes, *m_sender), server::CommandResult::invalid_input);
+}
+
+TEST_F(GameplaySpecTest, ShootRequiresServerHitResolver)
+{
+    setUpRoom();
+    setUpOpposingTeams();
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->setShotHandler({});
+
+    EXPECT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(legacyShootBytes(TARGET_ID, 25.0f), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH);
+}
+
+TEST_F(GameplaySpecTest, ShootRejectsClientSelectedHitWithHandler)
+{
+    setUpRoom();
+    setUpOpposingTeams();
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+
+    EXPECT_EQ(read(legacyShootBytes(TARGET_ID, 35.0f), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH);
 }
 
 TEST_F(GameplaySpecTest, ShootRoomNotFoundFails)
@@ -723,6 +770,21 @@ TEST_F(GameplaySpecTest, ShootRateLimitDropsFastFollowUpShot)
     EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH - 25.0f);
 }
 
+TEST_F(GameplaySpecTest, ShootMissConsumesCooldown)
+{
+    setUpRoom();
+    setUpOpposingTeams();
+    command.getServerConfig().getGameplayLimits().setMaxShootingRate(1.0f);
+
+    const auto missedShot = shootBytes(TARGET_ID, 25.0f);
+    m_nextHit.reset();
+    EXPECT_EQ(read(missedShot, *m_sender), server::CommandResult::success);
+    EXPECT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_FLOAT_EQ(server::RoomStorage::getRoomById(ROOM_ID)->getPlayerHealth(TARGET_ID),
+                    DEFAULT_HEALTH);
+}
+
 TEST_F(GameplaySpecTest, ShootRateLimitAllowsShotAfterInterval)
 {
     setUpRoom();
@@ -735,6 +797,30 @@ TEST_F(GameplaySpecTest, ShootRateLimitAllowsShotAfterInterval)
 
     auto* room = server::RoomStorage::getRoomById(ROOM_ID);
     EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH - 50.0f);
+}
+
+TEST(UserShotRateLimitTest, ConcurrentShotsReserveOnlyOneInterval)
+{
+    server::User user(SENDER_ID, "127.0.0.1");
+    constexpr int shotCount = 8;
+    const auto now = std::chrono::steady_clock::now();
+    const auto interval = std::chrono::duration<float>(0.1f);
+    std::atomic<bool> start{false};
+    std::atomic<int> accepted{0};
+    std::vector<std::thread> threads;
+    for (int i = 0; i < shotCount; ++i)
+    {
+        threads.emplace_back([&]
+                             {
+                                 while (!start.load())
+                                     std::this_thread::yield();
+                                 if (user.acceptShot(now, interval))
+                                     ++accepted; });
+    }
+    start.store(true);
+    for (auto& thread : threads)
+        thread.join();
+    EXPECT_EQ(accepted.load(), 1);
 }
 
 // ---------------------------------------------------------------------------

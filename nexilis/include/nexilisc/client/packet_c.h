@@ -48,7 +48,9 @@ extern "C"
     nx_data_c nexilis_packet_room_player3D_movement(nexilis_ClientAPI* client_api, nexilis_Vector3f* movement, float deltaTime);
     nx_data_c nexilis_packet_room_player3D_movement_direct(nexilis_ClientAPI* client_api, float x, float y, float z, float deltaTime);
     nx_data_c nexilis_packet_room_player3D_set_team(nexilis_ClientAPI* client_api, const char* team);
+    /* Deprecated wire format: servers reject client-selected hits. */
     nx_data_c nexilis_packet_room_player3D_shoot(nexilis_ClientAPI* client_api, uint64_t target_id, float damage);
+    nx_data_c nexilis_packet_room_player3D_fire(nexilis_ClientAPI* client_api, float x, float y, float z, uint8_t slot);
     nx_data_c nexilis_packet_room_player3D_audio_event(nexilis_ClientAPI* client_api, uint8_t sound, float x, float y, float z);
     nx_data_c nexilis_packet_room_communicate_broadcast(nexilis_ClientAPI* client_api, const char* message);
 

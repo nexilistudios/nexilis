@@ -146,3 +146,11 @@ TEST_F(PacketTest_c, Player3DMovement)
     nexilis_nx_data_destroy(&packet);
     nexilis_vector3f_destroy(mov);
 }
+
+TEST_F(PacketTest_c, Player3DFire)
+{
+    nx_data_c packet = nexilis_packet_room_player3D_fire(client_api, 0.0f, 0.0f, -1.0f, 1);
+    EXPECT_NE(packet.data, nullptr);
+    EXPECT_EQ(nexilis_nx_data_get_size(&packet), 17u);
+    nexilis_nx_data_destroy(&packet);
+}

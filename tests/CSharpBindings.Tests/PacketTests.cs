@@ -147,5 +147,13 @@ namespace Nexilis.Tests
 
             Assert.True(packet.Size > 0);
         }
+
+        [Fact]
+        public void Player3DFire()
+        {
+            using var packet = Packet.Player3DFire(_clientApi.ClientApiPtr, 0.0f, 0.0f, -1.0f, 1);
+
+            Assert.True(packet.Size == 17);
+        }
     }
 }

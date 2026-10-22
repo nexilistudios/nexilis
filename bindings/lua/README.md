@@ -65,10 +65,14 @@ The `on_remote_client_added`, `on_remote_client_removed`, `on_remote_client_posi
 
 `client:packet(kind, ...)` returns a binary Lua string. Supported kinds are
 `client_id`, `info_general`, `info_clients`, `info_rooms`, `join`, `leave`,
-`create`, `position`, `dimension`, `movement`, `set_team`, `shoot`, `audio_event`, and
+`create`, `position`, `dimension`, `movement`, `set_team`, `fire`, `audio_event`, and
 `broadcast`. Use `client:send_packet(bytes, "tcp" | "udp")` to send custom
 packets. Convenience methods route reliable packets over TCP and position,
 movement, and audio packets over UDP.
+
+`client:fire(x, y, z, slot)` sends an aim direction and weapon slot for the
+room's server-side shot handler. The old `shoot` packet with a client-selected
+target and damage is rejected by servers.
 
 IDs are LuaJIT `uint64_t` values so the full 64 bit range survives. Pass an ID
 as that value, an exact Lua number up to 2^53 - 1, or a decimal string. Use

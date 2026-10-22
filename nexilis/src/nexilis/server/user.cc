@@ -43,7 +43,6 @@ User::User(User&& other) noexcept
       m_replayWindow(std::move(other.m_replayWindow)),
       m_username(std::move(other.m_username)),
       m_roomId(std::move(other.m_roomId)),
-      m_lastShotTime(other.m_lastShotTime),
       m_boostTCPSendToClient(std::move(other.m_boostTCPSendToClient)),
       m_boostUDPSendToClient(std::move(other.m_boostUDPSendToClient)),
       m_unixStreamSendToClient(std::move(other.m_unixStreamSendToClient)),
@@ -53,6 +52,8 @@ User::User(User&& other) noexcept
       m_hasRootAccess(other.m_hasRootAccess.load()),
       m_hasCommonAccess(other.m_hasCommonAccess.load())
 {
+    std::lock_guard<std::mutex> lock(other.m_shotMutex);
+    m_lastShotTime = other.m_lastShotTime;
 }
 
 /// Move assignment operator.
@@ -66,7 +67,10 @@ User& User::operator=(User&& other) noexcept
         m_replayWindow = std::move(other.m_replayWindow);
         m_username = std::move(other.m_username);
         m_roomId = std::move(other.m_roomId);
-        m_lastShotTime = other.m_lastShotTime;
+        {
+            std::scoped_lock lock(m_shotMutex, other.m_shotMutex);
+            m_lastShotTime = other.m_lastShotTime;
+        }
         m_boostTCPSendToClient = std::move(other.m_boostTCPSendToClient);
         m_boostUDPSendToClient = std::move(other.m_boostUDPSendToClient);
         m_unixStreamSendToClient = std::move(other.m_unixStreamSendToClient);

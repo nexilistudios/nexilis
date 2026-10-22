@@ -33,8 +33,12 @@ namespace Nexilis
         public static NxData Player3DSetTeam(IntPtr clientApi, string team) =>
             Wrap(PacketNative.nexilis_packet_room_player3D_set_team(clientApi, team), "Set team");
 
+        [Obsolete("Servers reject client-selected target and damage. Use Player3DFire instead.")]
         public static NxData Player3DShoot(IntPtr clientApi, ulong targetId, float damage) =>
             Wrap(PacketNative.nexilis_packet_room_player3D_shoot(clientApi, targetId, damage), "Shoot");
+
+        public static NxData Player3DFire(IntPtr clientApi, float x, float y, float z, byte slot) =>
+            Wrap(PacketNative.nexilis_packet_room_player3D_fire(clientApi, x, y, z, slot), "Fire");
 
         public static NxData Player3DAudioEvent(IntPtr clientApi, byte sound, float x, float y, float z) =>
             Wrap(PacketNative.nexilis_packet_room_player3D_audio_event(clientApi, sound, x, y, z), "Audio event");

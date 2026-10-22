@@ -102,6 +102,7 @@ nx_data_c nexilis_packet_room_player3D_dimension_direct(nexilis_ClientAPI *, flo
 nx_data_c nexilis_packet_room_player3D_movement_direct(nexilis_ClientAPI *, float, float, float, float);
 nx_data_c nexilis_packet_room_player3D_set_team(nexilis_ClientAPI *, const char *);
 nx_data_c nexilis_packet_room_player3D_shoot(nexilis_ClientAPI *, uint64_t, float);
+nx_data_c nexilis_packet_room_player3D_fire(nexilis_ClientAPI *, float, float, float, uint8_t);
 nx_data_c nexilis_packet_room_player3D_audio_event(nexilis_ClientAPI *, uint8_t, float, float, float);
 nx_data_c nexilis_packet_room_communicate_broadcast(nexilis_ClientAPI *, const char *);
 ]]
@@ -383,6 +384,7 @@ Client.packet_factories = {
     movement = native.nexilis_packet_room_player3D_movement_direct,
     set_team = native.nexilis_packet_room_player3D_set_team,
     shoot = function(api, target, damage) return native.nexilis_packet_room_player3D_shoot(api, id(target), damage) end,
+    fire = native.nexilis_packet_room_player3D_fire,
     audio_event = native.nexilis_packet_room_player3D_audio_event,
     broadcast = native.nexilis_packet_room_communicate_broadcast,
 }
@@ -463,6 +465,7 @@ function Client:send_dimensions(x, y, z) return self:send("dimension", "tcp", x,
 function Client:send_movement(x, y, z, dt) return self:send("movement", "udp", x, y, z, dt) end
 function Client:set_team(team) return self:send("set_team", "tcp", team) end
 function Client:shoot(target_id, damage) return self:send("shoot", "tcp", target_id, damage) end
+function Client:fire(x, y, z, slot) return self:send("fire", "tcp", x, y, z, slot) end
 function Client:send_audio_event(sound, x, y, z) return self:send("audio_event", "udp", sound, x, y, z) end
 function Client:broadcast(message) return self:send("broadcast", "tcp", message) end
 
