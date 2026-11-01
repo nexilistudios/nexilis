@@ -73,7 +73,10 @@ existing players include their current yaw.
 
 The `room/player_3D/movement` request similarly accepts its legacy three-float
 velocity plus float delta time, or one additional float yaw. Movement responses
-relay that yaw, and the legacy form uses zero.
+relay that yaw, and the legacy form uses zero. The legacy movement handler
+rejects durations outside (0, 0.25] seconds and applies each accepted move
+during command dispatch. The 2D movement request uses the same duration range
+and applies its vector as one displacement rather than streaming tick updates.
 
 An application room can disable client position requests and install a movement
 input handler. In that room, the three movement floats are input direction and

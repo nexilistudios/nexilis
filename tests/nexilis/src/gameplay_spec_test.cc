@@ -730,8 +730,6 @@ TEST_F(GameplaySpecTest, MovementClampsSpeedToLimit)
     // displacement is capped at 100 * 0.1 = 10.
     ASSERT_EQ(read(player3DMovementBytes({300.0f, 0.0f, 0.0f}, 0.1f), *m_sender),
               server::CommandResult::success);
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
     auto serverPosition = m_sender->getObject3D().getPosition();
     EXPECT_NEAR(serverPosition.x, 10.0f, 0.01f);
     EXPECT_FLOAT_EQ(serverPosition.y, 0.0f);
@@ -745,11 +743,10 @@ TEST_F(GameplaySpecTest, MovementClampsResultingPositionToLimits)
 
     m_sender->getObject3D().setPosition({90.0f, 500.0f, 0.0f});
 
-    // One second at 1000 units/s would reach x = 1090; both the
-    // speed and the resulting position are clamped.
-    ASSERT_EQ(read(player3DMovementBytes({1000.0f, 0.0f, 0.0f}, 1.0f), *m_sender),
+    // A valid 0.25-second request at 1000 units/s would reach x = 340;
+    // both the speed and resulting position are clamped.
+    ASSERT_EQ(read(player3DMovementBytes({1000.0f, 0.0f, 0.0f}, 0.25f), *m_sender),
               server::CommandResult::success);
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     auto serverPosition = m_sender->getObject3D().getPosition();
     EXPECT_NEAR(serverPosition.x, 100.0f, 0.01f);
@@ -1379,6 +1376,17 @@ TEST_F(GameplaySpecTest, Player3DMovementAppliesDisplacementAndBroadcasts)
     EXPECT_NEAR(msg.at("x").as_double(), 10.0f * 0.1f, 0.01);
 }
 
+TEST_F(GameplaySpecTest, Player3DMovementRejectsExcessiveDelta)
+{
+    setUpRoom();
+    auto targetMessages = receivedMessages(*m_target);
+
+    EXPECT_EQ(read(player3DMovementBytes({100.0f, 0.0f, 0.0f}, 1000.0f), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_FLOAT_EQ(m_sender->getObject3D().getPosition().x, 0.0f);
+    EXPECT_TRUE(targetMessages.empty());
+}
+
 TEST_F(GameplaySpecTest, Player3DMovementWithYawUpdatesServerAndBroadcasts)
 {
     setUpRoom();
@@ -1388,7 +1396,6 @@ TEST_F(GameplaySpecTest, Player3DMovementWithYawUpdatesServerAndBroadcasts)
     auto yawBytes = Util::convertToByteVector(-0.75f);
     bytes.insert(bytes.end(), yawBytes.begin(), yawBytes.end());
     ASSERT_EQ(read(bytes, *m_sender), server::CommandResult::success);
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     EXPECT_FLOAT_EQ(m_sender->getObject3D().getYaw(), -0.75f);
     ASSERT_EQ(targetMessages.size(), 1);
     EXPECT_DOUBLE_EQ(targetMessages[0].at("yaw").as_double(), -0.75);
@@ -1439,23 +1446,21 @@ TEST_F(GameplaySpecTest, Player2DDimensionUpdatesServerAndBroadcasts)
     EXPECT_DOUBLE_EQ(msg.at("y").as_double(), dimensions.y);
 }
 
-TEST_F(GameplaySpecTest, Player2DMovementStreamsPositionUpdates)
+TEST_F(GameplaySpecTest, Player2DMovementAppliesDisplacement)
 {
     setUpRoom();
     auto targetMessages = receivedMessages(*m_target);
 
-    // A 50 ms movement span produces a few tick updates at 60 Hz.
+    // The displacement is applied during dispatch.
     const Vector2f velocity(2.0f, 0.0f);
     ASSERT_EQ(read(player2DMovementBytes(velocity, 0.05f), *m_sender), server::CommandResult::success);
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
     // The final server position matches the target displacement.
     auto serverPosition = m_sender->getObject2D().getPosition();
     EXPECT_NEAR(serverPosition.x, 2.0f * 1.0f, 0.01f);
     EXPECT_FLOAT_EQ(serverPosition.y, 0.0f);
 
-    // And the streamed broadcasts carry the updated positions.
+    // The broadcast carries the updated position.
     bool foundUpdate = false;
     for (const auto& msg : targetMessages)
     {
@@ -1467,6 +1472,17 @@ TEST_F(GameplaySpecTest, Player2DMovementStreamsPositionUpdates)
         }
     }
     EXPECT_TRUE(foundUpdate);
+}
+
+TEST_F(GameplaySpecTest, Player2DMovementRejectsExcessiveDelta)
+{
+    setUpRoom();
+    auto targetMessages = receivedMessages(*m_target);
+
+    EXPECT_EQ(read(player2DMovementBytes({2.0f, 0.0f}, 1000.0f), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_FLOAT_EQ(m_sender->getObject2D().getPosition().x, 0.0f);
+    EXPECT_TRUE(targetMessages.empty());
 }
 
 TEST_F(GameplaySpecTest, CreateObject2DAddsStaticObjectAndBroadcasts)

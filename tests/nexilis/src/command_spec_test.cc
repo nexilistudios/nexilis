@@ -272,8 +272,6 @@ TEST_F(CommandSpecTest, Player3DMovementBlockedWhenOverlappingDisabled)
     float delta = 0.05f;
     ASSERT_EQ(spec.read(player3dMovementBytes(Vector3f(0.4f, 0.f, 0.f), delta)),
               server::CommandResult::success);
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
-
     auto pos = spec.user.getObject3D().getPosition();
     EXPECT_FLOAT_EQ(pos.x, 0.0f);
     EXPECT_FLOAT_EQ(pos.y, 0.0f);
@@ -285,8 +283,6 @@ TEST_F(CommandSpecTest, Player3DMovementBlockedWhenOverlappingDisabled)
 
     ASSERT_EQ(spec.read(player3dMovementBytes(Vector3f(0.4f, 0.f, 0.f), delta)),
               server::CommandResult::success);
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
-
     pos = spec.user.getObject3D().getPosition();
     EXPECT_GT(pos.x, 0.0f);
 }

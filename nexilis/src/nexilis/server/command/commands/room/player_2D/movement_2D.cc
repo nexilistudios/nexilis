@@ -17,101 +17,70 @@
 #include <nexilis/server/client_storage.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
-#include <nexilis/server/movement.hh>
 #include <nexilis/server/room_storage.hh>
+
+#include <cmath>
 
 namespace nexilis::server
 {
 
+namespace
+{
+constexpr float kMaxClientMovementDelta = 0.25f;
+}
+
 CommandResult ServerImpl::room_player2d_movement(const DefaultArgs& args)
 {
-    // Movement 2D, creates a thread that sends the new position with time of delta.
-    // In 16 thread CPU: when delta = 0.1f -> ~6 updates.
-    auto data = args.getData();
-    auto& user = args.getUser();
-    auto& protocol = args.getProtocol();
-    auto messageId = args.getMessageId();
-
+    const auto& data = args.getData();
     auto payload = Util::removeAmountOfBytesFromVector(data, 3);
-    auto vecX = Util::floatFromFront(payload);
-    auto vecY = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 4));
-    auto delta = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 8));
-    auto movementVector = Vector2f(vecX, vecY);
-    auto mtx = std::make_shared<std::mutex>();
+    if (payload.size() != 12)
+        return CommandResult::invalid_input;
 
-    // Capture start position before the thread so each tick computes
-    // startPos + linear(progress, distance) rather than accumulating
-    // eased offsets onto an already-moved position (which overshoots).
-    Vector2f startPosition = user.getObject2D().getPosition();
+    const float vecX = Util::floatFromFront(payload);
+    const float vecY = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 4));
+    const float delta = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 8));
+    if (!std::isfinite(vecX) || !std::isfinite(vecY) || !std::isfinite(delta) ||
+        delta <= 0.0f || delta > kMaxClientMovementDelta)
+        return CommandResult::invalid_input;
 
-    // clang-format off
-    std::thread([mtx, movementVector, startPosition, &user, data, &protocol, messageId, delta]()
+    auto& user = args.getUser();
+    auto* room = RoomStorage::getRoomById(user.getRoomId());
+    if (!room)
+        return CommandResult::failure;
+
+    // The 2D vector is the total displacement for the requested duration.
+    // Apply it during dispatch so no worker outlives the user or room.
+    const auto startPosition = user.getObject2D().getPosition();
+    const Vector2f newPosition(startPosition.x + vecX, startPosition.y + vecY);
+    if (!std::isfinite(newPosition.x) || !std::isfinite(newPosition.y))
+        return CommandResult::invalid_input;
+
+    const auto dimensions = user.getObject2D().getDimensions();
+    for (auto clientId : room->getClients())
     {
-        try
-        {
-            Command::runWithTickrate(60.0f, delta, [&mtx, movementVector, startPosition, &user, data, &protocol, messageId](double progress)
-            {
-                auto* clientRoom = RoomStorage::getRoomById(user.getRoomId());
-                assert(clientRoom);
+        auto* other = ClientStorage::getClientById(clientId);
+        if (!other || other->getId() == user.getId())
+            continue;
 
-                // Linear gives responsive, predictable movement for a shooter.
-                // Add to startPosition (not currentPosition) to avoid per-tick accumulation drift.
-                double deltaX = Movement::linear(progress, movementVector.x);
-                double deltaY = Movement::linear(progress, movementVector.y);
-
-                Vector2f dimensions = user.getObject2D().getDimensions();
-                auto newMovedPosition = Vector2f(startPosition.x + deltaX, startPosition.y + deltaY);
-
-                bool limitedMovement = false;
-                for (auto& c : clientRoom->getClients())
-                {
-                    User* roomClient = ClientStorage::getClientById(c);
-
-                    if (roomClient && roomClient->getId() != user.getId())
-                    {
-                        Vector2f roomClientPosition;
-                        Vector2f roomClientDimensions;
-                        {
-                            std::lock_guard<std::mutex> lock(*mtx);
-                            roomClientPosition = roomClient->getObject2D().getPosition();
-                            roomClientDimensions = roomClient->getObject2D().getDimensions();
-                        }
-
-                        // Assumed square.
-                        if (
-                                newMovedPosition.x - dimensions.x / 2 < roomClientPosition.x + roomClientDimensions.x / 2 &&
-                                newMovedPosition.x + dimensions.x / 2 > roomClientPosition.x - roomClientDimensions.x / 2 &&
-                                newMovedPosition.y - dimensions.y / 2 < roomClientPosition.y + roomClientDimensions.y / 2 &&
-                                newMovedPosition.y + dimensions.y / 2 > roomClientPosition.y - roomClientDimensions.y / 2
-                           )
-                        {
-                            Log::info("Players tried to hit each other!");
-                            limitedMovement = true;
-                            return;
-                        }
-                    }
-                }
-
-                if (!limitedMovement)
-                {
-                    std::lock_guard<std::mutex> lock(*mtx);
-                    user.getObject2D().setPosition(newMovedPosition);
-                    std::map<std::string, boost::json::value> params = {
-                        {"x", boost::json::value(newMovedPosition.x)},
-                        {"y", boost::json::value(newMovedPosition.y)},
-                    };
-                    auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, data, params, messageId);
-                    Command::sendRoomCommand(roomCommand, user, protocol);
-                }
-            });
-        }
-        catch (std::exception& e)
-        {
-            Log::error(e.what());
-        }
-    })
-    .detach();
-    return CommandResult::success;
+        const auto otherPosition = other->getObject2D().getPosition();
+        const auto otherDimensions = other->getObject2D().getDimensions();
+        const bool intersects =
+                (newPosition.x - dimensions.x / 2 < otherPosition.x + otherDimensions.x / 2) &&
+                (newPosition.x + dimensions.x / 2 > otherPosition.x - otherDimensions.x / 2) &&
+                (newPosition.y - dimensions.y / 2 < otherPosition.y + otherDimensions.y / 2) &&
+                (newPosition.y + dimensions.y / 2 > otherPosition.y - otherDimensions.y / 2);
+        if (intersects)
+            return CommandResult::success;
     }
-// clang-format on
+
+    user.getObject2D().setPosition(newPosition);
+    std::map<std::string, boost::json::value> params{
+            {"x", boost::json::value(newPosition.x)},
+            {"y", boost::json::value(newPosition.y)}};
+    auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, data, params,
+                                                  args.getMessageId());
+    Command::sendRoomCommand(roomCommand, user, args.getProtocol());
+    return CommandResult::success;
+}
+
 } // namespace nexilis::server

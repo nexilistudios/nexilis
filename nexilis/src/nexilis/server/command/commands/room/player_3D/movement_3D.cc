@@ -26,6 +26,11 @@
 namespace nexilis::server
 {
 
+namespace
+{
+constexpr float kMaxClientMovementDelta = 0.25f;
+}
+
 CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
 {
     auto& user = args.getUser();
@@ -61,6 +66,9 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
                        ? CommandResult::success
                        : CommandResult::invalid_input;
 
+    if (delta <= 0.0f || delta > kMaxClientMovementDelta)
+        return CommandResult::invalid_input;
+
     // Keep the movement speed inside the configured limit by
     // scaling the velocity down to the maximum.
     const auto& limits = GameplayLimits::get();
@@ -74,109 +82,93 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
         Log::warning("Movement speed ", speed, " clamped to ", limits.getMaxMovementSpeed());
     }
     auto movement_vector = Vector3f(vec_x, vec_y, vec_z);
-    auto mtx = std::make_shared<std::mutex>();
-
-    // clang-format off
-    std::thread([mtx, movement_vector, limits, &user, data, &protocol, messageId, delta, yaw]()
+    try
     {
-        try
+        auto* room = RoomStorage::getRoomById(user.getRoomId());
+        if (!room)
         {
-            auto* room = RoomStorage::getRoomById(user.getRoomId());
-            if (!room)
-            {
-                Log::warning("room_player3d_movement: room not found for user ", user.getRoomId());
-                return;
-            }
+            Log::warning("room_player3d_movement: room not found for user ", user.getRoomId());
+            return CommandResult::failure;
+        }
 
-            // The client sends a movement vector (velocity) together with the
-            // frame duration. Displacement for this packet is velocity * delta.
-            // Applying it exactly once (instead of via a tick-rate easing loop)
-            // guarantees the movement is applied even when delta is shorter than
-            // a single server tick.
-            if (delta <= 0.0f)
-            {
-                return;
-            }
+        // The client sends a movement vector (velocity) together with the
+        // frame duration. Displacement for this packet is velocity * delta.
+        // Applying it exactly once (instead of via a tick-rate easing loop)
+        // guarantees the movement is applied even when delta is shorter than
+        // a single server tick.
+        auto current_pos = user.getObject3D().getPosition();
+        auto new_pos = Vector3f(current_pos.x + movement_vector.x * delta,
+                                current_pos.y + movement_vector.y * delta,
+                                current_pos.z + movement_vector.z * delta);
 
-            auto current_pos = user.getObject3D().getPosition();
-            auto new_pos = Vector3f(current_pos.x + movement_vector.x * delta,
-                                    current_pos.y + movement_vector.y * delta,
-                                    current_pos.z + movement_vector.z * delta);
+        // Keep the resulting position inside the configured
+        // world limits: the horizontal coordinates and the
+        // height are clamped to the nearest allowed value.
+        Vector3f clamped_pos(limits.clampHorizontal(new_pos.x),
+                             limits.clampHeight(new_pos.y),
+                             limits.clampHorizontal(new_pos.z));
+        if (clamped_pos.x != new_pos.x || clamped_pos.y != new_pos.y ||
+            clamped_pos.z != new_pos.z)
+        {
+            Log::warning("Movement to (", new_pos.x, ", ", new_pos.y, ", ", new_pos.z,
+                         ") clamped to (", clamped_pos.x, ", ", clamped_pos.y, ", ", clamped_pos.z, ")");
+        }
 
-            // Keep the resulting position inside the configured
-            // world limits: the horizontal coordinates and the
-            // height are clamped to the nearest allowed value.
-            Vector3f clamped_pos(limits.clampHorizontal(new_pos.x),
-                                 limits.clampHeight(new_pos.y),
-                                 limits.clampHorizontal(new_pos.z));
-            if (clamped_pos.x != new_pos.x || clamped_pos.y != new_pos.y ||
-                clamped_pos.z != new_pos.z)
+        // Overlap validation: when the room forbids clients from sharing
+        // positions, drop this move if the new position would intersect
+        // another client. The position is not applied nor broadcast.
+        if (!room->isOverlappingAllowed())
+        {
+            auto dimensions = user.getObject3D().getDimensions();
+            for (auto clientId : room->getClients())
             {
-                Log::warning("Movement to (", new_pos.x, ", ", new_pos.y, ", ", new_pos.z,
-                             ") clamped to (", clamped_pos.x, ", ", clamped_pos.y, ", ", clamped_pos.z, ")");
-            }
-
-            // Overlap validation: when the room forbids clients from sharing
-            // positions, drop this move if the new position would intersect
-            // another client. The position is not applied nor broadcast.
-            if (!room->isOverlappingAllowed())
-            {
-                auto dimensions = user.getObject3D().getDimensions();
-                for (auto clientId : room->getClients())
+                if (clientId == user.getId())
                 {
-                    if (clientId == user.getId())
-                    {
-                        continue;
-                    }
-                    auto* other = ClientStorage::getClientById(clientId);
-                    if (!other || other->getRoomId() != room->getId())
-                    {
-                        continue;
-                    }
-                    auto other_pos = other->getObject3D().getPosition();
-                    auto other_dimensions = other->getObject3D().getDimensions();
+                    continue;
+                }
+                auto* other = ClientStorage::getClientById(clientId);
+                if (!other || other->getRoomId() != room->getId())
+                {
+                    continue;
+                }
+                auto other_pos = other->getObject3D().getPosition();
+                auto other_dimensions = other->getObject3D().getDimensions();
 
-                    bool intersects =
-                            new_pos.x - dimensions.x / 2 < other_pos.x + other_dimensions.x / 2 &&
-                            new_pos.x + dimensions.x / 2 > other_pos.x - other_dimensions.x / 2 &&
-                            new_pos.y - dimensions.y / 2 < other_pos.y + other_dimensions.y / 2 &&
-                            new_pos.y + dimensions.y / 2 > other_pos.y - other_dimensions.y / 2 &&
-                            new_pos.z - dimensions.z / 2 < other_pos.z + other_dimensions.z / 2 &&
-                            new_pos.z + dimensions.z / 2 > other_pos.z - other_dimensions.z / 2;
-                    if (intersects)
-                    {
-                        return;
-                    }
+                bool intersects =
+                        new_pos.x - dimensions.x / 2 < other_pos.x + other_dimensions.x / 2 &&
+                        new_pos.x + dimensions.x / 2 > other_pos.x - other_dimensions.x / 2 &&
+                        new_pos.y - dimensions.y / 2 < other_pos.y + other_dimensions.y / 2 &&
+                        new_pos.y + dimensions.y / 2 > other_pos.y - other_dimensions.y / 2 &&
+                        new_pos.z - dimensions.z / 2 < other_pos.z + other_dimensions.z / 2 &&
+                        new_pos.z + dimensions.z / 2 > other_pos.z - other_dimensions.z / 2;
+                if (intersects)
+                {
+                    return CommandResult::success;
                 }
             }
+        }
 
-            {
-                std::lock_guard<std::mutex> lock(*mtx);
-                user.getObject3D().setPosition(clamped_pos);
-                user.getObject3D().setYaw(yaw);
-                std::map<std::string, boost::json::value> params
-                {
-                    {"x", boost::json::value(clamped_pos.x)},
-                    {"y", boost::json::value(clamped_pos.y)},
-                    {"z", boost::json::value(clamped_pos.z)},
-                    {"yaw", boost::json::value(yaw)},
-                };
-                auto room_command = Command::createRoomCommand(user.getRoomId(), user, data, params, messageId);
-                Command::sendRoomCommand(room_command, user, protocol);
-            }
-        }
-        catch (const std::exception& e)
-        {
-            Log::error("Error with 3D movement thread: ", e.what());
-        }
-        catch (...)
-        {
-            Log::error("Other error with 3D movement thread");
-        }
-    })
-    .detach();
-    // clang-format on
-    return CommandResult::success;
+        user.getObject3D().setPosition(clamped_pos);
+        user.getObject3D().setYaw(yaw);
+        std::map<std::string, boost::json::value> params{
+                {"x", boost::json::value(clamped_pos.x)},
+                {"y", boost::json::value(clamped_pos.y)},
+                {"z", boost::json::value(clamped_pos.z)},
+                {"yaw", boost::json::value(yaw)},
+        };
+        auto room_command = Command::createRoomCommand(user.getRoomId(), user, data, params, messageId);
+        Command::sendRoomCommand(room_command, user, protocol);
+        return CommandResult::success;
+    }
+    catch (const std::exception& e)
+    {
+        Log::error("Error with 3D movement: ", e.what());
+    }
+    catch (...)
+    {
+        Log::error("Other error with 3D movement");
+    }
+    return CommandResult::failure;
 }
 
 } // namespace nexilis::server
