@@ -46,7 +46,7 @@ def run_flake8(nexilis_root: str) -> bool:
     # Run from the scripts directory so that flake8 picks up the .flake8
     # config file and reports paths relative to it.
     result = subprocess.run(
-        ["flake8", "."],
+        ["flake8", "--jobs=1", "."],
         cwd=scripts_dir,
         capture_output=True,
         text=True,
@@ -55,6 +55,8 @@ def run_flake8(nexilis_root: str) -> bool:
     output = result.stdout.strip()
     if output:
         print(output)
+    if result.stderr.strip():
+        print(result.stderr.strip(), file=sys.stderr)
 
     return result.returncode == 0
 

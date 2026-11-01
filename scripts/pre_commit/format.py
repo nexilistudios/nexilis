@@ -34,11 +34,11 @@ def get_clang_format() -> Optional[str]:
             [executable, "--version"], capture_output=True, text=True
         )
         if result.returncode == 0 and re.search(
-            r"\bversion 23\.1\.1\b", result.stdout
+            r"\bversion 23\.1\.\d+\b", result.stdout
         ):
             return executable
 
-    print("Clang-format 23.1.1 is required (install clang-format==23.1.1).")
+    print("Clang-format 23.1.x is required (install clang-format==23.1.1).")
     return None
 
 
