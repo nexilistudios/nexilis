@@ -94,6 +94,11 @@ byte for weapon slot (1 primary, 2 secondary, 3 knife) and one action byte
 The handler computes the hit and damage from server state; a request with no
 valid hit does not damage anyone. Rooms without a handler reject shot requests.
 
+Client team selection requests are rejected by default. An application must install
+`Room::setTeamSelectionHandler` to allow them; the handler can reject a player based
+on match state. The server accepts only the `Terrorist` and `Counter Terrorist`
+team names from clients. An application can set teams directly on the server.
+
 An application room can also disable client game item creation and deletion
 and install a pickup handler. Pickup requests use `room/game_item/update`
 with an eight-byte item ID and the remaining string `picked_up`. The handler

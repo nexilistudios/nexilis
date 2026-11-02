@@ -152,6 +152,8 @@ public:
     bool onPlayerAction(uint64_t playerId, uint8_t action);
     void setCombatHandler(CombatHandler handler);
     bool canDamage(uint64_t shooterId, uint64_t targetId) const;
+    /// Client team requests are rejected until an application handler allows them.
+    /// The handler may veto changes based on the player's match state.
     void setTeamSelectionHandler(TeamSelectionHandler handler);
     bool canSelectTeam(uint64_t playerId) const;
     /// Allow or disallow direct client position requests

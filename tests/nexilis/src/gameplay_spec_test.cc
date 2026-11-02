@@ -845,6 +845,8 @@ TEST_F(GameplaySpecTest, SetTeamValidatesTeamValueAndStoresIt)
 {
     setUpRoom();
     auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->setTeamSelectionHandler([](uint64_t)
+                                  { return true; });
 
     ASSERT_EQ(read(setTeamBytes("Terrorist"), *m_sender), server::CommandResult::success);
     EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "Terrorist");
@@ -853,9 +855,34 @@ TEST_F(GameplaySpecTest, SetTeamValidatesTeamValueAndStoresIt)
     EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "Counter Terrorist");
 }
 
+TEST_F(GameplaySpecTest, SetTeamRequiresApplicationApproval)
+{
+    setUpRoom();
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+
+    EXPECT_EQ(read(setTeamBytes("Terrorist"), *m_sender), server::CommandResult::invalid_input);
+    EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "");
+
+    room->setTeamSelectionHandler([](uint64_t)
+                                  { return false; });
+    EXPECT_EQ(read(setTeamBytes("Terrorist"), *m_sender), server::CommandResult::invalid_input);
+    EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "");
+
+    room->setTeamSelectionHandler([](uint64_t playerId)
+                                  { return playerId == SENDER_ID; });
+    EXPECT_EQ(read(setTeamBytes("Terrorist"), *m_sender), server::CommandResult::success);
+    EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "Terrorist");
+    EXPECT_EQ(read(setTeamBytes("Counter Terrorist"), *m_target),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(room->getPlayerTeam(TARGET_ID), "");
+}
+
 TEST_F(GameplaySpecTest, SetTeamAnnouncesLeaderboardToRoomAndSeedsJoiner)
 {
     setUpRoom();
+    server::RoomStorage::getRoomById(ROOM_ID)->setTeamSelectionHandler(
+            [](uint64_t)
+            { return true; });
     m_sender->setUsername("shooters");
 
     auto senderMessages = receivedMessages(*m_sender);

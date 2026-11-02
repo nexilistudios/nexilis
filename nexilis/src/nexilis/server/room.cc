@@ -234,7 +234,7 @@ void Room::setTeamSelectionHandler(TeamSelectionHandler handler)
 }
 bool Room::canSelectTeam(uint64_t playerId) const
 {
-    return !m_teamSelectionHandler || m_teamSelectionHandler(playerId);
+    return m_teamSelectionHandler && m_teamSelectionHandler(playerId);
 }
 void Room::setClientPositionAllowed(bool allowed)
 {
