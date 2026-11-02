@@ -12,7 +12,8 @@ Each run:
    unchanged. Both `VERSION.txt` and Doxygen's `PROJECT_NUMBER` are updated.
 3. Builds Doxygen HTML with Graphviz from the versioned release source.
 4. Syncs the generated HTML into `docs/` in the `nexilistudios.github.io`
-   repository. The website build copies that directory to `dist/docs/`.
+   repository while preserving its existing CSS files. The website build copies
+   that directory to `dist/docs/` without changing the CSS.
 5. Pushes the version commit to `main` and its `vX.Y.Z-status` tag atomically.
 6. Creates a GitHub release with generated release notes. Versions ending in
    `-unstable` are marked as prereleases. GitHub provides source archives;

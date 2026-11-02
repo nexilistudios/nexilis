@@ -11,7 +11,7 @@ minutes, then wire the library into your own project. The current version is in
 - Git, with the Boost submodule initialized for local builds
 
 ```sh
-git clone --recurse-submodules https://github.com/NexilisLib/nexilis.git
+git clone --recurse-submodules https://github.com/nexilistudios/nexilis.git
 cd nexilis
 ```
 

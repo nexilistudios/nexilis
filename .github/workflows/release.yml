@@ -90,10 +90,9 @@ jobs:
 
           git clone --depth 1 "$remote" site
 
-          # Keep the website root intact and replace only its Doxygen directory.
+          # Keep the website root and its existing documentation styles intact.
           mkdir -p site/docs
-          rsync -a --delete nexilis/docs/html/ site/docs/
-          node site/scripts/apply-docs-theme.mjs site/docs
+          rsync -a --delete --exclude='*.css' nexilis/docs/html/ site/docs/
           test -s site/docs/index.html
 
           cd site

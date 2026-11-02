@@ -7,7 +7,7 @@ Nexilis is a C++20 client and server library for multiplayer applications. It pr
 Prerequisites: CMake 3.25 or newer, a C++20 compiler, OpenSSL development headers and libraries (1.1.1 or newer), and Git. A local build uses individually pinned Boost module submodules; clone with submodules or initialize them before configuring. The project is currently tested primarily on Linux.
 
 ```sh
-git clone --recurse-submodules https://github.com/NexilisLib/nexilis.git
+git clone --recurse-submodules https://github.com/nexilistudios/nexilis.git
 cd nexilis
 cmake -S examples/skip_auth -B examples/skip_auth/build
 cmake --build examples/skip_auth/build
