@@ -133,6 +133,8 @@ default and is configurable through `nexilis::server::ServerConfig::getGameplayL
 - Maximum horizontal position (absolute X and Z coordinate): 10000
 - Maximum movement speed (units per second): 100
 - Maximum shooting rate (shots per second): 10; a non-positive value disables the limit
+- Maximum broadcast message length (bytes): 1024
+- Maximum broadcast rate (messages per second): 5; a non-positive value disables the limit
 - Maximum damage per shot: 35
 - Minimum and maximum height (Y coordinate): 0 and 1000
 
@@ -142,6 +144,15 @@ are scaled down, damage above the per-shot cap is reduced to it, and shots
 that arrive sooner than the shooting rate allows are dropped. The shooting
 rate applies to fire requests before the room's shot handler runs, including
 misses. Reload requests do not consume this cooldown.
+
+`room/communication/broadcast` messages longer than the configured limit, or
+arriving faster than the configured broadcast rate, are rejected as invalid
+input before they are stored or relayed. The per-client rate limit applies to
+the encrypted broadcast form as well, since both forms use the same handler.
+Each room retains at most the 100 most recent broadcasts and replays only those
+to joining clients; this history bound is currently fixed in
+`nexilis_constants.hh`. Broadcasts still reach every member of the room,
+including the sender, and the server does not moderate their contents.
 
 `Packet::Room::Player3D::matchAction(api, action)` sends room/player_3D action byte `8` followed by exactly one byte: `0` cancels, `1` begins planting, and `2` begins defusing. The room's application-installed action handler validates the request; rooms without a handler reject it. The server's combat callback can also deny hits by participants who are outside an active round. These callbacks are optional and do not change normal rooms.
 

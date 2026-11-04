@@ -54,6 +54,8 @@ User::User(User&& other) noexcept
 {
     std::lock_guard<std::mutex> lock(other.m_shotMutex);
     m_lastShotTime = other.m_lastShotTime;
+    std::lock_guard<std::mutex> broadcastLock(other.m_broadcastMutex);
+    m_lastBroadcastTime = other.m_lastBroadcastTime;
 }
 
 /// Move assignment operator.
@@ -70,6 +72,10 @@ User& User::operator=(User&& other) noexcept
         {
             std::scoped_lock lock(m_shotMutex, other.m_shotMutex);
             m_lastShotTime = other.m_lastShotTime;
+        }
+        {
+            std::scoped_lock lock(m_broadcastMutex, other.m_broadcastMutex);
+            m_lastBroadcastTime = other.m_lastBroadcastTime;
         }
         m_boostTCPSendToClient = std::move(other.m_boostTCPSendToClient);
         m_boostUDPSendToClient = std::move(other.m_boostUDPSendToClient);

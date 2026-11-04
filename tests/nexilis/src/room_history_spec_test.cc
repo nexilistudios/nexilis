@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <nexilis/json.hh>
+#include <nexilis/nexilis_constants.hh>
 #include <nexilis/room_command_type.hh>
 #include <nexilis/server/client_storage.hh>
 #include <nexilis/server/command/command.hh>
@@ -28,8 +29,10 @@
 #include <boost/json/parse.hpp>
 #include <boost/json/serialize.hpp>
 
+#include <chrono>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace nexilis;
@@ -199,6 +202,116 @@ TEST_F(RoomHistorySpecTest, JoinHistoryKeepsOriginalSender)
             EXPECT_EQ(Util::toUint64(msg.at("room_id")), ROOM_ID);
         }
     }
+}
+
+TEST_F(RoomHistorySpecTest, BroadcastRejectsOverlongMessage)
+{
+    room()->joinRoom(SENDER_ID);
+    user(SENDER_ID)->setRoomId(ROOM_ID);
+    command.getServerConfig().getGameplayLimits().setMaxBroadcastLength(8);
+
+    EXPECT_EQ(command.read(broadcastBytes("123456789"), *user(SENDER_ID), protocol, 1),
+              server::CommandResult::invalid_input);
+    EXPECT_TRUE(room()->getBroadcasts().empty());
+
+    // A message at the configured limit is still accepted.
+    ASSERT_EQ(command.read(broadcastBytes("12345678"), *user(SENDER_ID), protocol, 2),
+              server::CommandResult::success);
+    ASSERT_EQ(room()->getBroadcasts().size(), 1);
+    EXPECT_EQ(room()->getBroadcasts().front().message, "12345678");
+}
+
+TEST_F(RoomHistorySpecTest, BroadcastRateLimitDropsFastFollowUp)
+{
+    room()->joinRoom(SENDER_ID);
+    user(SENDER_ID)->setRoomId(ROOM_ID);
+    command.getServerConfig().getGameplayLimits().setMaxBroadcastRate(1.0f);
+
+    ASSERT_EQ(command.read(broadcastBytes("first"), *user(SENDER_ID), protocol, 1),
+              server::CommandResult::success);
+    EXPECT_EQ(command.read(broadcastBytes("second"), *user(SENDER_ID), protocol, 2),
+              server::CommandResult::invalid_input);
+
+    const auto broadcasts = room()->getBroadcasts();
+    ASSERT_EQ(broadcasts.size(), 1);
+    EXPECT_EQ(broadcasts.front().message, "first");
+}
+
+TEST_F(RoomHistorySpecTest, BroadcastRateLimitIsPerClient)
+{
+    room()->joinRoom(SENDER_ID);
+    room()->joinRoom(JOINER_ID);
+    user(SENDER_ID)->setRoomId(ROOM_ID);
+    user(JOINER_ID)->setRoomId(ROOM_ID);
+    command.getServerConfig().getGameplayLimits().setMaxBroadcastRate(1.0f);
+
+    ASSERT_EQ(command.read(broadcastBytes("sender"), *user(SENDER_ID), protocol, 1),
+              server::CommandResult::success);
+    ASSERT_EQ(command.read(broadcastBytes("joiner"), *user(JOINER_ID), protocol, 1),
+              server::CommandResult::success);
+    EXPECT_EQ(command.read(broadcastBytes("sender again"), *user(SENDER_ID), protocol, 2),
+              server::CommandResult::invalid_input);
+
+    const auto broadcasts = room()->getBroadcasts();
+    ASSERT_EQ(broadcasts.size(), 2);
+    EXPECT_EQ(broadcasts.front().message, "sender");
+    EXPECT_EQ(broadcasts.back().message, "joiner");
+}
+
+TEST_F(RoomHistorySpecTest, BroadcastRateLimitAllowsMessageAfterInterval)
+{
+    room()->joinRoom(SENDER_ID);
+    user(SENDER_ID)->setRoomId(ROOM_ID);
+    command.getServerConfig().getGameplayLimits().setMaxBroadcastRate(10.0f);
+
+    ASSERT_EQ(command.read(broadcastBytes("first"), *user(SENDER_ID), protocol, 1),
+              server::CommandResult::success);
+    std::this_thread::sleep_for(std::chrono::milliseconds(110));
+    ASSERT_EQ(command.read(broadcastBytes("second"), *user(SENDER_ID), protocol, 2),
+              server::CommandResult::success);
+
+    const auto broadcasts = room()->getBroadcasts();
+    ASSERT_EQ(broadcasts.size(), 2);
+    EXPECT_EQ(broadcasts.front().message, "first");
+    EXPECT_EQ(broadcasts.back().message, "second");
+}
+
+TEST_F(RoomHistorySpecTest, BroadcastHistoryIsBounded)
+{
+    const uint64_t total = NEXILIS_MAX_BROADCAST_HISTORY + 5;
+    for (uint64_t i = 0; i < total; ++i)
+        room()->addBroadcast(SENDER_ID, std::to_string(i));
+
+    const auto broadcasts = room()->getBroadcasts();
+    ASSERT_EQ(broadcasts.size(), NEXILIS_MAX_BROADCAST_HISTORY);
+    EXPECT_EQ(broadcasts.front().message, std::to_string(total - NEXILIS_MAX_BROADCAST_HISTORY));
+    EXPECT_EQ(broadcasts.back().message, std::to_string(total - 1));
+}
+
+TEST_F(RoomHistorySpecTest, JoinReplaysOnlyBoundedHistory)
+{
+    const uint64_t total = NEXILIS_MAX_BROADCAST_HISTORY + 5;
+    for (uint64_t i = 0; i < total; ++i)
+        room()->addBroadcast(SENDER_ID, std::to_string(i));
+
+    auto messages = receivedMessages(JOINER_ID);
+    ASSERT_EQ(command.read(joinBytes(), *user(JOINER_ID), protocol, 1),
+              server::CommandResult::success);
+
+    std::vector<std::string> broadcastPayloads;
+    for (const auto& msg : messages)
+    {
+        if (msg.contains("type") && msg.at("type").as_string() == "communication" &&
+            msg.contains("action") && msg.at("action").as_string() == "broadcast")
+        {
+            broadcastPayloads.emplace_back(msg.at("message").as_string().c_str());
+        }
+    }
+
+    ASSERT_EQ(broadcastPayloads.size(), NEXILIS_MAX_BROADCAST_HISTORY);
+    EXPECT_EQ(broadcastPayloads.front(),
+              std::to_string(total - NEXILIS_MAX_BROADCAST_HISTORY));
+    EXPECT_EQ(broadcastPayloads.back(), std::to_string(total - 1));
 }
 
 } // namespace

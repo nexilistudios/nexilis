@@ -128,6 +128,17 @@ public:
         return true;
     }
 
+    /// Atomically check and record the last accepted broadcast across transports.
+    bool acceptBroadcast(std::chrono::steady_clock::time_point now,
+                         std::chrono::duration<float> interval)
+    {
+        std::lock_guard<std::mutex> lock(m_broadcastMutex);
+        if (now - m_lastBroadcastTime < interval)
+            return false;
+        m_lastBroadcastTime = now;
+        return true;
+    }
+
     void setUsername(const std::string& username)
     {
         BaseClient::setBaseUsername(username);
@@ -270,6 +281,8 @@ private:
     uint64_t m_roomId = 0;
     mutable std::mutex m_shotMutex;
     std::chrono::steady_clock::time_point m_lastShotTime{};
+    mutable std::mutex m_broadcastMutex;
+    std::chrono::steady_clock::time_point m_lastBroadcastTime{};
 
 private:
     std::function<void(nx_data)> m_boostTCPSendToClient = nullptr;

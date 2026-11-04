@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 
 namespace nexilis::server
 {
@@ -30,7 +31,8 @@ namespace nexilis::server
 /// has a default and is configurable through the server's ServerConfig.
 /// Values outside their limits are clamped to the nearest allowed
 /// value; shots that arrive faster than the shooting rate allow are
-/// dropped.
+/// dropped. Broadcasts that exceed the message length or broadcast
+/// rate limits are rejected.
 class GameplayLimits
 {
 public:
@@ -63,6 +65,27 @@ public:
     float getMaxShootingRate() const
     {
         return m_maxShootingRate;
+    }
+
+    /// Maximum length of a room broadcast message in bytes.
+    void setMaxBroadcastLength(std::size_t maxBroadcastLength)
+    {
+        m_maxBroadcastLength = maxBroadcastLength;
+    }
+    std::size_t getMaxBroadcastLength() const
+    {
+        return m_maxBroadcastLength;
+    }
+
+    /// Maximum broadcast rate in messages per second. A non-positive value
+    /// disables the rate limit.
+    void setMaxBroadcastRate(float maxBroadcastRate)
+    {
+        m_maxBroadcastRate = maxBroadcastRate;
+    }
+    float getMaxBroadcastRate() const
+    {
+        return m_maxBroadcastRate;
     }
 
     /// Maximum damage a single shot may deal.
@@ -158,6 +181,17 @@ public:
         return std::chrono::duration<float>(1.0f / m_maxShootingRate);
     }
 
+    /// Minimum interval between two accepted broadcasts. Zero when the
+    /// broadcast rate limit is disabled.
+    std::chrono::duration<float> broadcastInterval() const
+    {
+        if (m_maxBroadcastRate <= 0.0f)
+        {
+            return std::chrono::duration<float>::zero();
+        }
+        return std::chrono::duration<float>(1.0f / m_maxBroadcastRate);
+    }
+
     /// Whether the limits the static command handlers enforce have been
     /// bound to a live configuration.
     static bool isInitialized()
@@ -186,6 +220,8 @@ private:
     float m_maxHorizontalPosition = NEXILIS_MAX_POSITION;
     float m_maxMovementSpeed = 100.0f;
     float m_maxShootingRate = 10.0f;
+    std::size_t m_maxBroadcastLength = NEXILIS_MAX_BROADCAST_LENGTH;
+    float m_maxBroadcastRate = NEXILIS_DEFAULT_MAX_BROADCAST_RATE;
     float m_maxDamagePerShot = 35.0f;
     float m_minHeight = 0.0f;
     float m_maxHeight = 1000.0f;

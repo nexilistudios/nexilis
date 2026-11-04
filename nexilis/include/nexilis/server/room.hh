@@ -24,10 +24,12 @@
 #include <nexilis/server/user.hh>
 
 #include <atomic>
+#include <deque>
 #include <functional>
 #include <mutex>
 #include <optional>
 #include <unordered_map>
+#include <vector>
 
 namespace nexilis::server
 {
@@ -104,16 +106,14 @@ public:
         return m_clientIds;
     }
 
-    /// Store a broadcast message in the room.
+    /// Store a broadcast message in the room. Only the most recent
+    /// NEXILIS_MAX_BROADCAST_HISTORY messages are retained.
     /// \param clientId The id of the user that sent the message.
     /// \param message The payload of the message.
     void addBroadcast(uint64_t clientId, const std::string& message);
 
-    /// Get all broadcast messages that have been sent in the room.
-    const std::vector<Broadcast>& getBroadcasts() const
-    {
-        return m_broadcasts;
-    }
+    /// Get a snapshot of the broadcast messages retained in the room.
+    std::vector<Broadcast> getBroadcasts() const;
 
     /// Get the health of a player. Returns default health if not yet tracked.
     float getPlayerHealth(uint64_t clientId) const;
@@ -209,7 +209,8 @@ public:
 
 private:
     std::vector<uint64_t> m_clientIds;
-    std::vector<Broadcast> m_broadcasts;
+    mutable std::mutex m_broadcastMutex;
+    std::deque<Broadcast> m_broadcasts;
     std::unordered_map<uint64_t, float> m_playerHealth;
     std::unordered_map<uint64_t, uint64_t> m_playerKills;
     std::unordered_map<uint64_t, uint64_t> m_playerDeaths;

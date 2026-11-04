@@ -15,6 +15,7 @@
    along with this file.  If not, see <https://gnu.org>. */
 
 #include <nexilis/logger/log.hh>
+#include <nexilis/nexilis_constants.hh>
 #include <nexilis/server/client_storage.hh>
 #include <nexilis/server/room.hh>
 #include <nexilis/util.hh>
@@ -117,7 +118,16 @@ void Room::leaveRoom(uint64_t userId)
 
 void Room::addBroadcast(uint64_t clientId, const std::string& message)
 {
+    std::lock_guard<std::mutex> lock(m_broadcastMutex);
+    if (m_broadcasts.size() >= NEXILIS_MAX_BROADCAST_HISTORY)
+        m_broadcasts.pop_front();
     m_broadcasts.emplace_back(Broadcast{clientId, message});
+}
+
+std::vector<Room::Broadcast> Room::getBroadcasts() const
+{
+    std::lock_guard<std::mutex> lock(m_broadcastMutex);
+    return std::vector<Broadcast>(m_broadcasts.begin(), m_broadcasts.end());
 }
 
 float Room::getPlayerHealth(uint64_t clientId) const

@@ -16,7 +16,10 @@
 
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
+#include <nexilis/server/gameplay_limits.hh>
 #include <nexilis/server/room_storage.hh>
+
+#include <chrono>
 
 namespace nexilis::server
 {
@@ -24,8 +27,18 @@ namespace nexilis::server
 CommandResult ServerImpl::room_communicate_broadcast(const DefaultArgs& args)
 {
     auto& user = args.getUser();
-    auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 3);
-    auto messageData = Util::convertToString(payload);
+    const auto& limits = GameplayLimits::get();
+    if (args.getData().size() < 3 ||
+        args.getData().size() - 3 > limits.getMaxBroadcastLength())
+    {
+        Log::warning("Broadcast: player ", user.getId(),
+                     " sent a message longer than the ",
+                     limits.getMaxBroadcastLength(), " byte limit");
+        return CommandResult::invalid_input;
+    }
+
+    auto messageData = Util::convertToString(
+            Util::removeAmountOfBytesFromVector(args.getData(), 3));
 
     if (user.getRoomId() == 0)
     {
@@ -39,6 +52,17 @@ CommandResult ServerImpl::room_communicate_broadcast(const DefaultArgs& args)
         Log::error("Cannot find room for broadcast!");
         return CommandResult::error;
     }
+
+    const auto interval = limits.broadcastInterval();
+    if (interval.count() > 0.0f &&
+        !user.acceptBroadcast(std::chrono::steady_clock::now(), interval))
+    {
+        Log::warning("Broadcast: player ", user.getId(),
+                     " exceeded the broadcast rate limit of ",
+                     limits.getMaxBroadcastRate(), " messages per second");
+        return CommandResult::invalid_input;
+    }
+
     room->addBroadcast(user.getId(), messageData);
 
     std::map<std::string, boost::json::value> params{
