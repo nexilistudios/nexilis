@@ -19,6 +19,7 @@
 
 #include <nexilis/auth_config.hh>
 #include <nexilis/server/gameplay_limits.hh>
+#include <nexilis/server/room_limits.hh>
 
 #include <cassert>
 #include <string>
@@ -77,6 +78,16 @@ public:
         return m_gameplayLimits;
     }
 
+    /// Limits enforced on client-requested room creation.
+    RoomLimits& getRoomLimits()
+    {
+        return m_roomLimits;
+    }
+    const RoomLimits& getRoomLimits() const
+    {
+        return m_roomLimits;
+    }
+
     /// Whether TCP connections are encrypted with TLS-PSK.
     /// \note The pre-shared key is derived from the passphrase, so a client
     ///       only connects when it knows the same passphrase. On by default
@@ -96,6 +107,7 @@ private:
     float m_tickrate = 60.f;
     bool m_tls = true;
     GameplayLimits m_gameplayLimits;
+    RoomLimits m_roomLimits;
 };
 
 } // namespace nexilis::server

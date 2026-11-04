@@ -60,6 +60,11 @@ protected:
 
     void SetUp() override
     {
+        // Room creation acknowledges the action by sending a message back to
+        // the client; give the test user a no-op send callback so the dispatch
+        // does not fail with failed_room_send.
+        spec.user.setBoostTCPSend([](const nx_data&) {});
+
         auto userPtr = std::make_unique<server::User>(spec.user.getId(), spec.user.getIPAddress());
         server::ClientStorage::add(std::move(userPtr));
     }
@@ -178,10 +183,34 @@ namespace
 {
 constexpr uint64_t OVERLAP_ROOM_ID = 4242;
 
-server::Room makeOverlapRoom()
+server::Room makeOverlapRoom(uint64_t creatorId = 1)
 {
-    RoomData roomData(1, "overlap_room", OVERLAP_ROOM_ID, RoomData::Context::_3D);
+    RoomData roomData(creatorId, "overlap_room", OVERLAP_ROOM_ID, RoomData::Context::_3D);
     return server::Room(roomData);
+}
+
+/// Room create bytes: room, management, create, context, max size, name.
+nx_data roomCreateBytes(const std::string& name)
+{
+    nx_data bytes = {static_cast<uint8_t>(CommandType::room),
+                     static_cast<uint8_t>(RoomCommandType::Root::management),
+                     static_cast<uint8_t>(RoomCommandType::Management::create),
+                     0};
+    auto maxSize = Util::convertToByteVector(static_cast<uint16_t>(30));
+    bytes.insert(bytes.end(), maxSize.begin(), maxSize.end());
+    bytes.insert(bytes.end(), name.begin(), name.end());
+    return bytes;
+}
+
+/// Room remove bytes: room, management, remove, room id.
+nx_data roomRemoveBytes(uint64_t roomId)
+{
+    nx_data bytes = {static_cast<uint8_t>(CommandType::room),
+                     static_cast<uint8_t>(RoomCommandType::Root::management),
+                     static_cast<uint8_t>(RoomCommandType::Management::remove)};
+    auto idBytes = Util::convertToByteVector(roomId);
+    bytes.insert(bytes.end(), idBytes.begin(), idBytes.end());
+    return bytes;
 }
 
 /// Movement command bytes: room, player_3D, movement, Vector3f, delta.
@@ -204,13 +233,16 @@ TEST_F(CommandSpecTest, RoomOverlapAllowedByDefaultAndSurvivesMove)
     EXPECT_TRUE(room.isOverlappingAllowed());
 
     room.setOverlappingAllowed(false);
+    room.setClientRoomRemovalAllowed(true);
     server::Room movedRoom(std::move(room));
     EXPECT_FALSE(movedRoom.isOverlappingAllowed());
+    EXPECT_TRUE(movedRoom.isClientRoomRemovalAllowed());
 
     movedRoom.setOverlappingAllowed(true);
     server::Room assignedRoom(makeOverlapRoom());
     assignedRoom = std::move(movedRoom);
     EXPECT_TRUE(assignedRoom.isOverlappingAllowed());
+    EXPECT_TRUE(assignedRoom.isClientRoomRemovalAllowed());
 }
 
 TEST_F(CommandSpecTest, SetOverlapRequiresRoomMembership)
@@ -233,6 +265,78 @@ TEST_F(CommandSpecTest, SetOverlapUpdatesRoomViaRawBytes)
     nx_data disallow = {0x02, 0x00, 0x04, 0x00};
     EXPECT_EQ(spec.read(disallow), server::CommandResult::success);
     EXPECT_FALSE(server::RoomStorage::getRoomById(OVERLAP_ROOM_ID)->isOverlappingAllowed());
+}
+
+TEST_F(CommandSpecTest, SetOverlapRejectsNonCreator)
+{
+    auto room = makeOverlapRoom(2);
+    room.joinRoom(spec.user.getId());
+    server::RoomStorage::add(std::move(room));
+    spec.user.setRoomId(OVERLAP_ROOM_ID);
+
+    nx_data disallow = {0x02, 0x00, 0x04, 0x00};
+    EXPECT_EQ(spec.read(disallow), server::CommandResult::unauthorized);
+    EXPECT_TRUE(server::RoomStorage::getRoomById(OVERLAP_ROOM_ID)->isOverlappingAllowed());
+}
+
+TEST_F(CommandSpecTest, RoomRemovalIsDisabledByDefault)
+{
+    auto room = makeOverlapRoom();
+    room.joinRoom(spec.user.getId());
+    server::RoomStorage::add(std::move(room));
+    spec.user.setRoomId(OVERLAP_ROOM_ID);
+
+    EXPECT_EQ(spec.read(roomRemoveBytes(OVERLAP_ROOM_ID)),
+              server::CommandResult::unauthorized);
+    EXPECT_TRUE(server::RoomStorage::contains(OVERLAP_ROOM_ID));
+}
+
+TEST_F(CommandSpecTest, RoomRemovalRejectsShortPayload)
+{
+    nx_data bytes = {0x02, 0x00, 0x03, 0x01, 0x02};
+    EXPECT_EQ(spec.read(bytes), server::CommandResult::invalid_input);
+}
+
+TEST_F(CommandSpecTest, RoomRemovalWorksWhenRoomOptsIn)
+{
+    auto room = makeOverlapRoom();
+    room.setClientRoomRemovalAllowed(true);
+    room.joinRoom(spec.user.getId());
+    server::RoomStorage::add(std::move(room));
+    spec.user.setRoomId(OVERLAP_ROOM_ID);
+
+    EXPECT_EQ(spec.read(roomRemoveBytes(OVERLAP_ROOM_ID)),
+              server::CommandResult::success);
+    EXPECT_FALSE(server::RoomStorage::contains(OVERLAP_ROOM_ID));
+}
+
+TEST_F(CommandSpecTest, RoomCreationRejectsWhenServerLimitReached)
+{
+    server::RoomStorage::add(makeOverlapRoom());
+    auto& limits = spec.command.getServerConfig().getRoomLimits();
+    limits.setMaxRooms(1);
+
+    EXPECT_EQ(spec.read(roomCreateBytes("extra")), server::CommandResult::failure);
+    EXPECT_EQ(server::RoomStorage::getRoomCount(), 1);
+
+    limits.setMaxRooms(2);
+    EXPECT_EQ(spec.read(roomCreateBytes("extra")), server::CommandResult::success);
+    EXPECT_EQ(server::RoomStorage::getRoomCount(), 2);
+}
+
+TEST_F(CommandSpecTest, RoomCreationRejectsWhenClientLimitReached)
+{
+    server::RoomStorage::add(makeOverlapRoom());
+    auto& limits = spec.command.getServerConfig().getRoomLimits();
+    limits.setMaxRooms(10);
+    limits.setMaxRoomsPerClient(1);
+
+    EXPECT_EQ(spec.read(roomCreateBytes("extra")), server::CommandResult::failure);
+    EXPECT_EQ(server::RoomStorage::getRoomCount(), 1);
+
+    limits.setMaxRoomsPerClient(2);
+    EXPECT_EQ(spec.read(roomCreateBytes("extra")), server::CommandResult::success);
+    EXPECT_EQ(server::RoomStorage::getRoomCount(), 2);
 }
 
 TEST_F(CommandSpecTest, SetOverlapWireFormatFromPacketApi)

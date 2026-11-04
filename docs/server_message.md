@@ -126,6 +126,20 @@ finite; the resulting position is clamped to the configured world bounds. Rooms
 that have not opted in reject these requests, and object handlers reject
 commands for rooms that no longer exist.
 
+Client-requested room removal is disabled by default. A room that wants its
+creator to be able to remove it through `room/management/remove` must call
+`Room::setClientRoomRemovalAllowed(true)`; only the room creator can remove it,
+and applications can still remove rooms directly on the server. Only the room
+creator may change the room-wide overlap setting through
+`room/management/set_overlap`; other members receive an unauthorized result.
+
+Client-requested room creation is capped at 1024 rooms per server and 64 rooms
+per client by default. The limits are configurable through
+`nexilis::server::ServerConfig::getRoomLimits()` as `setMaxRooms` and
+`setMaxRoomsPerClient`; requests beyond either limit are rejected. Room creation
+remains available to authenticated clients, so applications that need stricter
+authorization should enforce it before dispatching the command.
+
 The server enforces gameplay limits on `room/player_3D/position`,
 `room/player_3D/movement` and `room/player_3D/shoot`. Every limit has a
 default and is configurable through `nexilis::server::ServerConfig::getGameplayLimits()`:

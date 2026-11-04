@@ -23,6 +23,7 @@
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
 #include <nexilis/server/movement.hh>
+#include <nexilis/server/room_limits.hh>
 #include <nexilis/server/room_storage.hh>
 #include <nexilis/server/server_json.hh>
 
@@ -124,6 +125,7 @@ CommandResult Command::read(const nx_data& command, User& user, NXProtocol& prot
     // destroyed limits.
     Movement::_initialize(m_settings);
     GameplayLimits::_initialize(m_settings.getGameplayLimits());
+    RoomLimits::_initialize(m_settings.getRoomLimits());
 
     Log::debug(header(), commandTypeAsString(arg));
     switch (arg)

@@ -181,6 +181,10 @@ public:
     /// A pickup handler can separately authorize pickup updates.
     void setClientGameItemCreationAllowed(bool allowed);
     bool isClientGameItemCreationAllowed() const;
+    /// Allow the room creator to remove this room through a client request.
+    /// Disabled by default. Server-side removal is still available directly.
+    void setClientRoomRemovalAllowed(bool allowed);
+    bool isClientRoomRemovalAllowed() const;
     void setGameItemPickupHandler(GameItemPickupHandler handler);
     bool onGameItemPickup(uint64_t playerId, uint64_t itemId);
     bool hasGameItemPickupHandler() const;
@@ -228,6 +232,7 @@ private:
     bool m_clientPositionAllowed = false;
     bool m_clientObjectCreationAllowed = false;
     bool m_clientGameItemCreationAllowed = false;
+    bool m_clientRoomRemovalAllowed = false;
 
     /// Guards per-player game state (health, kills, deaths, teams). The server
     /// runs one command thread per client, so these shared maps must be

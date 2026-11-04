@@ -31,6 +31,8 @@ constexpr inline float NEXILIS_MAX_POSITION = 10000.0f;
 constexpr inline uint64_t NEXILIS_MAX_BROADCAST_LENGTH = 1024;
 constexpr inline uint64_t NEXILIS_MAX_BROADCAST_HISTORY = 100;
 constexpr inline float NEXILIS_DEFAULT_MAX_BROADCAST_RATE = 5.0f;
+constexpr inline uint64_t NEXILIS_DEFAULT_MAX_ROOMS = 1024;
+constexpr inline uint64_t NEXILIS_DEFAULT_MAX_ROOMS_PER_CLIENT = 64;
 
 } // namespace nexilis
 

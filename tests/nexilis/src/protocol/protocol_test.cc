@@ -360,8 +360,11 @@ TEST_F(RoomBoostTCP2DTest, ProtocolTestBoostTCPRoomDelete)
 
     EXPECT_EQ(api->getActiveRooms().size(), 2);
 
-    // Delete the created room
+    // Delete the created room after opting in to client-requested removal.
     auto room_id = api->getActiveRooms()[1].getId();
+    auto* room = nexilis::server::RoomStorage::getRoomById(room_id);
+    ASSERT_NE(room, nullptr);
+    room->setClientRoomRemovalAllowed(true);
     this->client->sendMessage(nexilis::client::Packet::Room::Management::remove(*api, room_id));
     waitRoomInfo(this->client, this->server, this->api);
 

@@ -42,6 +42,14 @@ CommandResult ServerImpl::room_management_setOverlap(const DefaultArgs& args)
         return CommandResult::error;
     }
 
+    // Overlap is a room-wide setting, so only the creator may change it.
+    if (room->getCreatorId() != user.getId())
+    {
+        Log::warning("Set overlap: User ", user.getId(),
+                     " is not the creator of room ", room->getId());
+        return CommandResult::unauthorized;
+    }
+
     room->setOverlappingAllowed(allowed);
     Log::info("Room ", room->getId(), " overlapping set to ", allowed);
 

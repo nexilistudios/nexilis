@@ -20,6 +20,7 @@
 #include <nexilis/server/room.hh>
 #include <nexilis/server/user.hh>
 
+#include <cstddef>
 #include <functional>
 #include <vector>
 
@@ -41,6 +42,12 @@ public:
     /// Check if room exists.
     /// \param id The id of the room.
     static bool contains(uint64_t id);
+
+    /// Get the number of stored rooms.
+    static std::size_t getRoomCount();
+
+    /// Get the number of stored rooms created by a client.
+    static std::size_t getRoomCountByCreator(uint64_t creatorId);
 
     /// Get all the rooms in the server.
     static std::vector<Room>& getAllRooms();

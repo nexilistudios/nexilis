@@ -27,6 +27,11 @@ namespace nexilis::server
 CommandResult ServerImpl::room_management_remove(const DefaultArgs& args)
 {
     auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 3);
+    if (payload.size() < sizeof(uint64_t))
+    {
+        Log::error("Remove room: Insufficient payload");
+        return CommandResult::invalid_input;
+    }
     uint64_t roomId = Util::convertToType<uint64_t>(payload);
 
     auto* room = RoomStorage::getRoomById(roomId);
@@ -37,10 +42,16 @@ CommandResult ServerImpl::room_management_remove(const DefaultArgs& args)
         return CommandResult::invalid_input;
     }
 
-    // Only the creator can remove the room.
+    // Only the creator can remove the room, and client-requested removal is
+    // disabled unless the room explicitly opts in.
     if (room->getCreatorId() != args.getUser().getId())
     {
         Log::error("User does not have permission to remove room!");
+        return CommandResult::unauthorized;
+    }
+    if (!room->isClientRoomRemovalAllowed())
+    {
+        Log::warning("Client room removal is disabled for room ", roomId);
         return CommandResult::unauthorized;
     }
 

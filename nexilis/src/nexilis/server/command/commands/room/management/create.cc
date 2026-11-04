@@ -18,6 +18,7 @@
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
 #include <nexilis/server/room.hh>
+#include <nexilis/server/room_limits.hh>
 #include <nexilis/server/room_storage.hh>
 
 namespace nexilis::server
@@ -32,6 +33,9 @@ CommandResult ServerImpl::room_management_create(const DefaultArgs& args)
     const uint32_t maxSize = Util::convertToType<uint16_t>(
             Util::removeAmountOfBytesFromVector(payload, 1));
     std::string roomName = Util::convertToString(Util::removeAmountOfBytesFromVector(payload, 3));
+
+    const auto& roomLimits = RoomLimits::get();
+    const auto creatorId = args.getUser().getId();
 
     if (context > static_cast<uint8_t>(RoomData::Context::_3D) ||
         maxSize == 0 || maxSize > 64 || roomName.empty() || roomName.size() > 64)
@@ -49,9 +53,23 @@ CommandResult ServerImpl::room_management_create(const DefaultArgs& args)
         Log::error("Room name cannot be equal to \" \" ");
         return CommandResult::invalid_input;
     }
+    else if (RoomStorage::getRoomCount() >= roomLimits.getMaxRooms())
+    {
+        Log::warning("Room create rejected: server room limit of ",
+                     roomLimits.getMaxRooms(), " reached");
+        return CommandResult::failure;
+    }
+    else if (RoomStorage::getRoomCountByCreator(creatorId) >=
+             roomLimits.getMaxRoomsPerClient())
+    {
+        Log::warning("Room create rejected: client ", creatorId,
+                     " reached the per-client room limit of ",
+                     roomLimits.getMaxRoomsPerClient());
+        return CommandResult::failure;
+    }
     else
     {
-        auto room_data = RoomData(args.getUser().getId(), roomName, Util::getRandomUint64(), static_cast<RoomData::Context>(context), maxSize);
+        auto room_data = RoomData(creatorId, roomName, Util::getRandomUint64(), static_cast<RoomData::Context>(context), maxSize);
         auto newRoom = nexilis::server::Room(room_data);
 
         auto newRoomId = newRoom.getId();

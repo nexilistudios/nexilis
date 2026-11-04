@@ -17,6 +17,8 @@
 #include <nexilis/logger/log.hh>
 #include <nexilis/server/room_storage.hh>
 
+#include <algorithm>
+
 namespace nexilis::server
 {
 
@@ -49,6 +51,18 @@ bool RoomStorage::contains(uint64_t id)
                         {
                             return room.getId() == id;
                         }) != m_rooms.end();
+}
+
+std::size_t RoomStorage::getRoomCount()
+{
+    return m_rooms.size();
+}
+
+std::size_t RoomStorage::getRoomCountByCreator(uint64_t creatorId)
+{
+    return static_cast<std::size_t>(std::count_if(
+            m_rooms.begin(), m_rooms.end(), [creatorId](const Room& room)
+            { return room.getCreatorId() == creatorId; }));
 }
 
 Room* RoomStorage::getRoomById(uint64_t id)
