@@ -210,7 +210,8 @@ std::unique_ptr<BaseAPICommand> CommandParser::parseRoomCommand(const boost::jso
                 getString(json, "room_name"),
                 getUint64(json, "room_context"),
                 getString(json, "username"),
-                json.contains("overlap_allowed") ? json.at("overlap_allowed").as_bool() : true);
+                json.contains("overlap_allowed") ? json.at("overlap_allowed").as_bool() : true,
+                json.contains("max_size") ? static_cast<uint32_t>(getUint64(json, "max_size")) : NEXILIS_DEFAULT_ROOM_CLIENT_AMOUNT);
     }
     else if (type == "player_2D")
     {

@@ -171,13 +171,14 @@ nx_data ClientImpl::room_management_leave(ClientAPI& api)
     return id;
 }
 
-nx_data ClientImpl::room_management_create(ClientAPI& api, const std::string& roomName, RoomData::Context ctx)
+nx_data ClientImpl::room_management_create(ClientAPI& api, const std::string& roomName, RoomData::Context ctx, uint32_t maxSize)
 {
     auto id = _Packet::clientIdentification(api);
     id.emplace_back(static_cast<uint8_t>(CommandType::room));
     id.emplace_back(static_cast<uint8_t>(RoomCommandType::Root::management));
     id.emplace_back(static_cast<uint8_t>(RoomCommandType::Management::create));
     id.emplace_back(static_cast<uint8_t>(ctx));
+    emplaceAll(id, static_cast<uint16_t>(maxSize));
     emplaceAll(id, roomName);
     return id;
 }

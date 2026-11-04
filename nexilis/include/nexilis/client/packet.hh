@@ -42,7 +42,7 @@ struct ClientImpl
     // Room::Management
     static nx_data room_management_join(ClientAPI& api, uint64_t roomId);
     static nx_data room_management_leave(ClientAPI& api);
-    static nx_data room_management_create(ClientAPI& api, const std::string& roomName, RoomData::Context ctx = RoomData::Context::_3D);
+    static nx_data room_management_create(ClientAPI& api, const std::string& roomName, RoomData::Context ctx = RoomData::Context::_3D, uint32_t maxSize = NEXILIS_DEFAULT_ROOM_CLIENT_AMOUNT);
     static nx_data room_management_remove(ClientAPI& api, uint64_t roomId);
     static nx_data room_management_setOverlap(ClientAPI& api, bool allowed);
 

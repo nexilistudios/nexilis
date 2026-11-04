@@ -20,6 +20,7 @@
 #include <nexilis/server/room.hh>
 #include <nexilis/server/user.hh>
 
+#include <functional>
 #include <vector>
 
 namespace nexilis::server
@@ -34,6 +35,8 @@ public:
 
     /// Add new room to the server.
     static void add(Room&& room);
+    /// Called for each room after it is stored, before creation is acknowledged.
+    static void setCreateHandler(std::function<void(Room&)> handler);
 
     /// Check if room exists.
     /// \param id The id of the room.
@@ -50,6 +53,7 @@ public:
 
 private:
     static std::vector<Room> m_rooms;
+    static std::function<void(Room&)> m_createHandler;
 };
 
 } // namespace nexilis::server

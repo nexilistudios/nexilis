@@ -36,6 +36,23 @@
 
 using namespace nexilis;
 
+TEST(RoomCreatePacketTest, IncludesSelectedCapacity)
+{
+    client::ClientConfig config;
+    client::ClientAPI api(config);
+    api.setClientId(1);
+    auto packet = client::Packet::Room::Management::create(
+            api, "Shipment Bomb", RoomData::Context::_3D, 8);
+    ASSERT_EQ(packet.size(), 16 + 3 + 1 + 2 + 13);
+    EXPECT_EQ(packet[16], static_cast<uint8_t>(CommandType::room));
+    EXPECT_EQ(packet[18], static_cast<uint8_t>(RoomCommandType::Management::create));
+    EXPECT_EQ(packet[19], static_cast<uint8_t>(RoomData::Context::_3D));
+    nx_data payload(packet.begin() + 20, packet.end());
+    EXPECT_EQ(Util::convertToType<uint16_t>(payload), 8);
+    EXPECT_EQ(Util::convertToString(nx_data(payload.begin() + 2, payload.end())),
+              "Shipment Bomb");
+}
+
 namespace
 {
 

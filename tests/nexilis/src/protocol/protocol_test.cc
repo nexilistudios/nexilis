@@ -225,7 +225,8 @@ TEST_F(BasicBoostTCPTest, ProtocolTestBoostTCPJoinRoom)
 
     EXPECT_EQ(api->getActiveRooms().size(), 0);
 
-    auto create_room = nexilis::client::Packet::Room::Management::create(*api, "room1");
+    auto create_room = nexilis::client::Packet::Room::Management::create(
+            *api, "room1", nexilis::RoomData::Context::_3D, 2);
 
     this->client->sendMessage(create_room);
     waitFor(5, api->getActiveRooms().size() == 1);
@@ -234,6 +235,7 @@ TEST_F(BasicBoostTCPTest, ProtocolTestBoostTCPJoinRoom)
     auto room = api->getActiveRooms()[0];
 
     EXPECT_EQ(room.getClients().size(), 0);
+    EXPECT_EQ(room.getMaxSize(), 2);
     auto room_id = api->getActiveRooms()[0].getId();
     auto join_room = nexilis::client::Packet::Room::Management::join(*api, room_id);
     this->client->sendMessage(join_room);

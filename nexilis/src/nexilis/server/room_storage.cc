@@ -21,6 +21,12 @@ namespace nexilis::server
 {
 
 std::vector<Room> RoomStorage::m_rooms = {};
+std::function<void(Room&)> RoomStorage::m_createHandler;
+
+void RoomStorage::setCreateHandler(std::function<void(Room&)> handler)
+{
+    m_createHandler = std::move(handler);
+}
 
 std::vector<Room>& RoomStorage::getAllRooms()
 {
@@ -31,6 +37,8 @@ void RoomStorage::add(Room&& room)
 {
     Log::info("New room: ", room.getName(), " id: ", room.getId());
     m_rooms.emplace_back(std::move(room));
+    if (m_createHandler)
+        m_createHandler(m_rooms.back());
     Log::info("Total room amount = ", m_rooms.size());
 }
 

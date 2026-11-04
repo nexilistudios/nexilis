@@ -44,6 +44,9 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
         return CommandResult::error;
     }
 
+    if (room->getClients().size() >= room->getMaxSize())
+        return CommandResult::invalid_input;
+
     room->joinRoom(user_id);
 
     args.getUser().setRoomId(room->getId());

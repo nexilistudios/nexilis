@@ -28,10 +28,12 @@ class RoomManagementCommand : public BaseAPICommand
 public:
     RoomManagementCommand(std::string action, uint64_t room_id, uint64_t client_id,
                           std::string room_name = "", uint64_t room_context = 0,
-                          std::string username = "", bool overlap_allowed = true)
+                          std::string username = "", bool overlap_allowed = true,
+                          uint32_t max_size = NEXILIS_DEFAULT_ROOM_CLIENT_AMOUNT)
         : m_action(action), m_room_id(room_id), m_client_id(client_id),
           m_room_name(std::move(room_name)), m_room_context(room_context),
-          m_username(std::move(username)), m_overlap_allowed(overlap_allowed)
+          m_username(std::move(username)), m_overlap_allowed(overlap_allowed),
+          m_max_size(max_size)
     {
     }
 
@@ -83,7 +85,7 @@ public:
         else if (m_action == "create")
         {
             auto roomData = RoomData(m_client_id, m_room_name, m_room_id,
-                                     static_cast<RoomData::Context>(m_room_context));
+                                     static_cast<RoomData::Context>(m_room_context), m_max_size);
             rooms.emplace_back(Room(roomData, std::vector<ClientSession>()));
             return ReadResult::success;
         }
@@ -103,6 +105,7 @@ private:
     uint64_t m_room_context;
     std::string m_username;
     bool m_overlap_allowed;
+    uint32_t m_max_size;
 };
 
 } // namespace nexilis::client

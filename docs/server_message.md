@@ -183,6 +183,15 @@ Configuration details:
 - If only one side enables TLS, the handshake fails rather than silently downgrading to plaintext.
 - The handshake happens lazily: the server accepts it before the first message is read or written, and the client performs it right after the TCP connect. TLS is applied to both the initial connection and the fixed "switched" port the server uses for the authenticated session.
 
+## Room creation
+
+Room creation requests use a 3-byte room-management command header, followed by a
+1-byte room context, a 2-byte unsigned maximum player count in the configured
+wire byte order, and the room name. The server accepts capacities from 1 to 64,
+includes `max_size` in the creation response and room listing, and rejects joins
+when the room is full. Applications can install a `RoomStorage::setCreateHandler`
+callback to configure each new room before the server acknowledges creation.
+
 ## Security notes
 
 Command-channel passphrase authentication (`authentication`, action `2`) is

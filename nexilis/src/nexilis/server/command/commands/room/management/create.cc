@@ -26,10 +26,15 @@ namespace nexilis::server
 CommandResult ServerImpl::room_management_create(const DefaultArgs& args)
 {
     auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 3);
+    if (payload.size() < 3)
+        return CommandResult::invalid_input;
     uint8_t context = payload[0];
-    std::string roomName = Util::convertToString(Util::removeAmountOfBytesFromVector(payload, 1));
+    const uint32_t maxSize = Util::convertToType<uint16_t>(
+            Util::removeAmountOfBytesFromVector(payload, 1));
+    std::string roomName = Util::convertToString(Util::removeAmountOfBytesFromVector(payload, 3));
 
-    if (roomName.empty())
+    if (context > static_cast<uint8_t>(RoomData::Context::_3D) ||
+        maxSize == 0 || maxSize > 64 || roomName.empty() || roomName.size() > 64)
     {
         Log::error("Room name cannot be empty");
         return CommandResult::invalid_input;
@@ -46,7 +51,7 @@ CommandResult ServerImpl::room_management_create(const DefaultArgs& args)
     }
     else
     {
-        auto room_data = RoomData(args.getUser().getId(), roomName, Util::getRandomUint64(), static_cast<RoomData::Context>(context));
+        auto room_data = RoomData(args.getUser().getId(), roomName, Util::getRandomUint64(), static_cast<RoomData::Context>(context), maxSize);
         auto newRoom = nexilis::server::Room(room_data);
 
         auto newRoomId = newRoom.getId();
@@ -57,7 +62,8 @@ CommandResult ServerImpl::room_management_create(const DefaultArgs& args)
                 {"client_id", boost::json::value(args.getUser().getId())},
                 {"action", boost::json::value("create")},
                 {"room_id", boost::json::value(newRoomId)},
-                {"room_context", boost::json::value(context)}};
+                {"room_context", boost::json::value(context)},
+                {"max_size", boost::json::value(maxSize)}};
 
         auto data = Command::clientMessageData(CommandType::room, "management", args.getMessageId(), params);
 
