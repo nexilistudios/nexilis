@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <limits>
 #include <optional>
 #include <thread>
 #include <vector>
@@ -83,6 +84,35 @@ nx_data setTeamBytes(const std::string& team)
                   static_cast<uint8_t>(RoomCommandType::PlayerType::set_team)};
     auto teamBytes = Util::convertToByteVector(team);
     bytes.insert(bytes.end(), teamBytes.begin(), teamBytes.end());
+    return bytes;
+}
+
+nx_data createGameItemBytes(const Vector3f& position, const Vector3f& dimensions,
+                            const std::string& type = "health", const std::string& status = "ready",
+                            const std::string& filepath = "items/health.png")
+{
+    nx_data bytes{static_cast<uint8_t>(CommandType::room),
+                  static_cast<uint8_t>(RoomCommandType::Root::game_item),
+                  static_cast<uint8_t>(RoomCommandType::GameItemAction::create)};
+    for (const auto& vector : {position, dimensions})
+    {
+        auto encoded = Util::convertToByteVector(vector);
+        bytes.insert(bytes.end(), encoded.begin(), encoded.end());
+    }
+    const std::string fields = type + '\0' + status + '\0' + filepath;
+    bytes.insert(bytes.end(), fields.begin(), fields.end());
+    return bytes;
+}
+
+nx_data gameItemActionBytes(RoomCommandType::GameItemAction action, uint64_t itemId,
+                            const std::string& status = "")
+{
+    nx_data bytes{static_cast<uint8_t>(CommandType::room),
+                  static_cast<uint8_t>(RoomCommandType::Root::game_item),
+                  static_cast<uint8_t>(action)};
+    auto encoded = Util::convertToByteVector(itemId);
+    bytes.insert(bytes.end(), encoded.begin(), encoded.end());
+    bytes.insert(bytes.end(), status.begin(), status.end());
     return bytes;
 }
 
@@ -818,6 +848,111 @@ TEST(UserShotRateLimitTest, ConcurrentShotsReserveOnlyOneInterval)
     for (auto& thread : threads)
         thread.join();
     EXPECT_EQ(accepted.load(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// Game items
+// ---------------------------------------------------------------------------
+
+TEST_F(GameplaySpecTest, GameItemMutationsRequireRoomOptIn)
+{
+    setUpRoom();
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    ASSERT_FALSE(room->isClientGameItemCreationAllowed());
+    room->addGameItem(GameItem(OBJECT_ID, "health", {1.0f, 2.0f, 3.0f},
+                               {1.0f, 1.0f, 1.0f}, "ready", "items/health.png"));
+
+    EXPECT_EQ(read(createGameItemBytes({1.0f, 2.0f, 3.0f}, {1.0f, 1.0f, 1.0f}), *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(gameItemActionBytes(RoomCommandType::GameItemAction::update, OBJECT_ID, "used"),
+                   *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(gameItemActionBytes(RoomCommandType::GameItemAction::destroy, OBJECT_ID),
+                   *m_sender),
+              server::CommandResult::failure);
+    ASSERT_EQ(room->getGameItems().size(), 1);
+    EXPECT_EQ(room->getGameItems()[0].getStatus(), "ready");
+}
+
+TEST_F(GameplaySpecTest, GameItemPickupHandlerAuthorizesOnlyPickup)
+{
+    setUpRoom();
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->addGameItem(GameItem(OBJECT_ID, "health", {1.0f, 2.0f, 3.0f},
+                               {1.0f, 1.0f, 1.0f}, "ready", "items/health.png"));
+    room->setGameItemPickupHandler([](server::Room& currentRoom, uint64_t playerId,
+                                      uint64_t itemId)
+                                   {
+                                       if (playerId != SENDER_ID || itemId != OBJECT_ID)
+                                           return false;
+                                       currentRoom.deleteGameItem(itemId);
+                                       return true; });
+
+    EXPECT_EQ(read(gameItemActionBytes(RoomCommandType::GameItemAction::update, OBJECT_ID, "used"),
+                   *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(gameItemActionBytes(RoomCommandType::GameItemAction::update, OBJECT_ID,
+                                       "picked_up"),
+                   *m_target),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(gameItemActionBytes(RoomCommandType::GameItemAction::update, OBJECT_ID,
+                                       "picked_up"),
+                   *m_sender),
+              server::CommandResult::success);
+    EXPECT_TRUE(room->getGameItems().empty());
+}
+
+TEST_F(GameplaySpecTest, GameItemOptInValidatesPayloadAndAllowsValidItem)
+{
+    setUpRoom();
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->setClientGameItemCreationAllowed(true);
+    const Vector3f position{1.0f, 2.0f, 3.0f};
+    const Vector3f dimensions{1.0f, 1.0f, 1.0f};
+    const auto valid = createGameItemBytes(position, dimensions);
+
+    auto truncated = valid;
+    truncated.resize(3 + 20);
+    EXPECT_EQ(read(truncated, *m_sender), server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createGameItemBytes({std::numeric_limits<float>::quiet_NaN(), 2.0f, 3.0f},
+                                       dimensions),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createGameItemBytes(position, {-1.0f, 1.0f, 1.0f}), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createGameItemBytes(position, dimensions, "health", "ready", "../secret"),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createGameItemBytes(position, dimensions, "health", "ready", "/tmp/file"),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createGameItemBytes(position, dimensions, "health", "ready", "items/"),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createGameItemBytes(position, dimensions, "health item"), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createGameItemBytes(position, dimensions, "health", ""), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_TRUE(room->getGameItems().empty());
+
+    ASSERT_EQ(read(valid, *m_sender), server::CommandResult::success);
+    ASSERT_EQ(room->getGameItems().size(), 1);
+    const uint64_t itemId = room->getGameItems()[0].getId();
+    EXPECT_EQ(read(gameItemActionBytes(RoomCommandType::GameItemAction::update, itemId,
+                                       std::string(33, 'x')),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(gameItemActionBytes(RoomCommandType::GameItemAction::destroy, OBJECT_ID),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(gameItemActionBytes(RoomCommandType::GameItemAction::update, itemId, "used"),
+                   *m_sender),
+              server::CommandResult::success);
+    EXPECT_EQ(room->getGameItems()[0].getStatus(), "used");
+    EXPECT_EQ(read(gameItemActionBytes(RoomCommandType::GameItemAction::destroy, itemId),
+                   *m_sender),
+              server::CommandResult::success);
+    EXPECT_TRUE(room->getGameItems().empty());
 }
 
 // ---------------------------------------------------------------------------

@@ -99,8 +99,16 @@ Client team selection requests are rejected by default. An application must inst
 on match state. The server accepts only the `Terrorist` and `Counter Terrorist`
 team names from clients. An application can set teams directly on the server.
 
-An application room can also disable client game item creation and deletion
-and install a pickup handler. Pickup requests use `room/game_item/update`
+Client game item creation, status changes, and deletion are disabled by default.
+A room can call `setClientGameItemCreationAllowed(true)` to allow them. Creation
+requires finite positions within the configured world bounds, positive finite
+dimensions no larger than the horizontal world bound, a type of 1–64 characters,
+a status of 1–32 characters, and a relative asset path of 1–256 characters.
+Types and statuses accept ASCII letters, digits, `_`, and `-`. Asset paths accept
+those characters plus `.` and `/`, but reject absolute paths and `.` or `..`
+segments. Client status updates in an opted-in room use the same status rules.
+
+A room can separately install a pickup handler. Pickup requests use `room/game_item/update`
 with an eight-byte item ID and the remaining string `picked_up`. The handler
 must validate ownership, status, and proximity before the status is broadcast.
 The nx-3D handler consumes the item on pickup and follows the status message

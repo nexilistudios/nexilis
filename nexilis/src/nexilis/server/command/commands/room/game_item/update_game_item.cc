@@ -19,6 +19,8 @@
 #include <nexilis/server/command/commands.hh>
 #include <nexilis/server/room_storage.hh>
 
+#include <algorithm>
+
 namespace nexilis::server
 {
 
@@ -27,7 +29,7 @@ CommandResult ServerImpl::room_gameitem_update(const DefaultArgs& args)
     auto& user = args.getUser();
     auto data = args.getData();
     auto payload = Util::removeAmountOfBytesFromVector(data, 3);
-    if (payload.size() < 8)
+    if (payload.size() < 9 || payload.size() > 40)
         return CommandResult::invalid_input;
 
     auto itemId = Util::uint64FromFront(payload);
@@ -41,6 +43,16 @@ CommandResult ServerImpl::room_gameitem_update(const DefaultArgs& args)
         return CommandResult::failure;
     }
     const bool handledPickup = room->hasGameItemPickupHandler();
+    if (!handledPickup && !room->isClientGameItemCreationAllowed())
+        return CommandResult::failure;
+    if (!handledPickup && (status.empty() || status.size() > 32 ||
+                           !std::all_of(status.begin(), status.end(), [](unsigned char ch)
+                                        { return (ch >= 'a' && ch <= 'z') ||
+                                                 (ch >= 'A' && ch <= 'Z') ||
+                                                 (ch >= '0' && ch <= '9') || ch == '_' || ch == '-'; })))
+        return CommandResult::invalid_input;
+    if (!room->getGameItemById(itemId))
+        return CommandResult::invalid_input;
     if (handledPickup &&
         (status != "picked_up" || !room->onGameItemPickup(user.getId(), itemId)))
         return CommandResult::failure;

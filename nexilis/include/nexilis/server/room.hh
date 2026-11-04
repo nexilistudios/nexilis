@@ -172,6 +172,8 @@ public:
                                        uint8_t slot, uint8_t action);
     void setSpawnHandler(SpawnHandler handler);
     void spawnPlayer(uint64_t playerId);
+    /// Allow clients to create, change, and delete game items. Disabled by default.
+    /// A pickup handler can separately authorize pickup updates.
     void setClientGameItemCreationAllowed(bool allowed);
     bool isClientGameItemCreationAllowed() const;
     void setGameItemPickupHandler(GameItemPickupHandler handler);
@@ -218,7 +220,7 @@ private:
     SpawnHandler m_spawnHandler;
     GameItemPickupHandler m_gameItemPickupHandler;
     bool m_clientPositionAllowed = false;
-    bool m_clientGameItemCreationAllowed = true;
+    bool m_clientGameItemCreationAllowed = false;
 
     /// Guards per-player game state (health, kills, deaths, teams). The server
     /// runs one command thread per client, so these shared maps must be

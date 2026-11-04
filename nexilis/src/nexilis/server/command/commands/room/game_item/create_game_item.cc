@@ -17,12 +17,49 @@
 #include <nexilis/object/game_item.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
+#include <nexilis/server/gameplay_limits.hh>
 #include <nexilis/server/room_storage.hh>
 
-#include <sstream>
+#include <algorithm>
+#include <cmath>
+#include <string_view>
 
 namespace nexilis::server
 {
+
+namespace
+{
+
+bool validLabel(std::string_view value, size_t maxLength)
+{
+    return !value.empty() && value.size() <= maxLength &&
+           std::all_of(value.begin(), value.end(), [](unsigned char ch)
+                       { return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+                                (ch >= '0' && ch <= '9') || ch == '_' || ch == '-'; });
+}
+
+bool validAssetPath(std::string_view path)
+{
+    if (path.empty() || path.size() > 256 || path.front() == '/')
+        return false;
+    size_t start = 0;
+    while (start < path.size())
+    {
+        const size_t end = path.find('/', start);
+        const auto segment = path.substr(start, end == std::string_view::npos ? end : end - start);
+        if (segment.empty() || segment == "." || segment == ".." ||
+            !std::all_of(segment.begin(), segment.end(), [](unsigned char ch)
+                         { return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+                                  (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.'; }))
+            return false;
+        if (end == std::string_view::npos)
+            return true;
+        start = end + 1;
+    }
+    return false;
+}
+
+} // namespace
 
 CommandResult ServerImpl::room_gameitem_create(const DefaultArgs& args)
 {
@@ -30,26 +67,43 @@ CommandResult ServerImpl::room_gameitem_create(const DefaultArgs& args)
     auto room = RoomStorage::getRoomById(user.getRoomId());
     if (!room || !room->isClientGameItemCreationAllowed())
         return CommandResult::failure;
+    if (room->getContext() != RoomData::Context::_3D)
+        return CommandResult::invalid_input;
     auto data = args.getData();
     auto payload = Util::removeAmountOfBytesFromVector(data, 3);
+    if (payload.size() < 29 || payload.size() > 24 + 64 + 1 + 32 + 1 + 256)
+        return CommandResult::invalid_input;
 
     auto position = Util::vector3fFromFront(payload);
     payload = Util::removeAmountOfBytesFromVector(payload, 12);
     auto dimensions = Util::vector3fFromFront(payload);
     payload = Util::removeAmountOfBytesFromVector(payload, 12);
 
-    auto combined = Util::convertToString(payload);
-    std::vector<std::string> parts;
-    std::stringstream ss(combined);
-    std::string part;
-    while (std::getline(ss, part, '\0'))
-    {
-        parts.push_back(part);
-    }
+    const auto& limits = GameplayLimits::get();
+    const float maxPosition = limits.getMaxHorizontalPosition();
+    if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z) ||
+        !std::isfinite(dimensions.x) || !std::isfinite(dimensions.y) ||
+        !std::isfinite(dimensions.z) || std::abs(position.x) > maxPosition ||
+        std::abs(position.z) > maxPosition || position.y < limits.getMinHeight() ||
+        position.y > limits.getMaxHeight() || dimensions.x <= 0.0f ||
+        dimensions.y <= 0.0f || dimensions.z <= 0.0f ||
+        dimensions.x > maxPosition || dimensions.y > maxPosition ||
+        dimensions.z > maxPosition)
+        return CommandResult::invalid_input;
 
-    std::string item_type = parts.size() > 0 ? parts[0] : "";
-    std::string status = parts.size() > 1 ? parts[1] : "";
-    std::string filepath = parts.size() > 2 ? parts[2] : "";
+    const std::string combined = Util::convertToString(payload);
+    const size_t firstSeparator = combined.find('\0');
+    if (firstSeparator == std::string::npos)
+        return CommandResult::invalid_input;
+    const size_t secondSeparator = combined.find('\0', firstSeparator + 1);
+    if (secondSeparator == std::string::npos ||
+        combined.find('\0', secondSeparator + 1) != std::string::npos)
+        return CommandResult::invalid_input;
+    const std::string item_type = combined.substr(0, firstSeparator);
+    const std::string status = combined.substr(firstSeparator + 1, secondSeparator - firstSeparator - 1);
+    const std::string filepath = combined.substr(secondSeparator + 1);
+    if (!validLabel(item_type, 64) || !validLabel(status, 32) || !validAssetPath(filepath))
+        return CommandResult::invalid_input;
 
     auto item = GameItem(Util::getRandomUint64(), item_type, position, dimensions, status, filepath);
     uint64_t itemId = item.getId();

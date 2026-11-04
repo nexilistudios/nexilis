@@ -33,6 +33,8 @@ CommandResult ServerImpl::room_gameitem_destroy(const DefaultArgs& args)
     auto room = RoomStorage::getRoomById(user.getRoomId());
     if (!room || !room->isClientGameItemCreationAllowed())
         return CommandResult::failure;
+    if (!room->getGameItemById(itemId))
+        return CommandResult::invalid_input;
     room->deleteGameItem(itemId);
 
     std::map<std::string, boost::json::value> params{
