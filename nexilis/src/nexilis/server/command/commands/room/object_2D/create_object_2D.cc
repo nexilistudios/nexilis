@@ -18,6 +18,7 @@
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
 #include <nexilis/server/room_storage.hh>
+#include <nexilis/server/validation.hh>
 
 namespace nexilis::server
 {
@@ -25,12 +26,22 @@ namespace nexilis::server
 CommandResult ServerImpl::room_object2d_create(const DefaultArgs& args)
 {
     auto& user = args.getUser();
+    auto room = RoomStorage::getRoomById(user.getRoomId());
+    if (!room || !room->isClientObjectCreationAllowed())
+        return CommandResult::failure;
+
     auto data = args.getData();
     auto payload = Util::removeAmountOfBytesFromVector(data, 3);
+    if (payload.size() < 16 || payload.size() > 16 + 256)
+        return CommandResult::invalid_input;
     auto position = Util::vector2fFromFront(payload);
     auto dimensions = Util::vector2fFromFront(Util::removeAmountOfBytesFromVector(payload, 8));
-    auto fileBytes = Util::removeAmountOfBytesFromVector(payload, 16);
-    auto filepath = Util::convertToString(fileBytes);
+    auto filepath = Util::convertToString(Util::removeAmountOfBytesFromVector(payload, 16));
+
+    if (!validation::isValidPosition(position) ||
+        !validation::isValidDimensions(dimensions) ||
+        !validation::isValidOptionalAssetPath(filepath))
+        return CommandResult::invalid_input;
 
     // Create server object.
     auto object = nexilis::Object2D(Util::getRandomUint64(), position, dimensions);
@@ -39,7 +50,6 @@ CommandResult ServerImpl::room_object2d_create(const DefaultArgs& args)
     Log::info("Created object with id: ", objectId);
 
     // Add to storage.
-    auto room = RoomStorage::getRoomById(user.getRoomId());
     room->addObject(std::move(object));
 
     std::map<std::string, boost::json::value> params{

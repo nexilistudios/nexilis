@@ -16,7 +16,9 @@
 
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
+#include <nexilis/server/gameplay_limits.hh>
 #include <nexilis/server/room_storage.hh>
+#include <nexilis/server/validation.hh>
 
 namespace nexilis::server
 {
@@ -24,20 +26,20 @@ namespace nexilis::server
 CommandResult ServerImpl::room_object3d_move(const DefaultArgs& args)
 {
     auto& user = args.getUser();
+    auto room = RoomStorage::getRoomById(user.getRoomId());
+    if (!room || !room->isClientObjectCreationAllowed())
+        return CommandResult::failure;
 
     // Get messagedata.
     auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 3);
+    if (payload.size() != 20)
+        return CommandResult::invalid_input;
     auto objectId = Util::uint64FromFront(payload);
     auto position = Util::vector3fFromFront(Util::removeAmountOfBytesFromVector(payload, 8));
+    if (!validation::isFinite(position))
+        return CommandResult::invalid_input;
 
     // Get object from server storage.
-    auto room = RoomStorage::getRoomById(user.getRoomId());
-    if (!room)
-    {
-        Log::error("Client room not found!");
-        return CommandResult::failure;
-    }
-
     auto object = room->getObject3DById(objectId);
     if (!object)
     {
@@ -47,15 +49,29 @@ CommandResult ServerImpl::room_object3d_move(const DefaultArgs& args)
 
     auto oldPosition = object->getPosition();
     auto newPosition = oldPosition + position;
+    if (!validation::isFinite(newPosition))
+        return CommandResult::invalid_input;
+
+    const auto& limits = GameplayLimits::get();
+    Vector3f clampedPosition(limits.clampHorizontal(newPosition.x),
+                             limits.clampHeight(newPosition.y),
+                             limits.clampHorizontal(newPosition.z));
+    if (clampedPosition.x != newPosition.x || clampedPosition.y != newPosition.y ||
+        clampedPosition.z != newPosition.z)
+    {
+        Log::warning("Object move to (", newPosition.x, ", ", newPosition.y, ", ",
+                     newPosition.z, ") clamped to (", clampedPosition.x, ", ",
+                     clampedPosition.y, ", ", clampedPosition.z, ")");
+    }
 
     std::map<std::string, boost::json::value> params{
             {"id", boost::json::value(objectId)},
-            {"x", boost::json::value(newPosition.x)},
-            {"y", boost::json::value(newPosition.y)},
-            {"z", boost::json::value(newPosition.z)}};
+            {"x", boost::json::value(clampedPosition.x)},
+            {"y", boost::json::value(clampedPosition.y)},
+            {"z", boost::json::value(clampedPosition.z)}};
 
     // Move object in server storage.
-    object->setPosition(newPosition);
+    object->setPosition(clampedPosition);
 
     auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, args.getData(), params, args.getMessageId());
     if (Command::sendRoomCommand(roomCommand, user, args.getProtocol()))

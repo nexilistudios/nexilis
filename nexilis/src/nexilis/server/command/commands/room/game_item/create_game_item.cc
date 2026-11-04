@@ -19,47 +19,12 @@
 #include <nexilis/server/command/commands.hh>
 #include <nexilis/server/gameplay_limits.hh>
 #include <nexilis/server/room_storage.hh>
+#include <nexilis/server/validation.hh>
 
-#include <algorithm>
 #include <cmath>
-#include <string_view>
 
 namespace nexilis::server
 {
-
-namespace
-{
-
-bool validLabel(std::string_view value, size_t maxLength)
-{
-    return !value.empty() && value.size() <= maxLength &&
-           std::all_of(value.begin(), value.end(), [](unsigned char ch)
-                       { return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
-                                (ch >= '0' && ch <= '9') || ch == '_' || ch == '-'; });
-}
-
-bool validAssetPath(std::string_view path)
-{
-    if (path.empty() || path.size() > 256 || path.front() == '/')
-        return false;
-    size_t start = 0;
-    while (start < path.size())
-    {
-        const size_t end = path.find('/', start);
-        const auto segment = path.substr(start, end == std::string_view::npos ? end : end - start);
-        if (segment.empty() || segment == "." || segment == ".." ||
-            !std::all_of(segment.begin(), segment.end(), [](unsigned char ch)
-                         { return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
-                                  (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.'; }))
-            return false;
-        if (end == std::string_view::npos)
-            return true;
-        start = end + 1;
-    }
-    return false;
-}
-
-} // namespace
 
 CommandResult ServerImpl::room_gameitem_create(const DefaultArgs& args)
 {
@@ -102,7 +67,9 @@ CommandResult ServerImpl::room_gameitem_create(const DefaultArgs& args)
     const std::string item_type = combined.substr(0, firstSeparator);
     const std::string status = combined.substr(firstSeparator + 1, secondSeparator - firstSeparator - 1);
     const std::string filepath = combined.substr(secondSeparator + 1);
-    if (!validLabel(item_type, 64) || !validLabel(status, 32) || !validAssetPath(filepath))
+    if (!validation::isValidLabel(item_type, 64) ||
+        !validation::isValidLabel(status, 32) ||
+        !validation::isValidAssetPath(filepath))
         return CommandResult::invalid_input;
 
     auto item = GameItem(Util::getRandomUint64(), item_type, position, dimensions, status, filepath);

@@ -114,6 +114,18 @@ must validate ownership, status, and proximity before the status is broadcast.
 The nx-3D handler consumes the item on pickup and follows the status message
 with a destroy message so all clients remove it.
 
+Client room object creation, movement, and deletion are disabled by default.
+A room can call `setClientObjectCreationAllowed(true)` to allow
+`room/object_2D` and `room/object_3D` create, create_moving, move, and destroy
+requests. Creation requires finite positions within the configured world bounds,
+positive finite dimensions no larger than the horizontal world bound, and an
+optional relative asset path of at most 256 characters. Asset paths reject
+absolute paths and `.` or `..` segments. Moving object requests also require
+finite movement values and a duration in (0, 0.25] seconds. Move offsets must be
+finite; the resulting position is clamped to the configured world bounds. Rooms
+that have not opted in reject these requests, and object handlers reject
+commands for rooms that no longer exist.
+
 The server enforces gameplay limits on `room/player_3D/position`,
 `room/player_3D/movement` and `room/player_3D/shoot`. Every limit has a
 default and is configurable through `nexilis::server::ServerConfig::getGameplayLimits()`:

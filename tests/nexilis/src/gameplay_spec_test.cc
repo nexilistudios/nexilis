@@ -450,6 +450,12 @@ protected:
                              { return m_nextHit; });
     }
 
+    /// Object mutations are disabled by default, so object tests opt in.
+    void allowClientObjects()
+    {
+        server::RoomStorage::getRoomById(ROOM_ID)->setClientObjectCreationAllowed(true);
+    }
+
     /// Put the shooter and the target on opposing teams. The shoot command only
     /// accepts damage dealt to a member of another team.
     void setUpOpposingTeams()
@@ -1303,6 +1309,7 @@ TEST(RoomStateTest, DeathHandlerRunsOnPlayerDeath)
 TEST_F(GameplaySpecTest, CreateMovingObject2DAddsObjectAndBroadcastsCreate)
 {
     setUpRoom();
+    allowClientObjects();
     auto targetMessages = receivedMessages(*m_target);
 
     const Vector2f start(10.0f, 20.0f);
@@ -1344,6 +1351,7 @@ TEST_F(GameplaySpecTest, CreateMovingObject2DAddsObjectAndBroadcastsCreate)
 TEST_F(GameplaySpecTest, CreateMovingObject3DAddsObjectAndBroadcastsCreate)
 {
     setUpRoom();
+    allowClientObjects();
     auto targetMessages = receivedMessages(*m_target);
 
     const Vector3f start(1.0f, 2.0f, 3.0f);
@@ -1382,6 +1390,7 @@ TEST_F(GameplaySpecTest, CreateMovingObject3DAddsObjectAndBroadcastsCreate)
 TEST_F(GameplaySpecTest, CreateMovingLinearObjectMovesOverTime)
 {
     setUpRoom();
+    allowClientObjects();
     auto targetMessages = receivedMessages(*m_target);
 
     const float delta = 0.25f; // 15 ticks at the default 60 Hz tickrate.
@@ -1650,6 +1659,7 @@ TEST_F(GameplaySpecTest, Player2DMovementRejectsExcessiveDelta)
 TEST_F(GameplaySpecTest, CreateObject2DAddsStaticObjectAndBroadcasts)
 {
     setUpRoom();
+    allowClientObjects();
     auto targetMessages = receivedMessages(*m_target);
 
     const Vector2f position(7.0f, 8.0f);
@@ -1682,6 +1692,7 @@ TEST_F(GameplaySpecTest, CreateObject2DAddsStaticObjectAndBroadcasts)
 TEST_F(GameplaySpecTest, DestroyObject2DRemovesObjectAndBroadcasts)
 {
     setUpRoom();
+    allowClientObjects();
     auto* room = server::RoomStorage::getRoomById(ROOM_ID);
     room->addObject(Object2D(OBJECT_ID, Vector2f(1.0f, 2.0f), Vector2f(3.0f, 4.0f)));
 
@@ -1700,6 +1711,7 @@ TEST_F(GameplaySpecTest, DestroyObject2DRemovesObjectAndBroadcasts)
 TEST_F(GameplaySpecTest, MoveObject2DOffsetsPositionAndBroadcasts)
 {
     setUpRoom();
+    allowClientObjects();
     auto* room = server::RoomStorage::getRoomById(ROOM_ID);
     room->addObject(Object2D(OBJECT_ID, Vector2f(1.0f, 2.0f), Vector2f(3.0f, 4.0f)));
 
@@ -1722,6 +1734,7 @@ TEST_F(GameplaySpecTest, MoveObject2DOffsetsPositionAndBroadcasts)
 TEST_F(GameplaySpecTest, MoveObject2DUnknownObjectFails)
 {
     setUpRoom();
+    allowClientObjects();
 
     EXPECT_EQ(read(moveObject2DBytes(OBJECT_ID, Vector2f(1.0f, 1.0f)), *m_sender),
               server::CommandResult::failure);
@@ -1730,6 +1743,7 @@ TEST_F(GameplaySpecTest, MoveObject2DUnknownObjectFails)
 TEST_F(GameplaySpecTest, CreateObject3DAddsStaticObjectAndBroadcasts)
 {
     setUpRoom();
+    allowClientObjects();
     auto targetMessages = receivedMessages(*m_target);
 
     const Vector3f position(1.0f, 2.0f, 3.0f);
@@ -1766,6 +1780,7 @@ TEST_F(GameplaySpecTest, CreateObject3DAddsStaticObjectAndBroadcasts)
 TEST_F(GameplaySpecTest, DestroyObject3DRemovesObjectAndBroadcasts)
 {
     setUpRoom();
+    allowClientObjects();
     auto* room = server::RoomStorage::getRoomById(ROOM_ID);
     room->addObject(Object3D(OBJECT_ID, Vector3f(1.0f, 2.0f, 3.0f), Vector3f(4.0f, 5.0f, 6.0f)));
 
@@ -1784,6 +1799,7 @@ TEST_F(GameplaySpecTest, DestroyObject3DRemovesObjectAndBroadcasts)
 TEST_F(GameplaySpecTest, MoveObject3DOffsetsPositionAndBroadcasts)
 {
     setUpRoom();
+    allowClientObjects();
     auto* room = server::RoomStorage::getRoomById(ROOM_ID);
     room->addObject(Object3D(OBJECT_ID, Vector3f(1.0f, 2.0f, 3.0f), Vector3f(4.0f, 5.0f, 6.0f)));
 
@@ -1808,9 +1824,215 @@ TEST_F(GameplaySpecTest, MoveObject3DOffsetsPositionAndBroadcasts)
 TEST_F(GameplaySpecTest, MoveObject3DUnknownObjectFails)
 {
     setUpRoom();
+    allowClientObjects();
 
     EXPECT_EQ(read(moveObject3DBytes(OBJECT_ID, Vector3f(1.0f, 1.0f, 1.0f)), *m_sender),
               server::CommandResult::failure);
+}
+
+TEST_F(GameplaySpecTest, ObjectMutationsRequireRoomOptIn)
+{
+    setUpRoom();
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    ASSERT_FALSE(room->isClientObjectCreationAllowed());
+    auto targetMessages = receivedMessages(*m_target);
+
+    EXPECT_EQ(read(createObject2DBytes({1.0f, 2.0f}, {3.0f, 4.0f}, "sprites/tree.png"),
+                   *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(createObject3DBytes({1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f},
+                                       "models/house.obj"),
+                   *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(createMoving2DBytes({1.0f, 2.0f}, {1.0f, 1.0f}, {1.0f, 0.0f}, 0.001f,
+                                       MovementType::linear, ""),
+                   *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(createMoving3DBytes({1.0f, 2.0f, 3.0f}, {1.0f, 1.0f, 1.0f},
+                                       {1.0f, 0.0f, 0.0f}, 0.001f,
+                                       MovementType::linear, ""),
+                   *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(moveObject2DBytes(OBJECT_ID, {1.0f, 1.0f}), *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(moveObject3DBytes(OBJECT_ID, {1.0f, 1.0f, 1.0f}), *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(destroyObject2DBytes(OBJECT_ID), *m_sender), server::CommandResult::failure);
+    EXPECT_EQ(read(destroyObject3DBytes(OBJECT_ID), *m_sender), server::CommandResult::failure);
+
+    EXPECT_TRUE(room->getObjects2D().empty());
+    EXPECT_TRUE(room->getObjects3D().empty());
+    EXPECT_TRUE(targetMessages.empty());
+}
+
+TEST_F(GameplaySpecTest, ObjectCreationValidatesPayloadAndAllowsValidObjects)
+{
+    setUpRoom();
+    allowClientObjects();
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+
+    const Vector2f position2D(7.0f, 8.0f);
+    const Vector2f dimensions2D(2.0f, 3.0f);
+    const auto valid2D = createObject2DBytes(position2D, dimensions2D, "sprites/tree.png");
+    auto truncated2D = valid2D;
+    truncated2D.resize(3 + 15);
+
+    EXPECT_EQ(read(truncated2D, *m_sender), server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createObject2DBytes({std::numeric_limits<float>::quiet_NaN(), 8.0f},
+                                       dimensions2D, "sprites/tree.png"),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createObject2DBytes({1000000.0f, 8.0f}, dimensions2D, "sprites/tree.png"),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createObject2DBytes(position2D, {-1.0f, 3.0f}, "sprites/tree.png"),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createObject2DBytes(position2D, dimensions2D, "../secret"), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createObject2DBytes(position2D, dimensions2D, "/tmp/file"), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createObject2DBytes(position2D, dimensions2D, "sprites/"), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_TRUE(room->getObjects2D().empty());
+
+    ASSERT_EQ(read(valid2D, *m_sender), server::CommandResult::success);
+    ASSERT_EQ(room->getObjects2D().size(), 1);
+    EXPECT_EQ(room->getObjects2D()[0].getFilepath(), "sprites/tree.png");
+
+    const Vector3f position3D(1.0f, 2.0f, 3.0f);
+    const Vector3f dimensions3D(4.0f, 5.0f, 6.0f);
+    const auto valid3D = createObject3DBytes(position3D, dimensions3D, "models/house.obj");
+    auto truncated3D = valid3D;
+    truncated3D.resize(3 + 23);
+
+    EXPECT_EQ(read(truncated3D, *m_sender), server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createObject3DBytes({1.0f, 2.0f, std::numeric_limits<float>::infinity()},
+                                       dimensions3D, "models/house.obj"),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createObject3DBytes(position3D, {4.0f, 5.0f, 0.0f}, "models/house.obj"),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createObject3DBytes(position3D, dimensions3D, "models/../secret"),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_TRUE(room->getObjects3D().empty());
+
+    ASSERT_EQ(read(valid3D, *m_sender), server::CommandResult::success);
+    ASSERT_EQ(room->getObjects3D().size(), 1);
+    EXPECT_EQ(room->getObjects3D()[0].getFilepath(), "models/house.obj");
+}
+
+TEST_F(GameplaySpecTest, ObjectMoveRejectsNonFiniteAndClampsToWorldBounds)
+{
+    setUpRoom();
+    allowClientObjects();
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    const auto& limits = server::GameplayLimits::get();
+
+    room->addObject(Object2D(OBJECT_ID, Vector2f(1.0f, 2.0f), Vector2f(3.0f, 4.0f)));
+    EXPECT_EQ(read(moveObject2DBytes(OBJECT_ID,
+                                     {std::numeric_limits<float>::quiet_NaN(), 1.0f}),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_FLOAT_EQ(room->getObjects2D()[0].getPosition().x, 1.0f);
+
+    ASSERT_EQ(read(moveObject2DBytes(OBJECT_ID, {limits.getMaxHorizontalPosition() * 2.0f, 0.0f}),
+                   *m_sender),
+              server::CommandResult::success);
+    EXPECT_FLOAT_EQ(room->getObjects2D()[0].getPosition().x,
+                    limits.getMaxHorizontalPosition());
+
+    room->addObject(Object3D(OBJECT_ID, Vector3f(1.0f, 2.0f, 3.0f), Vector3f(4.0f, 5.0f, 6.0f)));
+    EXPECT_EQ(read(moveObject3DBytes(OBJECT_ID, {1.0f, 1.0f,
+                                                 std::numeric_limits<float>::infinity()}),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_FLOAT_EQ(room->getObjects3D()[0].getPosition().z, 3.0f);
+
+    ASSERT_EQ(read(moveObject3DBytes(OBJECT_ID, {0.0f, limits.getMaxHeight() * 2.0f, 0.0f}),
+                   *m_sender),
+              server::CommandResult::success);
+    EXPECT_FLOAT_EQ(room->getObjects3D()[0].getPosition().y, limits.getMaxHeight());
+}
+
+TEST_F(GameplaySpecTest, ObjectDestroyValidatesTheObjectId)
+{
+    setUpRoom();
+    allowClientObjects();
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+
+    auto truncated = destroyObject2DBytes(OBJECT_ID);
+    truncated.resize(3 + 7);
+    EXPECT_EQ(read(truncated, *m_sender), server::CommandResult::invalid_input);
+    EXPECT_EQ(read(destroyObject2DBytes(OBJECT_ID), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(destroyObject3DBytes(OBJECT_ID), *m_sender),
+              server::CommandResult::invalid_input);
+}
+
+TEST_F(GameplaySpecTest, MovingObjectCreationValidatesTimingAndMovement)
+{
+    setUpRoom();
+    allowClientObjects();
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    const Vector2f start(1.0f, 2.0f);
+    const Vector2f dimensions(1.0f, 1.0f);
+    const Vector2f movement(1.0f, 0.0f);
+
+    EXPECT_EQ(read(createMoving2DBytes(start, dimensions, movement, 0.0f,
+                                       MovementType::linear, ""),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createMoving2DBytes(start, dimensions, movement, 0.251f,
+                                       MovementType::linear, ""),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createMoving2DBytes(start, dimensions,
+                                       {std::numeric_limits<float>::quiet_NaN(), 0.0f}, 0.1f,
+                                       MovementType::linear, ""),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createMoving2DBytes(start, dimensions, movement, 0.1f,
+                                       static_cast<MovementType>(99), ""),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(createMoving2DBytes(start, dimensions, movement, 0.1f,
+                                       MovementType::linear, "../secret"),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_TRUE(room->getObjects2D().empty());
+}
+
+TEST_F(GameplaySpecTest, ObjectHandlersIgnoreMissingRooms)
+{
+    // The sender claims a room that is not stored on the server. None of these
+    // commands may dereference a null room.
+    m_sender->setRoomId(ROOM_ID);
+
+    EXPECT_EQ(read(createObject2DBytes({1.0f, 2.0f}, {3.0f, 4.0f}, "sprites/tree.png"),
+                   *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(createObject3DBytes({1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f},
+                                       "models/house.obj"),
+                   *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(createMoving2DBytes({1.0f, 2.0f}, {1.0f, 1.0f}, {1.0f, 0.0f}, 0.001f,
+                                       MovementType::linear, ""),
+                   *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(createMoving3DBytes({1.0f, 2.0f, 3.0f}, {1.0f, 1.0f, 1.0f},
+                                       {1.0f, 0.0f, 0.0f}, 0.001f,
+                                       MovementType::linear, ""),
+                   *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(moveObject2DBytes(OBJECT_ID, {1.0f, 1.0f}), *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(moveObject3DBytes(OBJECT_ID, {1.0f, 1.0f, 1.0f}), *m_sender),
+              server::CommandResult::failure);
+    EXPECT_EQ(read(destroyObject2DBytes(OBJECT_ID), *m_sender), server::CommandResult::failure);
+    EXPECT_EQ(read(destroyObject3DBytes(OBJECT_ID), *m_sender), server::CommandResult::failure);
 }
 
 // ---------------------------------------------------------------------------

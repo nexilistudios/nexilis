@@ -20,24 +20,45 @@
 #include <nexilis/server/command/commands.hh>
 #include <nexilis/server/movement.hh>
 #include <nexilis/server/room_storage.hh>
+#include <nexilis/server/validation.hh>
+
+#include <cmath>
 
 namespace nexilis::server
 {
 
+namespace
+{
+constexpr float kMaxClientMovementDelta = 0.25f;
+}
+
 CommandResult ServerImpl::room_object2d_createMoving(const DefaultArgs& args)
 {
     auto& user = args.getUser();
+    auto room = RoomStorage::getRoomById(user.getRoomId());
+    if (!room || !room->isClientObjectCreationAllowed())
+        return CommandResult::failure;
+
     auto data = args.getData();
 
     // Get messagedata.
     auto payload = Util::removeAmountOfBytesFromVector(data, 3);
+    if (payload.size() < 29 || payload.size() > 29 + 256)
+        return CommandResult::invalid_input;
     auto startingPosition = Util::vector2fFromFront(payload);
     auto dimensions = Util::vector2fFromFront(Util::removeAmountOfBytesFromVector(payload, 8));
     auto movement = Util::vector2fFromFront(Util::removeAmountOfBytesFromVector(payload, 16));
     auto deltaTime = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 24));
     auto movementType = static_cast<MovementType>(payload[28]);
-    auto fileBytes = Util::removeAmountOfBytesFromVector(payload, 29);
-    auto filepath = Util::convertToString(fileBytes);
+    auto filepath = Util::convertToString(Util::removeAmountOfBytesFromVector(payload, 29));
+
+    if (!validation::isValidPosition(startingPosition) ||
+        !validation::isValidDimensions(dimensions) ||
+        !validation::isFinite(movement) || !std::isfinite(deltaTime) ||
+        deltaTime <= 0.0f || deltaTime > kMaxClientMovementDelta ||
+        (movementType != MovementType::eased && movementType != MovementType::linear) ||
+        !validation::isValidOptionalAssetPath(filepath))
+        return CommandResult::invalid_input;
 
     // Create new object.
     auto object = nexilis::Object2D(Util::getRandomUint64(), startingPosition, dimensions);
@@ -46,7 +67,6 @@ CommandResult ServerImpl::room_object2d_createMoving(const DefaultArgs& args)
     Log::info("Created object with id: ", objectId);
 
     // Add newly created object to storage.
-    auto room = RoomStorage::getRoomById(user.getRoomId());
     room->addObject(std::move(object));
 
     std::map<std::string, boost::json::value> params{
@@ -75,8 +95,6 @@ CommandResult ServerImpl::room_object2d_createMoving(const DefaultArgs& args)
                 return Movement::linear(progress, totalDistance);
             };
             break;
-        default:
-            Log::error("Undefined movement type!");
     }
 
     auto base_move = std::make_unique<Movement2D>(MovementData(objectId, deltaTime, data, args.getMessageId()), movement, movementFunction);

@@ -24,12 +24,19 @@ namespace nexilis::server
 CommandResult ServerImpl::room_object3d_destroy(const DefaultArgs& args)
 {
     auto& user = args.getUser();
+    auto room = RoomStorage::getRoomById(user.getRoomId());
+    if (!room || !room->isClientObjectCreationAllowed())
+        return CommandResult::failure;
+
     auto data = args.getData();
     auto payload = Util::removeAmountOfBytesFromVector(data, 3);
+    if (payload.size() != 8)
+        return CommandResult::invalid_input;
     auto objectId = Util::uint64FromFront(payload);
+    if (!room->getObject3DById(objectId))
+        return CommandResult::invalid_input;
 
     // Remove from storage.
-    auto room = RoomStorage::getRoomById(user.getRoomId());
     room->deleteObject3D(objectId);
 
     std::map<std::string, boost::json::value> params{

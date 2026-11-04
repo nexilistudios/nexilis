@@ -46,6 +46,7 @@ Room::Room(Room&& other)
       m_spawnHandler(std::move(other.m_spawnHandler)),
       m_gameItemPickupHandler(std::move(other.m_gameItemPickupHandler)),
       m_clientPositionAllowed(other.m_clientPositionAllowed),
+      m_clientObjectCreationAllowed(other.m_clientObjectCreationAllowed),
       m_clientGameItemCreationAllowed(other.m_clientGameItemCreationAllowed),
       m_overlappingAllowed(other.m_overlappingAllowed.load())
 {
@@ -72,6 +73,7 @@ Room& Room::operator=(Room&& other)
         m_spawnHandler = std::move(other.m_spawnHandler);
         m_gameItemPickupHandler = std::move(other.m_gameItemPickupHandler);
         m_clientPositionAllowed = other.m_clientPositionAllowed;
+        m_clientObjectCreationAllowed = other.m_clientObjectCreationAllowed;
         m_clientGameItemCreationAllowed = other.m_clientGameItemCreationAllowed;
         m_overlappingAllowed.store(other.m_overlappingAllowed.load());
         BaseRoom::operator=(std::move(other));
@@ -278,6 +280,14 @@ void Room::spawnPlayer(uint64_t playerId)
 {
     if (m_spawnHandler)
         m_spawnHandler(*this, playerId);
+}
+void Room::setClientObjectCreationAllowed(bool allowed)
+{
+    m_clientObjectCreationAllowed = allowed;
+}
+bool Room::isClientObjectCreationAllowed() const
+{
+    return m_clientObjectCreationAllowed;
 }
 void Room::setClientGameItemCreationAllowed(bool allowed)
 {
