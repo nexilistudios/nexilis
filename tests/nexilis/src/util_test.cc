@@ -15,6 +15,8 @@
    along with this file.  If not, see <https://gnu.org>. */
 
 #include <gtest/gtest.h>
+#include <limits>
+#include <stdexcept>
 
 #include <nexilis/util.hh>
 
@@ -518,6 +520,34 @@ TEST(UtilRandomTest, GetRandomIntInRange)
         EXPECT_GE(val, 5);
         EXPECT_LE(val, 10);
     }
+}
+
+TEST(UtilRandomTest, GetRandomIntSupportsNegativeAndFullRanges)
+{
+    for (int iteration = 0; iteration < 100; ++iteration)
+    {
+        const auto negative = Util::getRandomInt(-10, -5);
+        EXPECT_GE(negative, -10);
+        EXPECT_LE(negative, -5);
+        EXPECT_NO_THROW(Util::getRandomInt(std::numeric_limits<int>::min(),
+                                           std::numeric_limits<int>::max()));
+    }
+}
+
+TEST(UtilRandomTest, GetRandomIntSingletonAndReversedRanges)
+{
+    EXPECT_EQ(Util::getRandomInt(0, 0), 0);
+    EXPECT_EQ(Util::getRandomInt(std::numeric_limits<int>::min(), std::numeric_limits<int>::min()),
+              std::numeric_limits<int>::min());
+    EXPECT_EQ(Util::getRandomInt(std::numeric_limits<int>::max(), std::numeric_limits<int>::max()),
+              std::numeric_limits<int>::max());
+    EXPECT_THROW(Util::getRandomInt(10, 5), std::invalid_argument);
+}
+
+TEST(UtilRandomTest, RandomIdsStayNonzeroAcrossCalls)
+{
+    for (int iteration = 0; iteration < 100; ++iteration)
+        EXPECT_NE(Util::getRandomUint64(), 0u);
 }
 
 TEST(UtilRandomTest, GetRandomStringCorrectLength)

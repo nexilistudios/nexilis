@@ -21,17 +21,44 @@
 
 #include <boost/json/serialize.hpp>
 
-#include <bitset>
+#include <openssl/rand.h>
+
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <random>
 #include <sstream>
+#include <stdexcept>
 
 namespace nexilis
 {
 
-static std::random_device rand_dev;
+namespace
+{
+/// Uniform random bit generator backed directly by OpenSSL. No predictable
+/// PRNG state or fallback is used when the cryptographic source fails.
+class CryptoRandom
+{
+public:
+    using result_type = uint64_t;
+    static constexpr result_type min()
+    {
+        return 0;
+    }
+    static constexpr result_type max()
+    {
+        return std::numeric_limits<result_type>::max();
+    }
+    result_type operator()() const
+    {
+        result_type value;
+        if (RAND_bytes(reinterpret_cast<unsigned char*>(&value), sizeof(value)) != 1)
+            throw std::runtime_error("Cryptographic random generation failed");
+        return value;
+    }
+};
+} // namespace
 
 std::string Util::convertToString(nx_data bytes)
 {
@@ -318,45 +345,35 @@ uint64_t Util::toUint64(const boost::json::value& val)
 
 uint64_t Util::getRandomUint64()
 {
-    std::mt19937_64 generator(rand_dev());
-    std::uniform_int_distribution<uint64_t> dist(0, NEXILIS_MAX);
-
-    uint64_t randomValue;
+    CryptoRandom generator;
+    uint64_t value;
     do
     {
-        randomValue = dist(generator);
-    } while (std::bitset<64>(randomValue).count() < 32); // Ensure at least 32 bits are set
-
-    assert((std::is_same<decltype(randomValue), uint64_t>::value));
-
-    if (randomValue == 0)
-        return getRandomUint64();
-
-    return randomValue;
+        value = generator();
+    } while (value == 0);
+    return value;
 }
 
 int Util::getRandomInt(int from, int to)
 {
-    std::mt19937_64 generator(rand_dev());
-    std::uniform_int_distribution<int> dist(from, to);
-    int randomValue = dist(generator);
-
-    assert(randomValue >= from);
-    assert(randomValue <= to);
-    return randomValue;
+    if (from > to)
+        throw std::invalid_argument("Random integer range is reversed");
+    CryptoRandom generator;
+    std::uniform_int_distribution<int> distribution(from, to);
+    return distribution(generator);
 }
 
 std::string Util::getRandomString(uint64_t charAmount)
 {
-    std::mt19937 eng(rand_dev());
+    std::string result;
+    if (charAmount > result.max_size())
+        throw std::length_error("Random string length is too large");
+    result.resize(static_cast<std::size_t>(charAmount));
+    CryptoRandom generator;
     std::uniform_int_distribution<int> distribution('A', 'Z');
-
-    std::string randomString;
-    for (uint64_t i = 0; i < charAmount; ++i)
-    {
-        randomString += static_cast<char>(distribution(eng));
-    }
-    return randomString;
+    for (auto& character : result)
+        character = static_cast<char>(distribution(generator));
+    return result;
 }
 
 nx_data Util::removeAmountOfBytesFromVector(nx_data original, uint8_t amount)

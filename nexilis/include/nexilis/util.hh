@@ -181,18 +181,21 @@ public:
 
     /// \defgroup RandFunctions Functions that generate random values.
 
-    /// Get random uint64_t value between 0 and max uint64.
+    /// Get a cryptographically random nonzero uint64_t.
+    /// Random-source failures throw std::runtime_error; there is no fallback.
     /// \ingroup RandFunctions
     static uint64_t getRandomUint64();
 
-    /// Get random integer between values.
+    /// Get a cryptographically random integer in the inclusive range.
+    /// Reversed ranges throw std::invalid_argument; source failures throw std::runtime_error.
     /// \param from The smallest possible value.
     /// \param to The biggest possible value.
     /// \return The random integer.
     /// \ingroup RandFunctions
     static int getRandomInt(int from, int to);
 
-    /// Get random characters from 'A' to 'Z'.
+    /// Get cryptographically random characters from 'A' to 'Z'.
+    /// Source failures throw std::runtime_error; oversized lengths throw std::length_error.
     /// \param charAmount The amount of characters in the string.
     /// \ingroup RandFunctions
     static std::string getRandomString(uint64_t charAmount);

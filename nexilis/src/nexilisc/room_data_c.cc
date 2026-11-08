@@ -17,12 +17,24 @@
 #include <nexilis/room_data.hh>
 #include <nexilisc/room_data_c.h>
 
+#include <memory>
+
 nexilis_RoomData* nexilis_room_data_create(uint64_t creator_id, const char* name, nexilis_RoomContext context, uint32_t max_size)
 {
-    uint64_t room_id = nexilis::Util::getRandomUint64();
-    auto room_data = new nexilis_RoomData();
-    room_data->data = new nexilis::RoomData(creator_id, name, room_id, static_cast<nexilis::RoomData::Context>(context), max_size);
-    return room_data;
+    if (!name)
+        return nullptr;
+    try
+    {
+        uint64_t room_id = nexilis::Util::getRandomUint64();
+        auto data = std::make_unique<nexilis::RoomData>(creator_id, name, room_id, static_cast<nexilis::RoomData::Context>(context), max_size);
+        auto wrapper = new nexilis_RoomData{data.get()};
+        data.release();
+        return wrapper;
+    }
+    catch (...)
+    {
+        return nullptr;
+    }
 }
 
 void nexilis_room_data_destroy(nexilis_RoomData* room_data)

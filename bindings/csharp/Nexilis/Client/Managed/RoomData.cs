@@ -30,6 +30,8 @@ namespace Nexilis.Client
                 throw new ArgumentException(nameof(name));
             }
             _nativePtr = RoomDataNative.nexilis_room_data_create(creatorId, name, context, maxSize);
+            if (_nativePtr == IntPtr.Zero)
+                throw new InvalidOperationException("Failed to create native room data");
         }
 
         public string Name

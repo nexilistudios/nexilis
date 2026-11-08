@@ -41,6 +41,11 @@ TEST(RoomDataTest_c, CreateWithAllParams)
     nexilis_room_data_destroy(room);
 }
 
+TEST(RoomDataTest_c, NullNameFailsWithoutThrowing)
+{
+    EXPECT_EQ(nexilis_room_data_create(1, nullptr, ROOM_CONTEXT_3D, 20), nullptr);
+}
+
 TEST(RoomDataTest_c, CreateWith3DContext)
 {
     nexilis_RoomData* room = nexilis_room_data_create(1, "MyRoom", ROOM_CONTEXT_3D, 20);

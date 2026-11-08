@@ -326,3 +326,35 @@ Boost UDP also contains exceptions in the surrounding datagram-processing loop,
 so a failed request does not stop later datagrams from being processed.
 A dispatch error does not roll back changes made before the exception: for
 example, creation can succeed before an acknowledgement callback throws.
+
+## Linux Unix socket restrictions
+
+Unix stream and datagram paths must be nonempty filesystem paths without NULs,
+shorter than `sockaddr_un::sun_path` (108 bytes on Linux, including the required
+terminator). Datagram clients also validate their longer generated reply path.
+Invalid paths and socket bind/listen failures stop setup. Existing files and
+socket nodes are never removed to make room for a new binding; clean up stale
+nodes explicitly. Created socket files use permissions `0600`.
+
+Stream peers are checked with `SO_PEERCRED`; both datagram endpoints verify
+`SCM_CREDENTIALS` supplied by the kernel using `SO_PASSCRED`. The peer UID must
+match the process's effective UID. Missing/truncated credentials are rejected.
+This restricts access by local account, while processes sharing that account
+still need application authentication. Place socket paths in a trusted directory.
+
+Unix stream server shutdown wakes blocked accepts/reads before joining workers.
+Its stored send callbacks retain connection state and reject sends after closure,
+including after the server is destroyed. Unix stream servers and datagram
+protocols must be stopped before moving them while a worker is joinable.
+
+## Random identifiers
+
+The C++ `Util` random helpers use OpenSSL `RAND_bytes` for identifiers, integer
+ranges, and uppercase random strings. IDs remain nonzero. Random-source failures
+throw `std::runtime_error` rather than falling back to a predictable generator.
+`getRandomInt` rejects reversed ranges with `std::invalid_argument`; bounds are
+inclusive. Identifiers remain public values and do not replace authentication
+or storage collision checks.
+
+The C `nexilis_room_data_create` returns null on allocation or random-source
+failure, and the C# `RoomData` constructor reports a construction exception.

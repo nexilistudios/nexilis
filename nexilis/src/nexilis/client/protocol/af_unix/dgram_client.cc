@@ -240,8 +240,10 @@ void DgramClient::receiveLoop()
         message.msg_controllen = sizeof(control);
         const ssize_t bytesRead = recvmsg(m_clientSocket, &message, 0);
 
-        if (bytesRead > 0 && unix_socket::sameUser(message))
+        if (bytesRead > 0)
         {
+            if (!unix_socket::sameUser(message))
+                continue;
             buffer.resize(bytesRead);
             Log::info("DgramClient received ", bytesRead, " bytes");
 
@@ -263,11 +265,7 @@ void DgramClient::receiveLoop()
                 Log::error("Error receiving message: ", strerror(errno));
             }
         }
-        else
-        {
-            Log::info("DgramClient: connection closed by peer");
-            break;
-        }
+        // A zero-length datagram is not a connection close.
     }
 }
 
