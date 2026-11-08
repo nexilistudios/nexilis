@@ -21,6 +21,14 @@ set up. Boost TCP also completes its TCP and TLS-PSK connection before sending
 the payload. The client's `waitUntil*Ready()` checks run after this exchange
 because they wait for the server's authentication response.
 
+The Boost TCP server rejects request payload lengths above `NEXILIS_BUFFER`
+(1024 bytes, including request headers and MAC) before allocating a body and
+closes the connection. Once frame data is readable, the complete length prefix
+and body must arrive within five seconds; partial reads do not reset this
+deadline. TLS handshakes have a separate five-second deadline. Idle polling
+alone does not close established connections. These limits apply to incoming
+server requests, not to the Boost TCP client's JSON response parser.
+
 UDP messages do not use a length prefix — each datagram is a single message.
 The Boost UDP and af_inet UDP transports add an authentication envelope. A
 new client sends a 20-byte `NXUH` hello and receives a 20-byte `NXUC` cookie

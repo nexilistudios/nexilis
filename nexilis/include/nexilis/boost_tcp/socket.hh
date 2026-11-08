@@ -67,6 +67,8 @@ public:
     bool tlsEnabled() const;
 
     bool send(const nx_data& data);
+    /// Poll for the first byte, then require a complete frame within five seconds.
+    /// Frames larger than NEXILIS_BUFFER and incomplete frames close the connection.
     bool receive(nx_data& data, size_t timeout_ms = 100);
     void close();
     void forceClose();
@@ -86,6 +88,9 @@ private:
 private:
     using TlsStream = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>;
 
+    // Private executor lets synchronous callers drive deadlines without relying
+    // on the server's shared io_context or spawning a timer thread.
+    std::shared_ptr<boost::asio::io_context> m_io;
     std::shared_ptr<boost::asio::ssl::context> m_context;
     std::shared_ptr<TlsStream> m_stream;
     mutable std::mutex m_mutex;

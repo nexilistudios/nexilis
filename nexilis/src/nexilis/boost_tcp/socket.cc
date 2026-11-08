@@ -16,32 +16,79 @@
 
 #include <nexilis/boost_tcp/socket.hh>
 #include <nexilis/logger/log.hh>
+#include <nexilis/nexilis_constants.hh>
 
-#include <boost/asio/buffers_iterator.hpp>
 #include <boost/asio/connect.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/read.hpp>
-#include <boost/asio/streambuf.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/write.hpp>
 
 #include <openssl/ssl.h>
 
+#include <chrono>
 #include <cstdint>
 #include <utility>
 
 namespace nexilis::boost_tcp
 {
 
-Socket::Socket(boost::asio::io_context& io) noexcept
+namespace
+{
+using Clock = std::chrono::steady_clock;
+constexpr auto kReadDeadline = std::chrono::seconds(5);
+
+// All operations use the socket's private executor and finish before returning.
+// Cancellation handlers are drained before references to local buffers expire.
+template <typename Initiate>
+bool runUntil(boost::asio::io_context& io, boost::asio::ip::tcp::socket& socket,
+              Clock::time_point deadline, Initiate initiate)
+{
+    io.restart();
+    boost::asio::steady_timer timer(io, deadline);
+    boost::system::error_code result = boost::asio::error::operation_aborted;
+    bool expired = false;
+    timer.async_wait([&](const boost::system::error_code& ec)
+                     {
+        if (!ec)
+        {
+            expired = true;
+            boost::system::error_code ignored;
+            socket.cancel(ignored);
+        } });
+    try
+    {
+        initiate([&](const boost::system::error_code& ec, auto...)
+                 {
+            result = ec;
+            timer.cancel(); });
+    }
+    catch (...)
+    {
+        boost::system::error_code ignored;
+        socket.cancel(ignored);
+        timer.cancel();
+        io.run();
+        return false;
+    }
+    io.run();
+    return !expired && !result;
+}
+} // namespace
+
+Socket::Socket(boost::asio::io_context&) noexcept
     : NxClass("boost_tcp::Socket-server"),
+      m_io(std::make_shared<boost::asio::io_context>()),
       m_context(std::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::tls)),
-      m_stream(std::make_shared<TlsStream>(io, *m_context))
+      m_stream(std::make_shared<TlsStream>(*m_io, *m_context))
 {
 }
 
-Socket::Socket(boost::asio::io_context& io, const std::string& host, uint16_t port) noexcept
+Socket::Socket(boost::asio::io_context&, const std::string& host, uint16_t port) noexcept
     : NxClass("boost_tcp::Socket-client"),
+      m_io(std::make_shared<boost::asio::io_context>()),
       m_context(std::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::tls)),
-      m_stream(std::make_shared<TlsStream>(io, *m_context)),
+      m_stream(std::make_shared<TlsStream>(*m_io, *m_context)),
       m_tlsServer(false),
       m_endpointId("client:" + host + ":" + std::to_string(port))
 {
@@ -49,6 +96,7 @@ Socket::Socket(boost::asio::io_context& io, const std::string& host, uint16_t po
 
 Socket::Socket(Socket&& other) noexcept
     : NxClass(std::move(other)),
+      m_io(std::move(other.m_io)),
       m_context(std::move(other.m_context)),
       m_stream(std::move(other.m_stream)),
       m_connected(other.m_connected.load()),
@@ -68,6 +116,8 @@ Socket& Socket::operator=(Socket&& other) noexcept
         std::lock_guard<std::mutex> lock(m_mutex);
         std::lock_guard<std::mutex> other_lock(other.m_mutex);
 
+        m_stream.reset();
+        m_io = std::move(other.m_io);
         m_context = std::move(other.m_context);
         m_stream = std::move(other.m_stream);
         m_connected = other.m_connected.load();
@@ -140,7 +190,10 @@ void Socket::assign(boost::asio::ip::tcp::socket&& socket)
     std::lock_guard<std::mutex> lock(m_mutex);
     // Rebuild the stream around the accepted socket so a TLS context set with
     // enableTls() before assign() is picked up automatically.
-    m_stream = std::make_shared<TlsStream>(std::move(socket), *m_context);
+    boost::asio::ip::tcp::socket local(*m_io);
+    const auto protocol = socket.local_endpoint().protocol();
+    local.assign(protocol, socket.release());
+    m_stream = std::make_shared<TlsStream>(std::move(local), *m_context);
     m_tlsHandshaken.store(false);
     m_endpointId = "server:" + std::to_string(m_stream->lowest_layer().local_endpoint().port());
     m_connected = m_stream->lowest_layer().is_open();
@@ -160,13 +213,14 @@ bool Socket::ensureHandshakeInternal()
         return false;
     }
 
-    boost::system::error_code ec;
-    m_stream->handshake(m_tlsServer ? boost::asio::ssl::stream_base::server
-                                    : boost::asio::ssl::stream_base::client,
-                        ec);
-    if (ec)
+    const bool complete = runUntil(*m_io, m_stream->next_layer(), Clock::now() + kReadDeadline,
+                                   [&](auto handler)
+                                   { m_stream->async_handshake(m_tlsServer ? boost::asio::ssl::stream_base::server
+                                                                           : boost::asio::ssl::stream_base::client,
+                                                               std::move(handler)); });
+    if (!complete)
     {
-        Log::error(header(), "TLS handshake failed: ", ec.message());
+        Log::error(header(), "TLS handshake failed or timed out");
         closeInternal();
         return false;
     }
@@ -275,24 +329,20 @@ bool Socket::receive(nx_data& data, size_t timeout_ms)
             return false;
         }
 
-        // select() reported data available, so these blocking reads complete
-        // promptly and never stall the mutex for long.
-        boost::system::error_code ec;
-
-        // Read 4-byte length prefix (big-endian uint32_t)
+        // One deadline covers the complete prefix and body, so a peer cannot
+        // extend it indefinitely by trickling bytes.
+        const auto deadline = Clock::now() + kReadDeadline;
+        auto readExact = [&](auto buffer)
+        {
+            return runUntil(*m_io, m_stream->next_layer(), deadline, [&](auto handler)
+                            {
+                if (m_tls)
+                    boost::asio::async_read(*m_stream, buffer, std::move(handler));
+                else
+                    boost::asio::async_read(m_stream->next_layer(), buffer, std::move(handler)); });
+        };
         uint8_t len_buf[4];
-        if (m_tls)
-        {
-            boost::asio::read(*m_stream, boost::asio::buffer(len_buf),
-                              boost::asio::transfer_exactly(4), ec);
-        }
-        else
-        {
-            boost::asio::read(m_stream->next_layer(), boost::asio::buffer(len_buf),
-                              boost::asio::transfer_exactly(4), ec);
-        }
-
-        if (ec)
+        if (!readExact(boost::asio::buffer(len_buf)))
         {
             closeInternal();
             return false;
@@ -303,35 +353,21 @@ bool Socket::receive(nx_data& data, size_t timeout_ms)
                                 (static_cast<uint32_t>(len_buf[2]) << 8) |
                                 (static_cast<uint32_t>(len_buf[3]));
 
-        if (payload_size == 0)
+        if (payload_size > NEXILIS_BUFFER)
         {
             data.clear();
-            return true;
-        }
-
-        // Read exactly payload_size bytes
-        boost::asio::streambuf buf;
-        if (m_tls)
-        {
-            boost::asio::read(*m_stream, buf,
-                              boost::asio::transfer_exactly(payload_size), ec);
-        }
-        else
-        {
-            boost::asio::read(m_stream->next_layer(), buf,
-                              boost::asio::transfer_exactly(payload_size), ec);
-        }
-
-        if (ec)
-        {
             closeInternal();
             return false;
         }
 
-        auto bufs = buf.data();
-        data.assign(
-                boost::asio::buffers_begin(bufs),
-                boost::asio::buffers_end(bufs));
+        nx_data payload(payload_size);
+        if (payload_size != 0 && !readExact(boost::asio::buffer(payload)))
+        {
+            data.clear();
+            closeInternal();
+            return false;
+        }
+        data = std::move(payload);
         return true;
     }
     catch (...)

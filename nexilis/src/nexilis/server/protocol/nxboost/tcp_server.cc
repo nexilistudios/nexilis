@@ -280,51 +280,6 @@ bool TCPServer::startListening()
     return true;
 }
 
-nx_data TCPServer::receiveMessage(boost::asio::ip::tcp::socket& socket)
-{
-    nx_data data;
-
-    boost::asio::streambuf receiveBuffer;
-    boost::system::error_code error_code;
-
-    boost::asio::read(socket, receiveBuffer, boost::asio::transfer_at_least(1), error_code);
-
-    if (error_code == boost::asio::error::eof)
-    {
-        return data;
-    }
-    else if (error_code == boost::asio::error::operation_aborted)
-    {
-        Log::debug(header(), "receiveMessage aborted due to shutdown");
-        return data;
-    }
-    else if (error_code)
-    {
-        // Handle other errors
-        Log::error(header(), "Error reading from client: ", error_code.message());
-        return data;
-    }
-
-    // Get the sequence of const buffers from the streambuf.
-    const boost::asio::const_buffer& receive_buffer = receiveBuffer.data();
-
-    // Check if the buffer is empty.
-    if (receive_buffer.size() == 0)
-    {
-        Log::info(header(), "Empty data");
-        return data;
-    }
-
-    // Extract the data.
-    const uint8_t* buffer_data = static_cast<const uint8_t*>(receive_buffer.data());
-    size_t buffer_size = receive_buffer.size();
-
-    // Insert the data from the buffer into the vector.
-    data.insert(data.end(), buffer_data, buffer_data + buffer_size);
-
-    return data;
-}
-
 std::string TCPServer::getClientAddress(boost::asio::ip::tcp::socket& socket)
 {
     std::string clientAddress;
