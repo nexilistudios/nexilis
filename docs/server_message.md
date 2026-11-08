@@ -310,3 +310,8 @@ The registry mutex and shared handles protect container access and lifetime.
 They do not synchronize mutable user fields or revoke a command already in
 progress when its user is removed. Applications must synchronize concurrent
 changes to user state separately.
+
+Room sends tolerate stale membership IDs: a missing client is skipped and
+remaining recipients are still attempted. `Command::sendRoomCommand` returns
+`false` if any recipient is missing or cannot be sent the message; a false
+result does not mean that no recipients received it.

@@ -506,6 +506,48 @@ protected:
 };
 
 // ---------------------------------------------------------------------------
+// Room delivery
+// ---------------------------------------------------------------------------
+
+TEST_F(GameplaySpecTest, RoomSendSkipsStaleIdAndContinuesDelivery)
+{
+    setUpRoom();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    // Put a stale ID first so the test also verifies delivery continues.
+    room->getClients().insert(room->getClients().begin(), 999);
+    const nx_data data{1, 2, 3};
+    unsigned senderSends = 0;
+    unsigned targetSends = 0;
+    m_sender->setBoostTCPSend([&](const nx_data& sent)
+                              {
+        EXPECT_EQ(sent, data);
+        ++senderSends; });
+    m_target->setBoostTCPSend([&](const nx_data& sent)
+                              {
+        EXPECT_EQ(sent, data);
+        ++targetSends; });
+
+    EXPECT_FALSE(server::Command::sendRoomCommand(data, *m_sender, protocol));
+    EXPECT_EQ(senderSends, 1);
+    EXPECT_EQ(targetSends, 1);
+}
+
+TEST_F(GameplaySpecTest, RoomSendHandlesClientRemovedBeforeItsTurn)
+{
+    setUpRoom();
+    bool targetSent = false;
+    m_target->setBoostTCPSend([&](const nx_data&)
+                              { targetSent = true; });
+    m_sender->setBoostTCPSend([](const nx_data&)
+                              { EXPECT_TRUE(server::ClientStorage::remove(TARGET_ID)); });
+
+    EXPECT_FALSE(server::Command::sendRoomCommand({1, 2, 3}, *m_sender, protocol));
+    EXPECT_FALSE(targetSent);
+    EXPECT_FALSE(server::ClientStorage::contains(TARGET_ID));
+    m_target = nullptr;
+}
+
+// ---------------------------------------------------------------------------
 // Shoot / damage
 // ---------------------------------------------------------------------------
 
