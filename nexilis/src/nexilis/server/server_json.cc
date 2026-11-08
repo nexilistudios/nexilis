@@ -50,7 +50,7 @@ boost::json::object ServerJson::getClientData()
 {
     boost::json::object clientDataObj;
 
-    auto& clients = ClientStorage::getAllClients();
+    auto clients = ClientStorage::getAllClients();
 
     if (clients.empty())
     {
@@ -76,7 +76,7 @@ boost::json::object ServerJson::getServerData()
     return serverDataObj;
 }
 
-boost::json::array ServerJson::clientsToJSON(const std::vector<std::unique_ptr<User>>& clients)
+boost::json::array ServerJson::clientsToJSON(const std::vector<std::shared_ptr<User>>& clients)
 {
     boost::json::array resultingArray;
 
@@ -130,7 +130,7 @@ boost::json::array ServerJson::roomsToJSON(const std::vector<std::shared_ptr<Roo
 
         for (auto& client : roomClients)
         {
-            auto* clientPointer = ClientStorage::getClientById(client);
+            auto clientPointer = ClientStorage::getClientById(client);
 
             if (clientPointer)
             {

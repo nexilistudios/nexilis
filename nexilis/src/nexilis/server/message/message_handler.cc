@@ -81,17 +81,15 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
     bool newUser = false;
 
     // Does the user actually exist?
-    auto* user = ClientStorage::getClientById(clientId);
-    std::unique_ptr<User> newUserPtr;
+    auto user = ClientStorage::getClientById(clientId);
     if (!user)
     {
         // Create a new user.
         uint64_t newId = Util::getRandomUint64();
-        newUserPtr = std::make_unique<User>(newId, address);
+        user = std::make_shared<User>(newId, address);
         Log::info(header(), "Created new user: ", newId);
         auto username = Util::getRandomString(10);
-        newUserPtr->setUsername(username);
-        user = newUserPtr.get();
+        user->setUsername(username);
         newUser = true;
     }
     assert(user);
@@ -130,17 +128,8 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
             // Brand new client. Register it so its client id stays stable and
             // hand its id back through the same AuthMessage handshake used by
             // password_protected mode (no credentials are verified here).
-            if (newUserPtr)
-            {
-                ClientStorage::add(std::move(newUserPtr));
-            }
-
-            uint64_t newClientId = user->getId();
-            auto realNewClient = ClientStorage::getClientById(newClientId);
-
-            // Checking successfull client creation.
-            assert(realNewClient);
-            assert(user->getId() == realNewClient->getId());
+            if (!ClientStorage::add(user))
+                return nullptr;
 
             // This message is equal to Packet::getId (without client id):
             // a "getting" / "client_id" command that delivers the assigned id.
@@ -155,7 +144,7 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
             std::vector<nx_data> test{message};
 
             auto new_message_id = Util::getRandomUint64();
-            BaseMessage::Data base_data(new_message_id, address, realNewClient);
+            BaseMessage::Data base_data(new_message_id, address, user);
             return std::make_unique<AuthMessage>(std::move(base_data), test);
         }
         case AuthenticationMode::admin_access:
@@ -236,17 +225,8 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                     user->setCommonAccess(true);
 
                     // Add to storage only if this was a new user.
-                    if (newUserPtr)
-                    {
-                        ClientStorage::add(std::move(newUserPtr));
-                    }
-
-                    uint64_t newClientId = user->getId();
-                    auto realNewClient = ClientStorage::getClientById(newClientId);
-
-                    // Checking successfull client creation.
-                    assert(realNewClient);
-                    assert(user->getId() == realNewClient->getId());
+                    if (!ClientStorage::add(user))
+                        return nullptr;
 
                     // This message is equal to Packet::getId (without client id).
                     // The session port is negotiated separately by the
@@ -261,7 +241,7 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                     std::vector<nx_data> test{message};
 
                     auto new_message_id = Util::getRandomUint64();
-                    BaseMessage::Data base_data(new_message_id, address, realNewClient);
+                    BaseMessage::Data base_data(new_message_id, address, user);
                     return std::make_unique<AuthMessage>(std::move(base_data), test);
                 }
                 else
@@ -293,7 +273,7 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
     }
 }
 
-Message MessageHandler::handlePayload(const nx_data& payload, User* user, const std::string& address)
+Message MessageHandler::handlePayload(const nx_data& payload, std::shared_ptr<User> user, const std::string& address)
 {
     // Vector without client id (8 bytes).
     auto vectorWithoutClientId = Util::removeAmountOfBytesFromVector(payload, 8);

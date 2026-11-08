@@ -52,7 +52,7 @@ public:
     std::unique_ptr<BaseMessage> readMessage(std::string address, const nx_data& payload, ServerConfig* authentication);
 
 private:
-    Message handlePayload(const nx_data& payload, User* user, const std::string& address);
+    Message handlePayload(const nx_data& payload, std::shared_ptr<User> user, const std::string& address);
 
     /// Failed passphrase attempts for the initial handshake, tracked per source
     /// address so a client cannot brute-force the shared passphrase. The state is

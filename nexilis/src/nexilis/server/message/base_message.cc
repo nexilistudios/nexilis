@@ -19,10 +19,10 @@
 namespace nexilis::server
 {
 
-BaseMessage::Data::Data(uint64_t messageId, const std::string& address, User* user)
+BaseMessage::Data::Data(uint64_t messageId, const std::string& address, std::shared_ptr<User> user)
     : m_messageId(messageId),
       m_address(address),
-      m_user(user)
+      m_user(std::move(user))
 {
 }
 
@@ -57,7 +57,7 @@ const std::string& BaseMessage::Data::getAddress() const
 
 User* BaseMessage::Data::getUser() const
 {
-    return m_user;
+    return m_user.get();
 }
 
 BaseMessage::BaseMessage(Data&& data)

@@ -19,7 +19,9 @@
 
 #include <nexilis/server/user.hh>
 
+#include <memory>
 #include <mutex>
+#include <vector>
 
 namespace nexilis::server
 {
@@ -28,23 +30,30 @@ namespace nexilis::server
 class ClientStorage
 {
 public:
-    static void add(std::unique_ptr<User> client);
+    /// Publish a user; reject null handles and duplicate IDs.
+    /// A unique_ptr may be moved in and converted to shared ownership.
+    static bool add(std::shared_ptr<User> client);
 
     static bool contains(uint64_t id);
 
-    static std::vector<std::unique_ptr<User>>& getAllClients();
+    /// Snapshot of owning handles. This does not lock mutable user fields.
+    static std::vector<std::shared_ptr<User>> getAllClients();
 
-    static User* getClientById(uint64_t id);
+    /// Retain the returned handle throughout the operation on the user.
+    static std::shared_ptr<User> getClientById(uint64_t id);
 
     /// Diagnostic lookup only. IP addresses are not session identities.
-    static std::vector<User*> getClientsByIpAddress(const std::string& ip_address);
+    static std::vector<std::shared_ptr<User>> getClientsByIpAddress(const std::string& ip_address);
 
     static bool remove(uint64_t id);
+
+    /// Change a registered user's ID under the registry lock; reject collisions.
+    static bool updateId(User& user, uint64_t id);
 
     static void clear();
 
 private:
-    static std::vector<std::unique_ptr<User>> m_clients;
+    static std::vector<std::shared_ptr<User>> m_clients;
     static std::mutex m_mutex;
 };
 

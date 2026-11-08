@@ -716,7 +716,7 @@ boost::json::array Command::playerStatsEntries(const Room& room, const std::vect
     boost::json::array entries;
     for (auto clientId : clientIds)
     {
-        auto* client = ClientStorage::getClientById(clientId);
+        auto client = ClientStorage::getClientById(clientId);
         if (!client)
             continue;
 
@@ -755,7 +755,7 @@ bool Command::sendRoomCommand(const nx_data& data, User& user, NXProtocol& proto
             bool all_success = true;
             for (auto& roomClient : room->getClients())
             {
-                auto* client = ClientStorage::getClientById(roomClient);
+                auto client = ClientStorage::getClientById(roomClient);
                 if (!sendMessageToClient(data, *client, protocol))
                     all_success = false;
             }

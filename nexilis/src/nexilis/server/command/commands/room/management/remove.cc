@@ -59,7 +59,7 @@ CommandResult ServerImpl::room_management_remove(const DefaultArgs& args)
     auto roomClients = room->getClients();
     for (auto clientId : roomClients)
     {
-        auto* client = ClientStorage::getClientById(clientId);
+        auto client = ClientStorage::getClientById(clientId);
         if (client)
         {
             client->setRoomId(0);

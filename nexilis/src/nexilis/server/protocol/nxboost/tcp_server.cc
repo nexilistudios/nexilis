@@ -552,7 +552,7 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
         // --- Cleanup: remove disconnected user from their room and client storage ---
         if (connectedUserId != 0)
         {
-            auto* user = ClientStorage::getClientById(connectedUserId);
+            auto user = ClientStorage::getClientById(connectedUserId);
             if (user)
             {
                 uint64_t roomId = user->getRoomId();

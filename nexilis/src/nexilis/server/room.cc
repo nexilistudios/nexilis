@@ -343,7 +343,7 @@ bool Room::broadcastToAll(const nx_data& data)
     bool all_success = true;
     for (auto clientId : m_clientIds)
     {
-        auto* client = ClientStorage::getClientById(clientId);
+        auto client = ClientStorage::getClientById(clientId);
         if (!client)
             continue;
 

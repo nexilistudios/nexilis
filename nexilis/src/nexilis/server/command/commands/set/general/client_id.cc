@@ -34,22 +34,9 @@ CommandResult ServerImpl::set_general_clientId(const DefaultArgs& args)
     auto payload = Util::removeAmountOfBytesFromVector(data, 3);
     uint64_t id = Util::convertToType<uint64_t>(payload);
 
-    auto& clients = ClientStorage::getAllClients();
-
-    for (auto c = clients.begin(); c != clients.end(); c++)
-    {
-        auto client = c->get();
-        if (*client == user)
-        {
-            assert(client->hasRootAccess());
-            assert(user.hasRootAccess());
-            client->setId(id);
-            return CommandResult::success;
-        }
-    }
-
-    Log::error("Error in CommandType::set::clientID");
-    return CommandResult::error;
+    return ClientStorage::updateId(user, id)
+                   ? CommandResult::success
+                   : CommandResult::error;
 }
 
 } // namespace nexilis::server

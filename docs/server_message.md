@@ -288,3 +288,25 @@ alive until the callback returns, even if the callback removes it.
 The registry mutex protects lookup, insertion, enumeration, removal, and callback
 registration. Shared handles protect lifetime; they do not lock mutable room
 contents. Applications must synchronize simultaneous changes to room state.
+
+## Server client storage ownership
+
+The C++ `server::ClientStorage::getClientById` returns `std::shared_ptr<User>`.
+Keep the handle alive throughout an operation. `getAllClients()` and
+`getClientsByIpAddress()` return copied vectors of owning handles, safe to
+iterate while the registry changes. Removal and `clear()` unpublish users;
+existing handles and incoming messages keep their users alive until dispatch
+finishes. `BaseMessage::Data` now takes a shared user handle; `getUser()` borrows
+from that message and must not outlive it.
+
+`ClientStorage::add` returns `bool` and accepts a shared handle (a moved
+`unique_ptr` is converted to shared ownership). Null users and duplicate IDs are
+rejected. The root ID-change command uses `ClientStorage::updateId` to change a
+registered ID under the mutex and reject collisions. Use `auto` rather than
+`auto*` for lookups, and keep the returned handle instead of extracting a raw
+pointer from a temporary.
+
+The registry mutex and shared handles protect container access and lifetime.
+They do not synchronize mutable user fields or revoke a command already in
+progress when its user is removed. Applications must synchronize concurrent
+changes to user state separately.

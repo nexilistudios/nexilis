@@ -29,7 +29,7 @@ CommandResult ServerImpl::set_general_username(const DefaultArgs& args)
     std::string username = Util::convertToString(payload);
 
     // Setting the username for internal client.
-    auto* client = ClientStorage::getClientById(args.getUser().getId());
+    auto client = ClientStorage::getClientById(args.getUser().getId());
     if (client)
     {
         client->setUsername(username);

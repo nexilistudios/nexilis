@@ -126,7 +126,7 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
                 {
                     continue;
                 }
-                auto* other = ClientStorage::getClientById(clientId);
+                auto other = ClientStorage::getClientById(clientId);
                 if (!other || other->getRoomId() != room->getId())
                 {
                     continue;

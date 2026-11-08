@@ -278,7 +278,7 @@ void UDPServer::receiveFromClients()
             if (buffer.size() < 4 + 8)
                 continue;
             nx_data idBytes(buffer.begin() + 4, buffer.begin() + 12);
-            auto* user = ClientStorage::getClientById(Util::uint64FromFront(idBytes));
+            auto user = ClientStorage::getClientById(Util::uint64FromFront(idBytes));
             if (!user || !udp_auth::readSession(buffer, user->getUdpToken(), payload))
                 continue;
             auto bound = m_clientEndpoints.find(user->getId());

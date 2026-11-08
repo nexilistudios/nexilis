@@ -92,7 +92,7 @@ protected:
         return server::RoomStorage::getRoomById(ROOM_ID);
     }
 
-    server::User* user(uint64_t id) const
+    std::shared_ptr<server::User> user(uint64_t id) const
     {
         return server::ClientStorage::getClientById(id);
     }
@@ -122,7 +122,7 @@ protected:
     std::vector<boost::json::object> receivedMessages(uint64_t clientId)
     {
         std::vector<boost::json::object> messages;
-        auto* client = user(clientId);
+        auto client = user(clientId);
         client->setBoostTCPSend([&messages](const nx_data& data)
                                 {
             nx_data jsonData = data;

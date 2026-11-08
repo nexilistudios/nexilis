@@ -34,6 +34,7 @@
 
 #include <algorithm>
 #include <string>
+#include <thread>
 
 using namespace nexilis;
 
@@ -529,4 +530,121 @@ TEST_F(MessageHandlerSkipTest, SecondMessageFromSameClientIsHandledAsCommand)
     EXPECT_EQ(again[0]->getId(), clientId);
 }
 
+} // namespace
+
+namespace
+{
+class ClientStorageSpecTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        server::ClientStorage::clear();
+    }
+    void TearDown() override
+    {
+        server::ClientStorage::clear();
+    }
+};
+
+TEST_F(ClientStorageSpecTest, SnapshotsAndLookupsOwnUsersAcrossRemoval)
+{
+    ASSERT_TRUE(server::ClientStorage::add(std::make_unique<server::User>(1, "address")));
+    auto held = server::ClientStorage::getClientById(1);
+    auto snapshot = server::ClientStorage::getAllClients();
+    auto diagnostic = server::ClientStorage::getClientsByIpAddress("address");
+    std::weak_ptr<server::User> lifetime = held;
+    ASSERT_TRUE(server::ClientStorage::remove(1));
+    EXPECT_EQ(server::ClientStorage::getClientById(1), nullptr);
+    server::ClientStorage::clear();
+    EXPECT_EQ(held->getId(), 1);
+    ASSERT_EQ(snapshot.size(), 1);
+    EXPECT_EQ(snapshot[0], held);
+    ASSERT_EQ(diagnostic.size(), 1);
+    EXPECT_EQ(diagnostic[0], held);
+    snapshot.clear();
+    diagnostic.clear();
+    held.reset();
+    EXPECT_TRUE(lifetime.expired());
+}
+
+TEST_F(ClientStorageSpecTest, MessageRetainsUserUntilDispatchEnds)
+{
+    server::ServerConfig config;
+    config.setMode(AuthenticationMode::skip);
+    server::MessageHandler handler;
+    auto message = handler.readMessage("address", nx_data(19, 0), &config);
+    ASSERT_NE(message, nullptr);
+    ASSERT_NE(message->getUser(), nullptr);
+    const auto id = message->getUser()->getId();
+    std::weak_ptr<server::User> lifetime = server::ClientStorage::getClientById(id);
+    ASSERT_TRUE(server::ClientStorage::remove(id));
+    EXPECT_FALSE(lifetime.expired());
+    EXPECT_EQ(message->getUser()->getId(), id);
+    message->getUser()->setUsername("retained");
+    message.reset();
+    EXPECT_TRUE(lifetime.expired());
+}
+
+TEST_F(ClientStorageSpecTest, EstablishedMessageRetainsUserAcrossClear)
+{
+    auto user = std::make_shared<server::User>(42, "address");
+    const auto token = user->getUdpToken();
+    std::weak_ptr<server::User> lifetime = user;
+    ASSERT_TRUE(server::ClientStorage::add(user));
+    auto request = Util::convertToByteVector(uint64_t{42});
+    auto messageId = Util::convertToByteVector(uint64_t{1});
+    request.insert(request.end(), messageId.begin(), messageId.end());
+    request.insert(request.end(), {static_cast<uint8_t>(CommandType::getting), 0});
+    server::ServerConfig config;
+    config.setMode(AuthenticationMode::skip);
+    server::MessageHandler handler;
+    auto message = handler.readMessage("address", message_auth::sign(request, token), &config);
+    ASSERT_NE(message, nullptr);
+    user.reset();
+    server::ClientStorage::clear();
+    EXPECT_FALSE(lifetime.expired());
+    EXPECT_EQ(message->getUser()->getId(), 42);
+    message.reset();
+    EXPECT_TRUE(lifetime.expired());
+}
+
+TEST_F(ClientStorageSpecTest, RejectsNullAndDuplicateUsersAndIdCollisions)
+{
+    EXPECT_FALSE(server::ClientStorage::add(nullptr));
+    ASSERT_TRUE(server::ClientStorage::add(std::make_unique<server::User>(1, "address")));
+    EXPECT_FALSE(server::ClientStorage::add(std::make_unique<server::User>(1, "duplicate")));
+    ASSERT_TRUE(server::ClientStorage::add(std::make_unique<server::User>(2, "other")));
+    auto user = server::ClientStorage::getClientById(1);
+    user->setRootAccess(true);
+    EXPECT_FALSE(server::ClientStorage::updateId(*user, 2));
+    EXPECT_TRUE(server::ClientStorage::updateId(*user, 3));
+    EXPECT_FALSE(server::ClientStorage::contains(1));
+    EXPECT_EQ(server::ClientStorage::getClientById(3), user);
+}
+
+TEST_F(ClientStorageSpecTest, ConcurrentLookupEnumerationAndRemovalKeepUsersAlive)
+{
+    std::vector<std::thread> workers;
+    for (uint64_t worker = 0; worker < 4; ++worker)
+        workers.emplace_back([worker]
+                             {
+            for (uint64_t index = 1; index <= 100; ++index)
+            {
+                const auto id = worker * 100 + index;
+                EXPECT_TRUE(server::ClientStorage::add(std::make_unique<server::User>(id, "stress")));
+                auto held = server::ClientStorage::getClientById(id);
+                auto snapshot = server::ClientStorage::getAllClients();
+                auto diagnostic = server::ClientStorage::getClientsByIpAddress("stress");
+                EXPECT_TRUE(server::ClientStorage::remove(id));
+                EXPECT_EQ(held->getId(), id);
+                for (const auto& user : snapshot)
+                    EXPECT_EQ(user->getIPAddress(), "stress");
+                for (const auto& user : diagnostic)
+                    EXPECT_EQ(user->getIPAddress(), "stress");
+            } });
+    for (auto& worker : workers)
+        worker.join();
+    EXPECT_TRUE(server::ClientStorage::getAllClients().empty());
+}
 } // namespace

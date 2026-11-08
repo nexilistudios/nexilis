@@ -50,7 +50,6 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
     room->joinRoom(user_id);
 
     args.getUser().setRoomId(room->getId());
-    assert(ClientStorage::getClientById(user_id)->getRoomId() == room->getId());
     assert(room->contains(user_id));
     assert(args.getUser().getRoomId() == roomId);
 
@@ -65,7 +64,7 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
     {
         if (existingClientId == user_id)
             continue;
-        auto* existingUser = ClientStorage::getClientById(existingClientId);
+        auto existingUser = ClientStorage::getClientById(existingClientId);
         if (!existingUser)
             continue;
 

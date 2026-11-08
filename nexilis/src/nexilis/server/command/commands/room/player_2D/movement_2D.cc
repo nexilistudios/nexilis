@@ -58,7 +58,7 @@ CommandResult ServerImpl::room_player2d_movement(const DefaultArgs& args)
     const auto dimensions = user.getObject2D().getDimensions();
     for (auto clientId : room->getClients())
     {
-        auto* other = ClientStorage::getClientById(clientId);
+        auto other = ClientStorage::getClientById(clientId);
         if (!other || other->getId() == user.getId())
             continue;
 

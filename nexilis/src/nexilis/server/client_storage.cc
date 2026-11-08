@@ -16,93 +16,104 @@
 
 #include <nexilis/server/client_storage.hh>
 
-#include <nexilis/logger/log.hh>
+#include <algorithm>
+#include <iterator>
 
 namespace nexilis::server
 {
 
-std::vector<std::unique_ptr<User>> ClientStorage::m_clients = {};
+std::vector<std::shared_ptr<User>> ClientStorage::m_clients;
 std::mutex ClientStorage::m_mutex;
 
-void ClientStorage::add(std::unique_ptr<User> client)
+bool ClientStorage::add(std::shared_ptr<User> client)
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    if (!client)
+        return false;
+    std::lock_guard lock(m_mutex);
+    if (std::any_of(m_clients.begin(), m_clients.end(), [&](const auto& existing)
+                    { return existing->getId() == client->getId(); }))
+        return false;
     m_clients.emplace_back(std::move(client));
-    Log::info("New client, total amount = ", m_clients.size());
+    return true;
 }
 
 bool ClientStorage::contains(uint64_t id)
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return std::find_if(m_clients.begin(), m_clients.end(),
-                        [id](const std::unique_ptr<User>& client)
-                        {
-                            return client->getId() == id;
-                        }) != m_clients.end();
+    return getClientById(id) != nullptr;
 }
 
-std::vector<std::unique_ptr<User>>& ClientStorage::getAllClients()
+std::vector<std::shared_ptr<User>> ClientStorage::getAllClients()
 {
+    std::lock_guard lock(m_mutex);
     return m_clients;
 }
 
-User* ClientStorage::getClientById(uint64_t id)
+std::shared_ptr<User> ClientStorage::getClientById(uint64_t id)
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::lock_guard lock(m_mutex);
     auto it = std::find_if(m_clients.begin(), m_clients.end(),
-                           [id](const std::unique_ptr<User>& client)
-                           {
-                               return client->getId() == id;
-                           });
-
-    if (it != m_clients.end())
-    {
-        return it->get();
-    }
-    else
-    {
-        return nullptr;
-    }
+                           [id](const auto& client)
+                           { return client->getId() == id; });
+    return it == m_clients.end() ? nullptr : *it;
 }
 
-std::vector<User*> ClientStorage::getClientsByIpAddress(const std::string& ip_address)
+std::vector<std::shared_ptr<User>> ClientStorage::getClientsByIpAddress(const std::string& ip_address)
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    std::vector<User*> result;
-
-    for (auto& client : m_clients)
-    {
-        if (client->getIPAddress() == ip_address)
-        {
-            result.push_back(client.get());
-        }
-    }
-
+    std::lock_guard lock(m_mutex);
+    std::vector<std::shared_ptr<User>> result;
+    std::copy_if(m_clients.begin(), m_clients.end(), std::back_inserter(result),
+                 [&](const auto& client)
+                 { return client->getIPAddress() == ip_address; });
     return result;
 }
 
 void ClientStorage::clear()
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    m_clients.clear();
+    std::vector<std::shared_ptr<User>> removed;
+    {
+        std::lock_guard lock(m_mutex);
+        removed.swap(m_clients);
+    }
+    // Explicitly release users after unlocking: callback destructors may
+    // reenter the registry.
+    removed.clear();
+}
+
+bool ClientStorage::updateId(User& user, uint64_t id)
+{
+    if (!user.hasRootAccess())
+        return false;
+    std::lock_guard lock(m_mutex);
+    bool found = false;
+    for (const auto& client : m_clients)
+    {
+        if (client.get() == &user)
+            found = true;
+        else if (client->getId() == id)
+            return false;
+    }
+    if (!found)
+        return false;
+    user.setId(id);
+    return true;
 }
 
 bool ClientStorage::remove(uint64_t id)
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    auto it = std::find_if(m_clients.begin(), m_clients.end(),
-                           [id](const std::unique_ptr<User>& client)
-                           {
-                               return client->getId() == id;
-                           });
-
-    if (it != m_clients.end())
+    std::shared_ptr<User> removed;
     {
+        std::lock_guard lock(m_mutex);
+        auto it = std::find_if(m_clients.begin(), m_clients.end(),
+                               [id](const auto& client)
+                               { return client->getId() == id; });
+        if (it == m_clients.end())
+            return false;
+        removed = std::move(*it);
         m_clients.erase(it);
-        Log::info("Removed client from storage, total amount = ", m_clients.size());
-        return true;
     }
-    return false;
+    // User send callbacks may own resources whose destructors reenter storage.
+    // Release the last registry reference after unlocking.
+    return true;
 }
 
 } // namespace nexilis::server

@@ -17,6 +17,7 @@
 #ifndef NEXILIS_MESSAGE_BASE_MESSAGE_HH
 #define NEXILIS_MESSAGE_BASE_MESSAGE_HH
 
+#include <memory>
 #include <nexilis/server/user.hh>
 
 namespace nexilis::server
@@ -37,7 +38,7 @@ public:
     {
     public:
         /// Constructor.
-        explicit Data(uint64_t messageId, const std::string& address, User* user);
+        explicit Data(uint64_t messageId, const std::string& address, std::shared_ptr<User> user);
 
         /// Deleted copy constructor.
         Data(const Data&) = delete;
@@ -61,7 +62,7 @@ public:
         uint64_t m_messageId;
         std::string m_address;
         uint16_t m_port = 0;
-        User* m_user = nullptr;
+        std::shared_ptr<User> m_user;
     };
 
     /// Constructor.
@@ -91,7 +92,7 @@ public:
     /// Get the address where the message is assigned.
     const std::string& getAddress() const;
 
-    /// Get pointer to the user that is associated with the message.
+    /// Borrowed pointer, valid while this message retains its user handle.
     User* getUser() const;
 
 private:
