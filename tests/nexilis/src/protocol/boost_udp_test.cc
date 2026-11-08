@@ -208,3 +208,20 @@ TEST_F(BoostUDPTest, ReplayedSignedCommandRunsOnce)
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
     EXPECT_EQ(nexilis::server::RoomStorage::getAllRooms().size(), before + 1);
 }
+
+TEST_F(BoostUDPTest, MalformedCommandDoesNotStopSubsequentDatagrams)
+{
+    client->start();
+    ASSERT_TRUE(client->isConnected());
+    const auto before = nexilis::server::RoomStorage::getRoomCount();
+    auto malformed = nexilis::client::Packet::Room::Management::join(*api, 1);
+    malformed.resize(16 + 3); // Keep session/message IDs and command, omit room ID.
+    client->sendMessage(malformed);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    client->sendMessage(nexilis::client::Packet::Room::Management::create(*api, "after_error"));
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (nexilis::server::RoomStorage::getRoomCount() == before &&
+           std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    EXPECT_EQ(nexilis::server::RoomStorage::getRoomCount(), before + 1);
+}

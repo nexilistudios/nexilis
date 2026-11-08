@@ -317,3 +317,12 @@ Room sends tolerate stale membership IDs: a missing client is skipped and
 remaining recipients are still attempted. `Command::sendRoomCommand` returns
 `false` if any recipient is missing or cannot be sent the message; a false
 result does not mean that no recipients received it.
+
+## Command dispatch errors
+
+Both C++ `Command::read` overloads contain parsing and callback exceptions and
+return `CommandResult::error`. All server transports use this boundary.
+Boost UDP also contains exceptions in the surrounding datagram-processing loop,
+so a failed request does not stop later datagrams from being processed.
+A dispatch error does not roll back changes made before the exception: for
+example, creation can succeed before an acknowledgement callback throws.

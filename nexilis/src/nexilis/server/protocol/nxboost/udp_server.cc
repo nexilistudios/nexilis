@@ -279,9 +279,17 @@ void UDPServer::receiveFromClients()
                 Log::critical(header(), "Unrecognized message type");
             }
         }
-        catch (const boost::system::system_error& e)
+        catch (...)
         {
-            Log::error("Error receiving message: ", e.what());
+            // Keep serving later datagrams. Exception text may contain secrets;
+            // a user-installed logger must not throw out of this boundary either.
+            try
+            {
+                Log::error("UDP request processing failed");
+            }
+            catch (...)
+            {
+            }
         }
     }
 

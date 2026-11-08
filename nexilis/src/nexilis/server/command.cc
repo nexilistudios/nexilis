@@ -81,12 +81,19 @@ Command& Command::operator=(Command&& other)
     return *this;
 }
 
-CommandResult Command::read(const char* command_data, size_t length, User& client, NXProtocol& protocol, uint64_t messageId)
+CommandResult Command::read(const char* command_data, size_t length, User& client, NXProtocol& protocol, uint64_t messageId) noexcept
+try
 {
     return Command::read(Util::convertToByteVector(command_data, length), client, protocol, messageId);
 }
 
-CommandResult Command::read(const nx_data& command, User& user, NXProtocol& protocol, uint64_t messageId)
+catch (...)
+{
+    return CommandResult::error;
+}
+
+CommandResult Command::read(const nx_data& command, User& user, NXProtocol& protocol, uint64_t messageId) noexcept
+try
 {
     assert(user.getId() != 0);
 
@@ -592,6 +599,14 @@ CommandResult Command::read(const nx_data& command, User& user, NXProtocol& prot
         }
     }
     return CommandResult::not_found;
+}
+
+catch (...)
+{
+    // All transports use this entry point. Do not let parsing, allocation, or
+    // application callback exceptions escape a network worker. Reporting is
+    // left to the caller; logging here could itself invoke a throwing callback.
+    return CommandResult::error;
 }
 
 bool Command::sendMessageToClient(nx_data data, User& user, NXProtocol& protocol)

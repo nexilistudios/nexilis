@@ -25,6 +25,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <stdexcept>
 #include <thread>
 
 using namespace nexilis;
@@ -366,6 +367,39 @@ TEST_F(CommandSpecTest, RoomCreationAcceptsNameAndCapacityBoundaries)
         EXPECT_EQ(static_cast<uint8_t>(room->getContext()), bytes[3]);
     }
     EXPECT_EQ(server::RoomStorage::getRoomCount(), 2);
+}
+
+TEST_F(CommandSpecTest, DispatchContainsMalformedCommandExceptionsAndContinues)
+{
+    const nx_data truncatedJoin{static_cast<uint8_t>(CommandType::room),
+                                static_cast<uint8_t>(RoomCommandType::Root::management),
+                                static_cast<uint8_t>(RoomCommandType::Management::join)};
+    EXPECT_EQ(spec.read(truncatedJoin), server::CommandResult::error);
+    EXPECT_EQ(spec.read(roomCreateBytes("after_error")), server::CommandResult::success);
+}
+
+TEST_F(CommandSpecTest, DispatchContainsStandardAndUnknownCallbackExceptions)
+{
+    spec.user.setBoostTCPSend([](const nx_data&)
+                              { throw std::runtime_error("send callback failed"); });
+    EXPECT_EQ(spec.read(roomCreateBytes("standard")), server::CommandResult::error);
+
+    spec.user.setBoostTCPSend([](const nx_data&)
+                              { throw 42; });
+    EXPECT_EQ(spec.read(roomCreateBytes("unknown")), server::CommandResult::error);
+
+    spec.user.setBoostTCPSend([](const nx_data&) {});
+    EXPECT_EQ(spec.read(roomCreateBytes("recovered")), server::CommandResult::success);
+}
+
+TEST_F(CommandSpecTest, RawCommandDispatchContainsExceptions)
+{
+    spec.user.setBoostTCPSend([](const nx_data&)
+                              { throw 42; });
+    const auto bytes = roomCreateBytes("raw");
+    EXPECT_EQ(spec.command.read(reinterpret_cast<const char*>(bytes.data()), bytes.size(),
+                                spec.user, spec.protocol, 1),
+              server::CommandResult::error);
 }
 
 TEST_F(CommandSpecTest, RoomCreationRejectsWhenServerLimitReached)

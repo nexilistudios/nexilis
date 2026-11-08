@@ -63,22 +63,22 @@ public:
     /// Deleted copy assignment operator.
     Command& operator=(const Command& other) = delete;
 
-    /// Read the command from client.
+    /// Read the command from client. Exceptions become CommandResult::error.
     /// \param command The vector of bytes that is the command.
     /// \param user The user that sent the message.
     /// \param protocol The protocol that was used in receiving the message.
     /// \param messageId The unique identifier for the message.
     /// \return Result from reading the command.
-    CommandResult read(const nx_data& command, User& user, NXProtocol& protocol, uint64_t messageId);
+    CommandResult read(const nx_data& command, User& user, NXProtocol& protocol, uint64_t messageId) noexcept;
 
-    /// Read the command from client.
+    /// Read the command from client. Exceptions become CommandResult::error.
     /// \param command_data The data for the command
     /// \param length The command length in bytes.
     /// \param user The user that sent the message.
     /// \param protocol The protocol that was used in receiving the message.
     /// \param messageId The unique identifier for the message.
     /// \return Result from reading the command.
-    CommandResult read(const char* command_data, size_t length, User& client, NXProtocol& protocol, uint64_t messageId);
+    CommandResult read(const char* command_data, size_t length, User& client, NXProtocol& protocol, uint64_t messageId) noexcept;
 
     ServerConfig& getServerConfig()
     {
