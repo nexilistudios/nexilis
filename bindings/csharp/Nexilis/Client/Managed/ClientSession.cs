@@ -45,6 +45,22 @@ namespace Nexilis.Client
             _ownsNativeInstance = ownsNativeInstance;
         }
 
+        internal static ClientSession Snapshot(IntPtr source)
+        {
+            var copy = ClientSessionNative.nexilis_client_session_clone(source);
+            if (copy == IntPtr.Zero)
+                throw new InvalidOperationException("Failed to copy client session");
+            try
+            {
+                return new ClientSession(copy, ownsNativeInstance: true);
+            }
+            catch
+            {
+                ClientSessionNative.nexilis_client_session_destroy(copy);
+                throw;
+            }
+        }
+
         public void SetPosition3D(float x, float y, float z)
         {
             ThrowIfDisposed();

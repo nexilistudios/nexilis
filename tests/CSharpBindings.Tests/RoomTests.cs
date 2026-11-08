@@ -176,6 +176,47 @@ namespace Nexilis.Tests
         }
 
         [Fact]
+        public void ClientSnapshotsSurviveRoomChangesAndDisposal()
+        {
+            using var source = new ClientSession(10, _clientApi.ClientApiPtr, true);
+            source.SetPosition3D(1, 2, 3);
+            _room.AddClient(source);
+
+            using var snapshot = _room.GetClients()[0];
+            // Force room storage to grow, then remove the original client.
+            for (ulong id = 20; id < 40; ++id)
+            {
+                using var added = new ClientSession(id, _clientApi.ClientApiPtr, true);
+                _room.AddClient(added);
+            }
+            _room.RemoveClient(10);
+            _room.Dispose();
+
+            using var position = snapshot.GetPosition3D();
+            Assert.Equal(1f, position.X);
+            Assert.Equal(2f, position.Y);
+            Assert.Equal(3f, position.Z);
+            snapshot.SetUsername("snapshot");
+            snapshot.SetPosition3D(4, 5, 6);
+        }
+
+        [Fact]
+        public void DisposingSnapshotLeavesRoomClientIntact()
+        {
+            using var source = new ClientSession(10, _clientApi.ClientApiPtr, true);
+            source.SetPosition3D(1, 2, 3);
+            _room.AddClient(source);
+            using (var snapshot = _room.GetClients()[0])
+                snapshot.SetPosition3D(4, 5, 6);
+
+            using var next = _room.GetClients()[0];
+            using var position = next.GetPosition3D();
+            Assert.Equal(1f, position.X);
+            Assert.Equal(2f, position.Y);
+            Assert.Equal(3f, position.Z);
+        }
+
+        [Fact]
         public void AddNullClientThrows()
         {
             Assert.Throws<System.ArgumentNullException>(() => _room.AddClient(null!));

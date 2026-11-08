@@ -52,6 +52,7 @@ namespace Nexilis.Client
             _ownsNativeInstance = ownsNativeInstance;
         }
 
+        /// <summary>Returns owned snapshots; dispose each session after use.</summary>
         public IReadOnlyList<ClientSession> GetClients()
         {
             ThrowIfDisposed();
@@ -71,18 +72,21 @@ namespace Nexilis.Client
             {
                 Marshal.Copy(clientsArrayPtr, clientPointers, 0, (int)numClients);
 
-                // Create managed wrappers. Each wrapper borrows its native
-                // ClientSession handle from the room's client array; the
-                // underlying ClientSession is owned by the ClientAPI and
-                // must not be destroyed here.
+                // Copy while the room-owned sessions and temporary wrappers are valid.
                 foreach (var ptr in clientPointers)
                 {
                     if (ptr != IntPtr.Zero)
                     {
-                        clientSessions.Add(new ClientSession(ptr, ownsNativeInstance: false));
+                        clientSessions.Add(ClientSession.Snapshot(ptr));
                     }
                 }
                 return clientSessions.AsReadOnly();
+            }
+            catch
+            {
+                foreach (var session in clientSessions)
+                    session.Dispose();
+                throw;
             }
             finally
             {

@@ -16,15 +16,11 @@
 
 #include <nexilis/client/room.hh>
 #include <nexilisc/client/client_api_c.h>
+#include <nexilisc/client/client_session_c.h>
 #include <nexilisc/client/room_c.h>
 
 #include <cstdlib>
 #include <cstring>
-
-struct nexilis_ClientSession
-{
-    nexilis::client::ClientSession* session;
-};
 
 struct nexilis_Communication
 {
@@ -41,7 +37,7 @@ nexilis_Room* nexilis_room_create(nexilis_RoomData* room_data, nexilis_RoomClien
 
         for (const auto& client : *(clients->clients))
         {
-            auto cpp_client = static_cast<nexilis::client::ClientSession*>(client.session);
+            auto cpp_client = static_cast<nexilis::client::ClientSession*>(client.client);
             clientSessions.emplace_back(std::move(*cpp_client));
         }
     }
@@ -127,9 +123,9 @@ uint64_t nexilis_room_get_creator_id(const nexilis_Room* room)
 
 void nexilis_room_add_client(nexilis_Room* room, nexilis_ClientSession* client)
 {
-    if (room && room->room && client && client->session)
+    if (room && room->room && client && client->client)
     {
-        room->room->addClient(std::move(*client->session));
+        room->room->addClient(std::move(*client->client));
     }
 }
 
@@ -164,7 +160,7 @@ nexilis_ClientSession** nexilis_room_get_clients(const nexilis_Room* room, size_
     for (size_t i = 0; i < *num_clients; ++i)
     {
         client_array[i] = new nexilis_ClientSession();
-        client_array[i]->session = const_cast<nexilis::client::ClientSession*>(&clients[i]);
+        client_array[i]->client = const_cast<nexilis::client::ClientSession*>(&clients[i]);
     }
     return client_array;
 }
@@ -265,10 +261,10 @@ bool nexilis_room_contains_communication_by_id(const nexilis_Room* room, uint64_
 
 nexilis_Communication* nexilis_communication_create(const char* payload, nexilis_ClientSession* sender)
 {
-    if (sender && sender->session && payload)
+    if (sender && sender->client && payload)
     {
         auto communication = new nexilis_Communication();
-        auto cpp_communication = new nexilis::client::Room::Communication(payload, sender->session);
+        auto cpp_communication = new nexilis::client::Room::Communication(payload, sender->client);
         communication->communication = cpp_communication;
         return communication;
     }
@@ -309,7 +305,7 @@ const nexilis_ClientSession* nexilis_communication_get_client(const nexilis_Comm
     {
         auto client_session = new nexilis_ClientSession();
         auto cpp_client_session = communication->communication->getClient();
-        client_session->session = const_cast<nexilis::client::ClientSession*>(cpp_client_session);
+        client_session->client = const_cast<nexilis::client::ClientSession*>(cpp_client_session);
         return client_session;
     }
     return nullptr;

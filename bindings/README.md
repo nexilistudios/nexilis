@@ -26,3 +26,12 @@ To run the C# test project after the native libraries are available, use `make t
 
 For server-authoritative 3D shots, use `NexilisClient.Fire(x, y, z, slot)`.
 The former `Shoot(targetId, damage)` request is rejected by servers.
+
+`Room.GetClients()` and `ClientAPI.GetClientFromClientId()` return independently
+owned session snapshots. Dispose each returned `ClientSession` after use.
+Snapshots remain valid after room clients change or the room is destroyed;
+setters modify the snapshot, and a new lookup is needed to read current room
+state. The C API's `nexilis_client_session_clone` provides the same copy behavior;
+release its result with `nexilis_client_session_destroy`. Existing C room client
+arrays still contain borrowed sessions and are freed with
+`nexilis_room_free_client_array`.

@@ -28,6 +28,23 @@ nexilis_ClientSession* nexilis_client_session_create(uint64_t id, nexilis_Client
     return new nexilis_ClientSession{session};
 }
 
+nexilis_ClientSession* nexilis_client_session_clone(const nexilis_ClientSession* session)
+{
+    if (!session || !session->client)
+        return nullptr;
+    try
+    {
+        auto copy = std::make_unique<nexilis::client::ClientSession>(*session->client);
+        auto wrapper = new nexilis_ClientSession{copy.get()};
+        copy.release();
+        return wrapper;
+    }
+    catch (...)
+    {
+        return nullptr;
+    }
+}
+
 void nexilis_client_session_destroy(nexilis_ClientSession* client)
 {
     if (client)

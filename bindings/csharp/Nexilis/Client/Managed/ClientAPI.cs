@@ -181,7 +181,14 @@ namespace Nexilis.Client
             {
                 throw new InvalidOperationException($"Client {clientId} was not found in any room.");
             }
-            return new ClientSession(client_ptr, true);
+            try
+            {
+                return ClientSession.Snapshot(client_ptr);
+            }
+            finally
+            {
+                ClientSessionNative.nexilis_client_session_free_wrapper(client_ptr);
+            }
         }
 
         /// <summary>Consumes pending shooter events as a UTF-8 JSON object.</summary>

@@ -66,6 +66,33 @@ TEST_F(RoomTest_c, CreateAndDestroy)
     EXPECT_EQ(nexilis_room_get_client_amount(room), 0u);
 }
 
+TEST_F(RoomTest_c, SessionSnapshotSurvivesArrayAndRoomDestruction)
+{
+    auto source = makeSession(42);
+    nexilis_client_session_set_position_3D(source, 1, 2, 3);
+    nexilis_room_add_client(room, source);
+    nexilis_client_session_destroy(source);
+
+    size_t count = 0;
+    auto clients = nexilis_room_get_clients(room, &count);
+    ASSERT_EQ(count, 1u);
+    auto copy = nexilis_client_session_clone(clients[0]);
+    ASSERT_NE(copy, nullptr);
+    nexilis_room_free_client_array(clients, count);
+    nexilis_room_destroy(room);
+    room = nullptr;
+
+    EXPECT_EQ(nexilis_client_session_get_id(copy), 42u);
+    float x, y, z;
+    ASSERT_TRUE(nexilis_client_session_get_position_3D_values(copy, &x, &y, &z));
+    EXPECT_FLOAT_EQ(x, 1);
+    EXPECT_FLOAT_EQ(y, 2);
+    EXPECT_FLOAT_EQ(z, 3);
+    nexilis_client_session_set_username(copy, "snapshot");
+    nexilis_client_session_destroy(copy);
+    EXPECT_EQ(nexilis_client_session_clone(nullptr), nullptr);
+}
+
 TEST_F(RoomTest_c, GetId)
 {
     uint64_t expected_id = nexilis_room_data_get_id(room_data);
