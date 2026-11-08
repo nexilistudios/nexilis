@@ -21,14 +21,21 @@
 #include <nexilis/server/room_limits.hh>
 #include <nexilis/server/room_storage.hh>
 
+#include <cstddef>
+
 namespace nexilis::server
 {
 
 CommandResult ServerImpl::room_management_create(const DefaultArgs& args)
 {
-    auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 3);
-    if (payload.size() < 3)
+    constexpr std::size_t kCommandBytes = 3;
+    constexpr std::size_t kFixedPayloadBytes = 3; // context + uint16 capacity
+    constexpr std::size_t kMaxRoomNameBytes = 64;
+    const auto& request = args.getData();
+    if (request.size() < kCommandBytes + kFixedPayloadBytes + 1 ||
+        request.size() > kCommandBytes + kFixedPayloadBytes + kMaxRoomNameBytes)
         return CommandResult::invalid_input;
+    auto payload = Util::removeAmountOfBytesFromVector(request, kCommandBytes);
     uint8_t context = payload[0];
     const uint32_t maxSize = Util::convertToType<uint16_t>(
             Util::removeAmountOfBytesFromVector(payload, 1));
@@ -38,49 +45,37 @@ CommandResult ServerImpl::room_management_create(const DefaultArgs& args)
     const auto creatorId = args.getUser().getId();
 
     if (context > static_cast<uint8_t>(RoomData::Context::_3D) ||
-        maxSize == 0 || maxSize > 64 || roomName.empty() || roomName.size() > 64)
+        maxSize == 0 || maxSize > 64 || roomName == " ")
     {
-        Log::error("Room name cannot be empty");
+        Log::error("Invalid room context, capacity, or name");
         return CommandResult::invalid_input;
     }
-    else if (roomName == "")
+
+    auto room_data = RoomData(creatorId, roomName, Util::getRandomUint64(), static_cast<RoomData::Context>(context), maxSize);
+    auto newRoom = nexilis::server::Room(room_data);
+
+    auto newRoomId = newRoom.getId();
+    if (!RoomStorage::add(std::move(newRoom), roomLimits.getMaxRooms(),
+                          roomLimits.getMaxRoomsPerClient()))
+        return CommandResult::failure;
+
+    std::map<std::string, boost::json::value> params{
+            {"room_name", boost::json::value(roomName)},
+            {"client_id", boost::json::value(args.getUser().getId())},
+            {"action", boost::json::value("create")},
+            {"room_id", boost::json::value(newRoomId)},
+            {"room_context", boost::json::value(context)},
+            {"max_size", boost::json::value(maxSize)}};
+
+    auto data = Command::clientMessageData(CommandType::room, "management", args.getMessageId(), params);
+
+    if (Command::sendMessageToClient(data, args.getUser(), args.getProtocol()))
     {
-        Log::error("Room name cannot be an empty string");
-        return CommandResult::invalid_input;
-    }
-    else if (roomName == " ")
-    {
-        Log::error("Room name cannot be equal to \" \" ");
-        return CommandResult::invalid_input;
+        return CommandResult::success;
     }
     else
     {
-        auto room_data = RoomData(creatorId, roomName, Util::getRandomUint64(), static_cast<RoomData::Context>(context), maxSize);
-        auto newRoom = nexilis::server::Room(room_data);
-
-        auto newRoomId = newRoom.getId();
-        if (!RoomStorage::add(std::move(newRoom), roomLimits.getMaxRooms(),
-                              roomLimits.getMaxRoomsPerClient()))
-            return CommandResult::failure;
-
-        std::map<std::string, boost::json::value> params{
-                {"room_name", boost::json::value(roomName)},
-                {"client_id", boost::json::value(args.getUser().getId())},
-                {"action", boost::json::value("create")},
-                {"room_id", boost::json::value(newRoomId)},
-                {"room_context", boost::json::value(context)},
-                {"max_size", boost::json::value(maxSize)}};
-
-        auto data = Command::clientMessageData(CommandType::room, "management", args.getMessageId(), params);
-
-        if (Command::sendMessageToClient(data, args.getUser(), args.getProtocol()))
-        {
-            return CommandResult::success;
-        }
-        else
-        {
-            return CommandResult::failed_room_send;
-        }
+        return CommandResult::failed_room_send;
     }
 }
 

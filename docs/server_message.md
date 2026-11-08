@@ -239,7 +239,9 @@ Configuration details:
 
 Room creation requests use a 3-byte room-management command header, followed by a
 1-byte room context, a 2-byte unsigned maximum player count in the configured
-wire byte order, and the room name. The server accepts capacities from 1 to 64,
+wire byte order, and a room name of 1–64 bytes (a single space is rejected).
+The server checks the complete payload length before indexing or copying its
+fields, rejecting truncated and oversized requests. It accepts capacities from 1 to 64,
 includes `max_size` in the creation response and room listing, and rejects joins
 when the room is full. Applications can install a `RoomStorage::setCreateHandler`
 callback to configure each new room before the server acknowledges creation.

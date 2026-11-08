@@ -310,6 +310,64 @@ TEST_F(CommandSpecTest, RoomRemovalWorksWhenRoomOptsIn)
     EXPECT_FALSE(server::RoomStorage::contains(OVERLAP_ROOM_ID));
 }
 
+TEST_F(CommandSpecTest, RoomCreationRejectsTruncatedAndOversizedRequests)
+{
+    unsigned sends = 0;
+    spec.user.setBoostTCPSend([&](const nx_data&)
+                              { ++sends; });
+    const auto valid = roomCreateBytes("room");
+    // Complete command bytes, followed by zero through three payload bytes.
+    // A three-byte payload has context/capacity but no room name.
+    for (std::size_t size = 3; size <= 6; ++size)
+    {
+        auto truncated = valid;
+        truncated.resize(size);
+        EXPECT_EQ(spec.read(truncated), server::CommandResult::invalid_input);
+    }
+    EXPECT_EQ(spec.read(roomCreateBytes(std::string(65, 'a'))),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(server::RoomStorage::getRoomCount(), 0);
+    EXPECT_EQ(sends, 0);
+}
+
+TEST_F(CommandSpecTest, RoomCreationValidatesContextAndCapacity)
+{
+    auto invalidContext = roomCreateBytes("room");
+    invalidContext[3] = 2;
+    EXPECT_EQ(spec.read(invalidContext), server::CommandResult::invalid_input);
+    for (uint16_t capacity : {uint16_t{0}, uint16_t{65}})
+    {
+        auto bytes = roomCreateBytes("room");
+        auto encoded = Util::convertToByteVector(capacity);
+        bytes[4] = encoded[0];
+        bytes[5] = encoded[1];
+        EXPECT_EQ(spec.read(bytes), server::CommandResult::invalid_input);
+    }
+    EXPECT_EQ(spec.read(roomCreateBytes(" ")), server::CommandResult::invalid_input);
+    EXPECT_EQ(server::RoomStorage::getRoomCount(), 0);
+}
+
+TEST_F(CommandSpecTest, RoomCreationAcceptsNameAndCapacityBoundaries)
+{
+    for (uint16_t capacity : {uint16_t{1}, uint16_t{64}})
+    {
+        const std::string name(capacity, 'a');
+        auto bytes = roomCreateBytes(name);
+        auto encoded = Util::convertToByteVector(capacity);
+        bytes[4] = encoded[0];
+        bytes[5] = encoded[1];
+        bytes[3] = capacity == 1 ? 0 : 1; // both valid room contexts
+        ASSERT_EQ(spec.read(bytes), server::CommandResult::success);
+        const auto rooms = server::RoomStorage::getAllRooms();
+        ASSERT_FALSE(rooms.empty());
+        const auto& room = rooms.back();
+        EXPECT_EQ(room->getName(), name);
+        EXPECT_EQ(room->getMaxSize(), capacity);
+        EXPECT_EQ(static_cast<uint8_t>(room->getContext()), bytes[3]);
+    }
+    EXPECT_EQ(server::RoomStorage::getRoomCount(), 2);
+}
+
 TEST_F(CommandSpecTest, RoomCreationRejectsWhenServerLimitReached)
 {
     server::RoomStorage::add(makeOverlapRoom());

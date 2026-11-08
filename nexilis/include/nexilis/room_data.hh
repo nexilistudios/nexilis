@@ -33,7 +33,7 @@ public:
 
     /// Constructor.
     /// \param creatorId The identifier of the creator.
-    /// \param name 1-15 characters of text for the name of the room.
+    /// \param name Room name. Client creation requests accept 1-64 bytes.
     /// \param roomId The id of the created room.
     /// \param context The context for dimensions in a room.
     /// \param maxSize The maximum size of the room.
