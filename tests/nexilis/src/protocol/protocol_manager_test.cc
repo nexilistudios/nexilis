@@ -30,10 +30,34 @@
 #include <nexilis/server/protocol/af_unix/stream_server.hh>
 #include <nexilis/server/protocol/nxboost/tcp_server.hh>
 
+#include <cstdlib>
+#include <filesystem>
+#include <string>
+
 class ProtocolManagerTest : public ::testing::Test
 {
 protected:
     nexilis::ProtocolManager manager;
+    std::string socketDirectory;
+
+    void SetUp() override
+    {
+        char pattern[] = "/tmp/nexilis-protocol-XXXXXX";
+        const auto* directory = mkdtemp(pattern);
+        ASSERT_NE(directory, nullptr);
+        socketDirectory = directory;
+    }
+
+    void TearDown() override
+    {
+        if (!socketDirectory.empty())
+            std::filesystem::remove_all(socketDirectory);
+    }
+
+    std::string socketPath(const std::string& name) const
+    {
+        return socketDirectory + "/" + name;
+    }
 };
 
 TEST_F(ProtocolManagerTest, CreateProtocol_UnixStreamServer)
@@ -43,7 +67,7 @@ TEST_F(ProtocolManagerTest, CreateProtocol_UnixStreamServer)
     settings.setPassphrase("salasana");
     settings.setRootPassword("root");
 
-    auto unix_stream_server = manager.createProtocol<nexilis::server::af_unix::StreamServer>(settings, "/tmp/nexilis/stream");
+    auto unix_stream_server = manager.createProtocol<nexilis::server::af_unix::StreamServer>(settings, socketPath("stream"));
 
     EXPECT_EQ(unix_stream_server.getType(), nexilis::NXProtocol::Type::AF_UNIX_SOCK_STREAM_SERVER);
     EXPECT_EQ(unix_stream_server.getSettings().getMode(), nexilis::server::AuthenticationMode::password_protected);
@@ -58,7 +82,7 @@ TEST_F(ProtocolManagerTest, CreateProtocol_UnixDgramServer)
     settings.setPassphrase("salasana");
     settings.setRootPassword("root");
 
-    auto unix_dgram_server = manager.createProtocol<nexilis::server::af_unix::DgramServer>(settings, "/tmp/nexilis/dgram");
+    auto unix_dgram_server = manager.createProtocol<nexilis::server::af_unix::DgramServer>(settings, socketPath("dgram"));
 
     EXPECT_EQ(unix_dgram_server.getType(), nexilis::NXProtocol::Type::AF_UNIX_SOCK_DGRAM_SERVER);
     EXPECT_EQ(unix_dgram_server.getSettings().getMode(), nexilis::server::AuthenticationMode::password_protected);
@@ -152,7 +176,7 @@ TEST_F(ProtocolManagerTest, GetProtocolCount_AfterCreate)
     manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
     EXPECT_EQ(manager.getProtocolCount(), 1u);
 
-    manager.createProtocol<nexilis::server::af_unix::StreamServer>(settings, "/tmp/nexilis/stream");
+    manager.createProtocol<nexilis::server::af_unix::StreamServer>(settings, socketPath("stream"));
     EXPECT_EQ(manager.getProtocolCount(), 2u);
 }
 
@@ -248,7 +272,7 @@ TEST_F(ProtocolManagerTest, FindByType_Multiple)
     settings.setRootPassword("root");
 
     manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
-    manager.createProtocol<nexilis::server::af_unix::StreamServer>(settings, "/tmp/nexilis/stream");
+    manager.createProtocol<nexilis::server::af_unix::StreamServer>(settings, socketPath("stream"));
     manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
 
     auto tcp_results = manager.findByType(nexilis::NXProtocol::Type::BOOST_TCP_SERVER);
@@ -271,7 +295,7 @@ TEST_F(ProtocolManagerTest, Iterator_NonEmpty)
     settings.setRootPassword("root");
 
     manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
-    manager.createProtocol<nexilis::server::af_unix::StreamServer>(settings, "/tmp/nexilis/stream");
+    manager.createProtocol<nexilis::server::af_unix::StreamServer>(settings, socketPath("stream"));
 
     size_t count = 0;
     for (const auto& item : manager)
@@ -290,7 +314,7 @@ TEST_F(ProtocolManagerTest, ProtocolData_IdUniqueness)
     settings.setRootPassword("root");
 
     manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
-    manager.createProtocol<nexilis::server::af_unix::StreamServer>(settings, "/tmp/nexilis/stream");
+    manager.createProtocol<nexilis::server::af_unix::StreamServer>(settings, socketPath("stream"));
 
     // Two creates should produce entries with different ids.
     ASSERT_EQ(manager.getProtocolCount(), 2u);

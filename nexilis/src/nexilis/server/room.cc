@@ -380,4 +380,67 @@ bool Room::broadcastToAll(const nx_data& data)
     return all_success;
 }
 
+bool Room::tryAddObject(Object2D&& object, std::size_t maximum)
+{
+    std::lock_guard lock(m_resourceMutex);
+    if (getObjects2D().size() + getObjects3D().size() >= maximum)
+        return false;
+    BaseRoom::addObject(std::move(object));
+    return true;
+}
+
+void Room::addObject(Object2D&& object)
+{
+    std::lock_guard lock(m_resourceMutex);
+    BaseRoom::addObject(std::move(object));
+}
+
+bool Room::tryAddObject(Object3D&& object, std::size_t maximum)
+{
+    std::lock_guard lock(m_resourceMutex);
+    if (getObjects2D().size() + getObjects3D().size() >= maximum)
+        return false;
+    BaseRoom::addObject(std::move(object));
+    return true;
+}
+
+void Room::addObject(Object3D&& object)
+{
+    std::lock_guard lock(m_resourceMutex);
+    BaseRoom::addObject(std::move(object));
+}
+
+bool Room::tryAddGameItem(GameItem&& object, std::size_t maximum)
+{
+    std::lock_guard lock(m_resourceMutex);
+    if (getGameItems().size() >= maximum)
+        return false;
+    BaseRoom::addGameItem(std::move(object));
+    return true;
+}
+
+void Room::addGameItem(GameItem&& object)
+{
+    std::lock_guard lock(m_resourceMutex);
+    BaseRoom::addGameItem(std::move(object));
+}
+
+void Room::deleteObject2D(uint64_t id)
+{
+    std::lock_guard lock(m_resourceMutex);
+    BaseRoom::deleteObject2D(id);
+}
+
+void Room::deleteObject3D(uint64_t id)
+{
+    std::lock_guard lock(m_resourceMutex);
+    BaseRoom::deleteObject3D(id);
+}
+
+void Room::deleteGameItem(uint64_t id)
+{
+    std::lock_guard lock(m_resourceMutex);
+    BaseRoom::deleteGameItem(id);
+}
+
 } // namespace nexilis::server

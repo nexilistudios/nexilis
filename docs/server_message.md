@@ -358,3 +358,23 @@ or storage collision checks.
 
 The C `nexilis_room_data_create` returns null on allocation or random-source
 failure, and the C# `RoomData` constructor reports a construction exception.
+
+## Client-created resource limits
+
+`ServerConfig::getRoomLimits()` also controls client-created resources:
+
+- `setMaxObjectsPerRoom`: 1024 combined 2D/3D objects by default, including moving objects.
+- `setMaxGameItemsPerRoom`: 1024 game items per room by default.
+- `setMaxUsernameLength`: 64 username bytes by default.
+
+Zero disables the corresponding client operation. Object/item requests at the
+cap fail before insertion or broadcast; deletions free capacity. Username
+updates above the configured size are rejected before state changes or sending.
+The room opt-in gates remain required for client object/item creation.
+
+Server `Room::tryAddObject` and `tryAddGameItem` check capacity and insert under
+a resource mutex shared with server additions and deletions. Direct server
+`addObject`/`addGameItem` calls intentionally bypass the client caps; their
+resources still count against subsequent client creation. These methods do
+not synchronize outstanding pointers/references returned by room accessors.
+Applications must synchronize concurrent access to mutable room contents.

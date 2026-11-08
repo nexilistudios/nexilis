@@ -119,6 +119,30 @@ TEST_F(CommandSpecTest, SetUsernameFromRawBytes)
     EXPECT_EQ(spec.read(bytes), server::CommandResult::success);
 }
 
+TEST_F(CommandSpecTest, UsernameLengthIsBoundedBeforeMutationOrSend)
+{
+    auto client = server::ClientStorage::getClientById(spec.user.getId());
+    client->setUsername("old");
+    unsigned sends = 0;
+    spec.user.setBoostTCPSend([&](const nx_data&)
+                              { ++sends; });
+    auto request = [](std::size_t length)
+    {
+        nx_data bytes{0, 0, 1};
+        bytes.insert(bytes.end(), length, 'a');
+        return bytes;
+    };
+    EXPECT_EQ(spec.read(request(65)), server::CommandResult::invalid_input);
+    EXPECT_EQ(client->getUsername(), "old");
+    EXPECT_EQ(sends, 0);
+    EXPECT_EQ(spec.read(request(64)), server::CommandResult::success);
+    spec.command.getServerConfig().getRoomLimits().setMaxUsernameLength(4);
+    EXPECT_EQ(spec.read(request(5)), server::CommandResult::invalid_input);
+    EXPECT_EQ(spec.read(request(4)), server::CommandResult::success);
+    spec.command.getServerConfig().getRoomLimits().setMaxUsernameLength(0);
+    EXPECT_EQ(spec.read(request(0)), server::CommandResult::invalid_input);
+}
+
 TEST_F(CommandSpecTest, RejectsCommandsWithoutTwoRequiredBytes)
 {
     EXPECT_EQ(spec.read({}), server::CommandResult::invalid_input);

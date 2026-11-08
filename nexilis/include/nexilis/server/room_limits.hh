@@ -24,7 +24,7 @@
 namespace nexilis::server
 {
 
-/// Limits the server enforces on room creation. Every limit has a default
+/// Limits the server enforces on client-created rooms and room resources. Every limit has a default
 /// and is configurable through the server's ServerConfig.
 class RoomLimits
 {
@@ -47,6 +47,36 @@ public:
     std::size_t getMaxRoomsPerClient() const
     {
         return m_maxRoomsPerClient;
+    }
+
+    /// Maximum ObjectsPerRoom; zero rejects client requests for this resource.
+    void setMaxObjectsPerRoom(std::size_t value)
+    {
+        m_maxObjectsPerRoom = value;
+    }
+    std::size_t getMaxObjectsPerRoom() const
+    {
+        return m_maxObjectsPerRoom;
+    }
+
+    /// Maximum GameItemsPerRoom; zero rejects client requests for this resource.
+    void setMaxGameItemsPerRoom(std::size_t value)
+    {
+        m_maxGameItemsPerRoom = value;
+    }
+    std::size_t getMaxGameItemsPerRoom() const
+    {
+        return m_maxGameItemsPerRoom;
+    }
+
+    /// Maximum UsernameLength; zero rejects client requests for this resource.
+    void setMaxUsernameLength(std::size_t value)
+    {
+        m_maxUsernameLength = value;
+    }
+    std::size_t getMaxUsernameLength() const
+    {
+        return m_maxUsernameLength;
     }
 
     /// Whether the limits the static command handlers enforce have been
@@ -75,6 +105,10 @@ public:
 private:
     std::size_t m_maxRooms = NEXILIS_DEFAULT_MAX_ROOMS;
     std::size_t m_maxRoomsPerClient = NEXILIS_DEFAULT_MAX_ROOMS_PER_CLIENT;
+
+    std::size_t m_maxObjectsPerRoom = 1024;
+    std::size_t m_maxGameItemsPerRoom = 1024;
+    std::size_t m_maxUsernameLength = 64;
 
     static inline const RoomLimits* m_limits = nullptr;
 };

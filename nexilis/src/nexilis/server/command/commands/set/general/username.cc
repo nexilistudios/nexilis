@@ -18,6 +18,7 @@
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/command_result.hh>
 #include <nexilis/server/command/commands.hh>
+#include <nexilis/server/room_limits.hh>
 
 namespace nexilis::server
 {
@@ -25,6 +26,9 @@ namespace nexilis::server
 CommandResult ServerImpl::set_general_username(const DefaultArgs& args)
 {
     Log::debug("setting::general::username", args);
+    const auto maximum = RoomLimits::get().getMaxUsernameLength();
+    if (maximum == 0 || args.getData().size() < 3 || args.getData().size() - 3 > maximum)
+        return CommandResult::invalid_input;
     auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 3);
     std::string username = Util::convertToString(payload);
 

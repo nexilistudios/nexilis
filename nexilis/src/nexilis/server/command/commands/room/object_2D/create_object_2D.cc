@@ -17,6 +17,7 @@
 #include <nexilis/object/object_2d.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
+#include <nexilis/server/room_limits.hh>
 #include <nexilis/server/room_storage.hh>
 #include <nexilis/server/validation.hh>
 
@@ -50,7 +51,8 @@ CommandResult ServerImpl::room_object2d_create(const DefaultArgs& args)
     Log::info("Created object with id: ", objectId);
 
     // Add to storage.
-    room->addObject(std::move(object));
+    if (!room->tryAddObject(std::move(object), RoomLimits::get().getMaxObjectsPerRoom()))
+        return CommandResult::failure;
 
     std::map<std::string, boost::json::value> params{
             {"x", boost::json::value(position.x)},

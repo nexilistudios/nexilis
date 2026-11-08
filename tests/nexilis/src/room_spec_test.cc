@@ -353,3 +353,21 @@ TEST_F(RoomStorageSpecTest, ConcurrentMutationAndEnumerationKeepHandlesAlive)
     EXPECT_EQ(server::RoomStorage::getRoomCount(), 0);
 }
 } // namespace
+
+TEST(RoomResourceLimitTest, ConcurrentCreationCannotExceedCombinedObjectCap)
+{
+    server::Room room(RoomData(1, "resources", 1));
+    std::atomic<unsigned> accepted{0};
+    std::vector<std::thread> workers;
+    for (uint64_t id = 1; id <= 16; ++id)
+        workers.emplace_back([&, id]
+                             {
+            if (id % 2 == 0 ? room.tryAddObject(Object2D(id), 2)
+                            : room.tryAddObject(Object3D(id), 2))
+                ++accepted; });
+    for (auto& worker : workers)
+        worker.join();
+    EXPECT_EQ(accepted.load(), 2);
+    EXPECT_EQ(room.getObjects2D().size() + room.getObjects3D().size(), 2);
+    EXPECT_FALSE(room.tryAddObject(Object2D(99), 0));
+}

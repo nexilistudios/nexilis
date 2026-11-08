@@ -1957,6 +1957,40 @@ TEST_F(GameplaySpecTest, MoveObject3DUnknownObjectFails)
               server::CommandResult::failure);
 }
 
+TEST_F(GameplaySpecTest, ObjectCreationCapsCoverDimensionsAndMovingObjects)
+{
+    setUpRoom();
+    allowClientObjects();
+    command.getServerConfig().getRoomLimits().setMaxObjectsPerRoom(1);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto messages = receivedMessages(*m_target);
+    ASSERT_EQ(read(createObject3DBytes({1, 2, 3}, {1, 1, 1}, ""), *m_sender), server::CommandResult::success);
+    EXPECT_EQ(read(createObject2DBytes({1, 2}, {1, 1}, ""), *m_sender), server::CommandResult::failure);
+    EXPECT_EQ(read(createMoving2DBytes({1, 2}, {1, 1}, {1, 0}, 0.1f, MovementType::linear, ""), *m_sender), server::CommandResult::failure);
+    EXPECT_EQ(read(createMoving3DBytes({1, 2, 3}, {1, 1, 1}, {1, 0, 0}, 0.1f, MovementType::linear, ""), *m_sender), server::CommandResult::failure);
+    EXPECT_EQ(messages.size(), 1);
+    ASSERT_EQ(room->getObjects3D().size(), 1);
+    ASSERT_EQ(read(destroyObject3DBytes(room->getObjects3D()[0].getId()), *m_sender), server::CommandResult::success);
+    EXPECT_EQ(read(createObject2DBytes({1, 2}, {1, 1}, ""), *m_sender), server::CommandResult::success);
+    EXPECT_EQ(room->getObjects2D().size(), 1);
+}
+
+TEST_F(GameplaySpecTest, ItemCreationCapRecoversAfterDeletion)
+{
+    setUpRoom();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->setClientGameItemCreationAllowed(true);
+    command.getServerConfig().getRoomLimits().setMaxGameItemsPerRoom(1);
+    const auto bytes = createGameItemBytes({1, 2, 3}, {1, 1, 1});
+    ASSERT_EQ(read(bytes, *m_sender), server::CommandResult::success);
+    auto messages = receivedMessages(*m_target);
+    EXPECT_EQ(read(bytes, *m_sender), server::CommandResult::failure);
+    EXPECT_TRUE(messages.empty());
+    ASSERT_EQ(room->getGameItems().size(), 1);
+    ASSERT_EQ(read(gameItemActionBytes(RoomCommandType::GameItemAction::destroy, room->getGameItems()[0].getId()), *m_sender), server::CommandResult::success);
+    EXPECT_EQ(read(bytes, *m_sender), server::CommandResult::success);
+}
+
 TEST_F(GameplaySpecTest, ObjectMutationsRequireRoomOptIn)
 {
     setUpRoom();

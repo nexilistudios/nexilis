@@ -84,6 +84,18 @@ public:
     /// Deleted copy assignment operator.
     Room& operator=(const Room&) = delete;
 
+    /// Client creation caps check and insert atomically. Zero disables creation.
+    bool tryAddObject(Object2D&& object, std::size_t maximum);
+    bool tryAddObject(Object3D&& object, std::size_t maximum);
+    bool tryAddGameItem(GameItem&& item, std::size_t maximum);
+    /// Server-authored additions bypass caps but share the resource lock.
+    void addObject(Object2D&& object);
+    void addObject(Object3D&& object);
+    void addGameItem(GameItem&& item);
+    void deleteObject2D(uint64_t id);
+    void deleteObject3D(uint64_t id);
+    void deleteGameItem(uint64_t id);
+
     /// User joins the room context.
     /// \param userId The id of the user that joins the room.
     void joinRoom(uint64_t userId);
@@ -241,6 +253,7 @@ private:
 
     /// Atomic because movement threads read this while command threads write it.
     std::atomic<bool> m_overlappingAllowed{true};
+    std::mutex m_resourceMutex;
 };
 
 } // namespace nexilis::server

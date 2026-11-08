@@ -18,6 +18,7 @@
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
 #include <nexilis/server/gameplay_limits.hh>
+#include <nexilis/server/room_limits.hh>
 #include <nexilis/server/room_storage.hh>
 #include <nexilis/server/validation.hh>
 
@@ -76,7 +77,8 @@ CommandResult ServerImpl::room_gameitem_create(const DefaultArgs& args)
     uint64_t itemId = item.getId();
     Log::info("Created game item with id: ", itemId, " type: ", item_type);
 
-    room->addGameItem(std::move(item));
+    if (!room->tryAddGameItem(std::move(item), RoomLimits::get().getMaxGameItemsPerRoom()))
+        return CommandResult::failure;
 
     std::map<std::string, boost::json::value> params{
             {"id", boost::json::value(itemId)},
