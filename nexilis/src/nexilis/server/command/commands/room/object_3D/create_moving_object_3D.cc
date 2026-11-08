@@ -102,7 +102,7 @@ CommandResult ServerImpl::room_object3d_createMoving(const DefaultArgs& args)
     auto movement_data = MovementData(objectId, deltaTime, data, args.getMessageId());
     auto base_move = std::make_unique<Movement3D>(movement_data, movement, movementFunction);
 
-    Movement::object3D(std::move(base_move), user, args.getProtocol()).detach();
+    Movement::object3D(std::move(base_move), user, args.getProtocol());
     return CommandResult::success;
 }
 

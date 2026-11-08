@@ -136,6 +136,15 @@ finite; the resulting position is clamped to the configured world bounds. Rooms
 that have not opted in reject these requests, and object handlers reject
 commands for rooms that no longer exist.
 
+Moving-object creation sends the create message followed by one final position
+update during dispatch. Both eased and linear requests apply their full
+requested displacement immediately, with the resulting position clamped to the
+world bounds. The validated duration no longer schedules background ticks.
+Applications needing intermediate animation must update objects on their own
+server tick. The C++ `Movement::object2D` and `object3D` helpers now return
+`void` and complete before returning; callers must remove thread operations
+such as `.detach()` or `.join()`.
+
 Client-requested room removal is disabled by default. A room that wants its
 creator to be able to remove it through `room/management/remove` must call
 `Room::setClientRoomRemovalAllowed(true)`; only the room creator can remove it,

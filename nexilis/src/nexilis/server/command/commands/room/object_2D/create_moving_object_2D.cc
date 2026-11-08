@@ -98,7 +98,7 @@ CommandResult ServerImpl::room_object2d_createMoving(const DefaultArgs& args)
     }
 
     auto base_move = std::make_unique<Movement2D>(MovementData(objectId, deltaTime, data, args.getMessageId()), movement, movementFunction);
-    Movement::object2D(std::move(base_move), user, args.getProtocol()).detach();
+    Movement::object2D(std::move(base_move), user, args.getProtocol());
     return CommandResult::success;
 }
 

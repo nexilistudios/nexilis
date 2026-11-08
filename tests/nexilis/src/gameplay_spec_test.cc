@@ -1338,13 +1338,13 @@ TEST_F(GameplaySpecTest, CreateMovingObject2DAddsObjectAndBroadcastsCreate)
     auto* room = server::RoomStorage::getRoomById(ROOM_ID);
     ASSERT_EQ(room->getObjects2D().size(), 1);
     const auto& object = room->getObjects2D()[0];
-    EXPECT_FLOAT_EQ(object.getPosition().x, start.x);
+    EXPECT_FLOAT_EQ(object.getPosition().x, start.x + 1.0f);
     EXPECT_FLOAT_EQ(object.getPosition().y, start.y);
     EXPECT_FLOAT_EQ(object.getDimensions().x, dims.x);
     EXPECT_FLOAT_EQ(object.getDimensions().y, dims.y);
     EXPECT_EQ(object.getFilepath(), "sprites/ball.png");
 
-    ASSERT_EQ(targetMessages.size(), 1);
+    ASSERT_EQ(targetMessages.size(), 2);
     const auto& msg = targetMessages[0];
     EXPECT_EQ(msg.at("command").as_string(), "room");
     EXPECT_EQ(msg.at("type").as_string(), "object_2D");
@@ -1360,9 +1360,9 @@ TEST_F(GameplaySpecTest, CreateMovingObject2DAddsObjectAndBroadcastsCreate)
     EXPECT_EQ(Util::toUint64(msg.at("client_id")), SENDER_ID);
     EXPECT_EQ(Util::toUint64(msg.at("callback")), MESSAGE_ID);
 
-    // Give the (immediately terminating) movement thread a moment to exit
-    // before TearDown releases the shared storage it reads.
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    EXPECT_EQ(targetMessages[1].at("createMovingType").as_string(), "update");
+    EXPECT_DOUBLE_EQ(targetMessages[1].at("x").as_double(), start.x + 1.0);
+    // TearDown can immediately release the room and clients.
 }
 
 TEST_F(GameplaySpecTest, CreateMovingObject3DAddsObjectAndBroadcastsCreate)
@@ -1380,7 +1380,7 @@ TEST_F(GameplaySpecTest, CreateMovingObject3DAddsObjectAndBroadcastsCreate)
     auto* room = server::RoomStorage::getRoomById(ROOM_ID);
     ASSERT_EQ(room->getObjects3D().size(), 1);
     const auto& object = room->getObjects3D()[0];
-    EXPECT_FLOAT_EQ(object.getPosition().x, start.x);
+    EXPECT_FLOAT_EQ(object.getPosition().x, start.x + 1.0f);
     EXPECT_FLOAT_EQ(object.getPosition().y, start.y);
     EXPECT_FLOAT_EQ(object.getPosition().z, start.z);
     EXPECT_FLOAT_EQ(object.getDimensions().x, dims.x);
@@ -1388,7 +1388,7 @@ TEST_F(GameplaySpecTest, CreateMovingObject3DAddsObjectAndBroadcastsCreate)
     EXPECT_FLOAT_EQ(object.getDimensions().z, dims.z);
     EXPECT_EQ(object.getFilepath(), "models/crate.obj");
 
-    ASSERT_EQ(targetMessages.size(), 1);
+    ASSERT_EQ(targetMessages.size(), 2);
     const auto& msg = targetMessages[0];
     EXPECT_EQ(msg.at("type").as_string(), "object_3D");
     EXPECT_EQ(msg.at("action").as_string(), "create_moving");
@@ -1401,33 +1401,50 @@ TEST_F(GameplaySpecTest, CreateMovingObject3DAddsObjectAndBroadcastsCreate)
     EXPECT_DOUBLE_EQ(msg.at("h").as_double(), dims.y);
     EXPECT_DOUBLE_EQ(msg.at("d").as_double(), dims.z);
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    EXPECT_EQ(targetMessages[1].at("createMovingType").as_string(), "update");
+    EXPECT_DOUBLE_EQ(targetMessages[1].at("x").as_double(), start.x + 1.0);
 }
 
-TEST_F(GameplaySpecTest, CreateMovingLinearObjectMovesOverTime)
+TEST_F(GameplaySpecTest, CreateMovingObject3DClampsFinalPosition)
+{
+    setUpRoom();
+    allowClientObjects();
+    auto targetMessages = receivedMessages(*m_target);
+    command.getServerConfig().getGameplayLimits().setMaxHorizontalPosition(50.0f);
+    command.getServerConfig().getGameplayLimits().setMaxHeight(20.0f);
+    auto bytes = createMoving3DBytes({1.0f, 2.0f, 3.0f}, {1.0f, 1.0f, 1.0f},
+                                     {100.0f, 100.0f, -100.0f}, 0.25f,
+                                     MovementType::eased, "");
+    ASSERT_EQ(read(bytes, *m_sender), server::CommandResult::success);
+    const auto position = server::RoomStorage::getRoomById(ROOM_ID)->getObjects3D()[0].getPosition();
+    EXPECT_FLOAT_EQ(position.x, 50.0f);
+    EXPECT_FLOAT_EQ(position.y, 20.0f);
+    EXPECT_FLOAT_EQ(position.z, -50.0f);
+    ASSERT_EQ(targetMessages.size(), 2);
+    EXPECT_DOUBLE_EQ(targetMessages.back().at("x").as_double(), position.x);
+    EXPECT_DOUBLE_EQ(targetMessages.back().at("y").as_double(), position.y);
+    EXPECT_DOUBLE_EQ(targetMessages.back().at("z").as_double(), position.z);
+}
+
+TEST_F(GameplaySpecTest, CreateMovingLinearObjectCompletesDuringDispatch)
 {
     setUpRoom();
     allowClientObjects();
     auto targetMessages = receivedMessages(*m_target);
 
-    const float delta = 0.25f; // 15 ticks at the default 60 Hz tickrate.
+    const float delta = 0.25f;
     auto bytes = createMoving2DBytes(Vector2f(0.0f, 0.0f), Vector2f(1.0f, 1.0f),
                                      Vector2f(10.0f, 0.0f), delta, MovementType::linear, "");
     ASSERT_EQ(read(bytes, *m_sender), server::CommandResult::success);
-
-    // Wait until the movement thread has run to completion and detached.
-    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
 
     auto* room = server::RoomStorage::getRoomById(ROOM_ID);
     ASSERT_EQ(room->getObjects2D().size(), 1);
     auto position = room->getObjects2D()[0].getPosition();
 
-    // The object advanced along the x axis without overshooting its target.
-    EXPECT_GT(position.x, 0.0f);
-    EXPECT_LE(position.x, 10.0f + 0.01f);
+    EXPECT_FLOAT_EQ(position.x, 10.0f);
     EXPECT_FLOAT_EQ(position.y, 0.0f);
 
-    // The server streamed at least one update to the room members.
+    // The final update is delivered before dispatch returns.
     bool foundUpdate = false;
     for (const auto& msg : targetMessages)
     {

@@ -16,8 +16,10 @@
 
 #include <nexilis/nx_protocol.hh>
 #include <nexilis/server/command/command.hh>
+#include <nexilis/server/gameplay_limits.hh>
 #include <nexilis/server/movement.hh>
 #include <nexilis/server/room_storage.hh>
+#include <nexilis/server/validation.hh>
 
 namespace nexilis::server
 {
@@ -46,96 +48,62 @@ double Movement::linear(double progress, double totalDistance)
     return totalDistance * progress;
 }
 
-std::thread Movement::object2D(std::unique_ptr<Movement2D> movement, User& user, NXProtocol& protocol)
+void Movement::object2D(std::unique_ptr<Movement2D> movement, User& user, NXProtocol& protocol)
 {
-    // clang-format off
-    return std::thread([movement = std::move(movement), &user, &protocol]()
-    {
-        try
-        {
-            auto* room = RoomStorage::getRoomById(user.getRoomId());
-            auto* serverObject = room->getObject2DById(movement->getObjectId());
-            // Capture start position so each tick computes startPos + f(progress)
-            // instead of accumulating offsets onto an already-moved position.
-            Vector2f startPosition = serverObject->getPosition();
+    if (!movement)
+        return;
+    auto* room = RoomStorage::getRoomById(user.getRoomId());
+    auto* object = room ? room->getObject2DById(movement->getObjectId()) : nullptr;
+    if (!object)
+        return;
 
-            Command::runWithTickrate(m_settings->getTickrate(), movement->getDeltatime(), [&movement, &user, &protocol, startPosition](double progress)
-            {
-                auto func = movement->getMovementFunc();
-                auto amount = movement->getAmount();
-
-                auto* room = RoomStorage::getRoomById(user.getRoomId());
-                auto* serverObject = room->getObject2DById(movement->getObjectId());
-
-                Vector2f newPosition = Vector2f(startPosition.x + func(progress, amount.x),
-                                               startPosition.y + func(progress, amount.y));
-
-                serverObject->setPosition(newPosition);
-                std::map<std::string, boost::json::value> messageParams
-                {
-                    {"createMovingType", boost::json::value("update")},
-                    {"id", boost::json::value(serverObject->getId())},
-                    {"x", boost::json::value(newPosition.x)},
-                    {"y", boost::json::value(newPosition.y)}
-                };
-
-                auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, movement->getMessageData(), messageParams, movement->getMessageId());
-                Command::sendRoomCommand(roomCommand, user, protocol);
-            });
-        }
-        catch (const std::exception& e)
-        {
-            Log::error(e.what());
-        }
-    });
-    // clang-format on
+    const auto start = object->getPosition();
+    const auto amount = movement->getAmount();
+    const auto func = movement->getMovementFunc();
+    const auto& limits = GameplayLimits::get();
+    // Complete the displacement during dispatch; no task retains the user,
+    // protocol, room, or object after the command returns.
+    const Vector2f position(limits.clampHorizontal(start.x + func(1.0, amount.x)),
+                            limits.clampHorizontal(start.y + func(1.0, amount.y)));
+    if (!validation::isFinite(position))
+        return;
+    object->setPosition(position);
+    std::map<std::string, boost::json::value> params{
+            {"createMovingType", boost::json::value("update")},
+            {"id", boost::json::value(object->getId())},
+            {"x", boost::json::value(position.x)},
+            {"y", boost::json::value(position.y)}};
+    auto command = Command::createRoomCommand(user.getRoomId(), user, movement->getMessageData(), params, movement->getMessageId());
+    Command::sendRoomCommand(command, user, protocol);
 }
 
-std::thread Movement::object3D(std::unique_ptr<Movement3D> movement, User& user, NXProtocol& protocol)
+void Movement::object3D(std::unique_ptr<Movement3D> movement, User& user, NXProtocol& protocol)
 {
-    // clang-format off
-    return std::thread([movement = std::move(movement), &user, &protocol]()
-    {
-        try
-        {
-            auto* room = RoomStorage::getRoomById(user.getRoomId());
-            auto* serverObject = room->getObject3DById(movement->getObjectId());
-            // Capture start position so each tick computes startPos + f(progress)
-            // instead of accumulating offsets onto an already-moved position.
-            auto startPosition = serverObject->getPosition();
+    if (!movement)
+        return;
+    auto* room = RoomStorage::getRoomById(user.getRoomId());
+    auto* object = room ? room->getObject3DById(movement->getObjectId()) : nullptr;
+    if (!object)
+        return;
 
-            Command::runWithTickrate(m_settings->getTickrate(), movement->getDeltatime(), [&movement, &user, &protocol, startPosition](double progress)
-            {
-                auto func = movement->getMovementFunc();
-                auto amount = movement->getAmount();
-
-                auto* room = RoomStorage::getRoomById(user.getRoomId());
-                auto* serverObject = room->getObject3DById(movement->getObjectId());
-
-                Vector3f newPosition = Vector3f(startPosition.x + func(progress, amount.x),
-                                               startPosition.y + func(progress, amount.y),
-                                               startPosition.z + func(progress, amount.z));
-
-                serverObject->setPosition(newPosition);
-                std::map<std::string, boost::json::value> messageParams
-                {
-                    {"createMovingType", boost::json::value("update")},
-                    {"id", boost::json::value(serverObject->getId())},
-                    {"x", boost::json::value(newPosition.x)},
-                    {"y", boost::json::value(newPosition.y)},
-                    {"z", boost::json::value(newPosition.z)}
-                };
-
-                auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, movement->getMessageData(), messageParams, movement->getMessageId());
-                Command::sendRoomCommand(roomCommand, user, protocol);
-            });
-        }
-        catch (const std::exception& e)
-        {
-            Log::error(e.what());
-        }
-    });
-    // clang-format on
+    const auto start = object->getPosition();
+    const auto amount = movement->getAmount();
+    const auto func = movement->getMovementFunc();
+    const auto& limits = GameplayLimits::get();
+    const Vector3f position(limits.clampHorizontal(start.x + func(1.0, amount.x)),
+                            limits.clampHeight(start.y + func(1.0, amount.y)),
+                            limits.clampHorizontal(start.z + func(1.0, amount.z)));
+    if (!validation::isFinite(position))
+        return;
+    object->setPosition(position);
+    std::map<std::string, boost::json::value> params{
+            {"createMovingType", boost::json::value("update")},
+            {"id", boost::json::value(object->getId())},
+            {"x", boost::json::value(position.x)},
+            {"y", boost::json::value(position.y)},
+            {"z", boost::json::value(position.z)}};
+    auto command = Command::createRoomCommand(user.getRoomId(), user, movement->getMessageData(), params, movement->getMessageId());
+    Command::sendRoomCommand(command, user, protocol);
 }
 
 } // namespace nexilis::server

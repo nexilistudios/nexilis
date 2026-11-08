@@ -31,6 +31,7 @@
 #include <array>
 #include <chrono>
 #include <mutex>
+#include <thread>
 #include <unordered_map>
 
 namespace nexilis::server
@@ -120,9 +121,7 @@ CommandResult Command::read(const nx_data& command, User& user, NXProtocol& prot
     // Keep the movement system and the gameplay limits bound to the
     // live server settings: the static pointers must be refreshed on
     // every dispatch so a fresh Command (e.g. a recreated server or a
-    // test fixture) does not leave detached movement threads reading a
-    // destroyed configuration's tickrate or command handlers reading
-    // destroyed limits.
+    // test fixture) does not leave command handlers reading destroyed limits.
     Movement::_initialize(m_settings);
     GameplayLimits::_initialize(m_settings.getGameplayLimits());
     RoomLimits::_initialize(m_settings.getRoomLimits());

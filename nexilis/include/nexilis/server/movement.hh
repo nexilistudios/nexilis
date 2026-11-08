@@ -23,8 +23,6 @@
 #include <nexilis/server/server_config.hh>
 #include <nexilis/server/user.hh>
 
-#include <thread>
-
 namespace nexilis::server
 {
 
@@ -40,9 +38,10 @@ public:
     /// Linear movement.
     static double linear(double progress, double totalDistance);
 
-    /// 2D movement thread.
-    static std::thread object2D(std::unique_ptr<Movement2D> movement, User& user, NXProtocol& protocol);
-    static std::thread object3D(std::unique_ptr<Movement3D> movement, User& user, NXProtocol& protocol);
+    /// Apply a complete object displacement during dispatch and broadcast it.
+    /// These methods do not spawn workers or retain the supplied references.
+    static void object2D(std::unique_ptr<Movement2D> movement, User& user, NXProtocol& protocol);
+    static void object3D(std::unique_ptr<Movement3D> movement, User& user, NXProtocol& protocol);
 
 private:
     static ServerConfig* m_settings;
