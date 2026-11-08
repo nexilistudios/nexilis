@@ -603,7 +603,7 @@ public:
 
     std::string getClientUsername(uint64_t client_id)
     {
-        auto* client = getClientFromRoom(client_id);
+        auto client = getClientFromRoom(client_id);
         return client ? client->getUsername() : "";
     }
 
@@ -622,11 +622,11 @@ public:
         return m_clientAPIData.getServerClientCount();
     }
 
-    /// Get a reference to a room from room id.
-    Room* getRoom(uint64_t room_id);
+    /// Return an owned snapshot copied under the room lock.
+    std::unique_ptr<Room> getRoom(uint64_t room_id);
 
-    /// Get client pointer from any room.
-    ClientSession* getClientFromRoom(uint64_t client_id);
+    /// Return an owned session snapshot copied under the room lock.
+    std::unique_ptr<ClientSession> getClientFromRoom(uint64_t client_id);
 
     /// Get a copy of a client's 3D position.
     Vector3f getClientPosition3D(uint64_t client_id);

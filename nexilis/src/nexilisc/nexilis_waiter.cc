@@ -24,56 +24,36 @@
 struct nexilis_WaiterHandle
 {
     std::function<void()> callback;
-    nexilis_ClientAPI* client_api;
     std::mutex mutex;
     bool waited = false;
-    nexilis_WaitType wait_type;
 };
 
 namespace
 {
-std::function<void()> create_wait_callback(nexilis_ClientAPI* client_api,
-                                           std::promise<void>& promise,
+std::function<void()> create_wait_callback(std::shared_ptr<nexilis::client::ClientAPI> api,
+                                           std::shared_ptr<std::promise<void>> promise,
                                            nexilis_WaitType wait_type)
 {
-    if (!client_api || !client_api->api)
+    return [api = std::move(api), promise = std::move(promise), wait_type]
     {
-        return [&promise]()
-        {
-            promise.set_exception(std::make_exception_ptr(
-                    std::runtime_error("Invalid ClientAPI")));
-        };
-    }
-
-    switch (wait_type)
-    {
-        case NEXILIS_WAIT_UNTIL_ROOMS_CREATED:
-            return [client_api, &promise]()
-            {
-                client_api->api->waitUntilRoomsCreated(promise);
-            };
-        default:
-            return [&promise]()
-            {
-                promise.set_exception(std::make_exception_ptr(
-                        std::runtime_error("Unknown wait type")));
-            };
-    }
+        if (wait_type == NEXILIS_WAIT_UNTIL_ROOMS_CREATED)
+            api->waitUntilRoomsCreated (*promise)();
+        else
+            promise->set_exception(std::make_exception_ptr(std::runtime_error("Unknown wait type")));
+    };
 }
 } // namespace
 
 nexilis_WaiterHandle* nexilis_waiter_create(nexilis_ClientAPI* client_api, nexilis_PromiseHandle* promise, nexilis_WaitType wait_type)
 {
-    if (!client_api || !promise)
+    if (!client_api || !client_api->owner || !promise || !promise->promise)
         return nullptr;
 
     try
     {
-        auto waiter = new nexilis_WaiterHandle();
-        waiter->client_api = client_api;
-        waiter->wait_type = wait_type;
-        waiter->callback = create_wait_callback(client_api, promise->promise, wait_type);
-        return waiter;
+        auto waiter = std::make_unique<nexilis_WaiterHandle>();
+        waiter->callback = create_wait_callback(client_api->owner, promise->promise, wait_type);
+        return waiter.release();
     }
     catch (...)
     {
@@ -120,7 +100,10 @@ void nexilis_waiter_destroy(nexilis_WaiterHandle* waiter)
 {
     if (waiter)
     {
-        std::lock_guard<std::mutex> lock(waiter->mutex);
+        {
+            std::lock_guard<std::mutex> lock(waiter->mutex);
+            waiter->callback = {};
+        }
         delete waiter;
     }
 }

@@ -119,7 +119,7 @@ try
     else
     {
         Log::debug("Command: Nexilis command sequence");
-        Util::debugUint8Vector(command);
+        Log::debug("Command bytes: ", command.size());
     }
 
     // DefaultArgs from Commands.

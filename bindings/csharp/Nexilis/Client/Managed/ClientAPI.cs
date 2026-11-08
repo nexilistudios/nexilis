@@ -156,8 +156,8 @@ namespace Nexilis.Client
         }
 
         /// <summary>
-        /// Get room object from the root id. Returns null when the room is
-        /// unknown to the client.
+        /// Get an owned snapshot of a room. Returns null when the room is
+        /// unknown to the client. Dispose the returned room when done.
         /// </summary>
         public Room? GetRoomFromId(ulong room_id)
         {
@@ -172,6 +172,10 @@ namespace Nexilis.Client
             return new Room(room_ptr, ownsNativeInstance: true);
         }
 
+        /// <summary>
+        /// Get an owned snapshot of a client session. Dispose the returned
+        /// session when done.
+        /// </summary>
         public ClientSession GetClientFromClientId(ulong clientId)
         {
             ThrowIfDisposed();
@@ -181,14 +185,7 @@ namespace Nexilis.Client
             {
                 throw new InvalidOperationException($"Client {clientId} was not found in any room.");
             }
-            try
-            {
-                return ClientSession.Snapshot(client_ptr);
-            }
-            finally
-            {
-                ClientSessionNative.nexilis_client_session_free_wrapper(client_ptr);
-            }
+            return new ClientSession(client_ptr, ownsNativeInstance: true);
         }
 
         /// <summary>Consumes pending shooter events as a UTF-8 JSON object.</summary>

@@ -239,8 +239,7 @@ void UDPClient::receiveLoop()
             }
             else
             {
-                Log::error("UDPClient: Received unexpected message");
-                Util::debugUint8Vector(buffer);
+                Log::error("UDPClient: Received unexpected message (", buffer.size(), " bytes)");
             }
         }
         else if (bytesRead == -1)
@@ -314,55 +313,43 @@ void UDPClient::sendMessage(const nx_data& message, const std::function<void()>&
 
 std::future<void> UDPClient::sendMessageAsync(const nx_data& message)
 {
-    if (m_stopped->load())
+    std::promise<void> promise;
+    auto future = promise.get_future();
+    try
     {
-        std::promise<void> promise;
-        promise.set_exception(std::make_exception_ptr(std::runtime_error("Client is stopped")));
-        return promise.get_future();
-    }
-
-    if (m_clientSocket == -1)
-    {
-        std::promise<void> promise;
-        promise.set_exception(std::make_exception_ptr(std::runtime_error("Socket is not open")));
-        return promise.get_future();
-    }
-
-    auto promise = std::make_shared<std::promise<void>>();
-    auto future = promise->get_future();
-
-    auto packet = udp_auth::makeSession(message, getClientAPI()->getUdpToken());
-    if (packet.empty())
-    {
-        promise->set_exception(std::make_exception_ptr(std::runtime_error("UDP session is not authenticated")));
-        return future;
-    }
-    auto messageCopy = std::make_shared<nx_data>(std::move(packet));
-
-    std::thread([this, messageCopy, promise]()
-                {
-        try
+        if (m_stopped->load())
         {
-            std::lock_guard<std::mutex> lock(*m_mutex);
-
-            if (m_clientSocket == -1)
-            {
-                throw std::runtime_error("Socket is not open");
-            }
-
-            if (!sendData(reinterpret_cast<const char*>(messageCopy->data()), messageCopy->size()))
-            {
-                throw std::runtime_error(std::string("Failed to send message: ") + strerror(errno));
-            }
-
-            promise->set_value();
+            throw std::runtime_error("Client is stopped");
         }
-        catch (...)
-        {
-            promise->set_exception(std::current_exception());
-        } })
-            .detach();
 
+        if (m_clientSocket == -1)
+        {
+            throw std::runtime_error("Socket is not open");
+        }
+
+        auto packet = udp_auth::makeSession(message, getClientAPI()->getUdpToken());
+        if (packet.empty())
+        {
+            throw std::runtime_error("UDP session is not authenticated");
+        }
+
+        std::lock_guard<std::mutex> lock(*m_mutex);
+        if (m_clientSocket == -1)
+        {
+            throw std::runtime_error("Socket is not open");
+        }
+
+        if (!sendData(reinterpret_cast<const char*>(packet.data()), packet.size()))
+        {
+            throw std::runtime_error(std::string("Failed to send message: ") + strerror(errno));
+        }
+
+        promise.set_value();
+    }
+    catch (...)
+    {
+        promise.set_exception(std::current_exception());
+    }
     return future;
 }
 

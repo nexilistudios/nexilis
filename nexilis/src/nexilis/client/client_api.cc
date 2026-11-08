@@ -155,7 +155,7 @@ ReadResult ClientAPI::readMessage(const nx_data& message)
     }
     catch (...)
     {
-        Util::debugUint8Vector(message);
+        Log::debug("ClientAPI: Could not parse message (", message.size(), " bytes)");
         return ReadResult::error_in_json_conversion;
     }
 
@@ -245,25 +245,25 @@ std::function<void()> ClientAPI::waitUntilRoomsCreated(std::promise<void>& promi
     };
 }
 
-Room* ClientAPI::getRoom(uint64_t room_id)
+std::unique_ptr<Room> ClientAPI::getRoom(uint64_t room_id)
 {
     std::lock_guard<std::mutex> lock(*m_clientAPIData.getRoomsMutex());
     for (auto& room : m_clientAPIData.getCurrentlyActiveRooms())
     {
         if (room.getId() == room_id)
         {
-            return &room;
+            return std::make_unique<Room>(room);
         }
     }
     return nullptr;
 }
 
-ClientSession* ClientAPI::getClientFromRoom(uint64_t client_id)
+std::unique_ptr<ClientSession> ClientAPI::getClientFromRoom(uint64_t client_id)
 {
     auto& mtx = m_clientAPIData.getRoomsMutex();
     std::lock_guard<std::mutex> lock(*mtx);
 
-    ClientSession* returned_client = nullptr;
+    std::unique_ptr<ClientSession> returned_client;
     auto& rooms = m_clientAPIData.getCurrentlyActiveRooms();
     for (auto&& room = rooms.begin(); room != rooms.end(); room++)
     {
@@ -271,7 +271,7 @@ ClientSession* ClientAPI::getClientFromRoom(uint64_t client_id)
         {
             if (client.getId() == client_id)
             {
-                returned_client = &client;
+                returned_client = std::make_unique<ClientSession>(client);
             }
         }
     }

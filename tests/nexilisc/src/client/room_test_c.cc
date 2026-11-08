@@ -25,6 +25,8 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <nexilisc/nexilis_promise.h>
+#include <nexilisc/nexilis_waiter.h>
 
 class RoomTest_c : public ::testing::Test
 {
@@ -274,4 +276,40 @@ TEST_F(RoomTest_c, DestroyNullSafe)
 TEST_F(RoomTest_c, CommunicationDestroyNullSafe)
 {
     nexilis_communication_destroy(nullptr);
+}
+
+TEST_F(RoomTest_c, WaiterRetainsApiAndPromiseAfterHandlesAreDestroyed)
+{
+    auto promise = nexilis_promise_create();
+    auto future = promise->promise->get_future();
+    // The callback executes the invalid-type error path without a timed wait.
+    auto waiter = nexilis_waiter_create(client_api, promise, static_cast<nexilis_WaitType>(99));
+    ASSERT_NE(waiter, nullptr);
+    nexilis_promise_destroy(promise);
+    nexilis_client_api_destroy(client_api);
+    client_api = nullptr;
+    nexilis_waiter_wait(waiter);
+    ASSERT_EQ(future.wait_for(std::chrono::milliseconds(0)), std::future_status::ready);
+    EXPECT_THROW(future.get(), std::runtime_error);
+    nexilis_waiter_destroy(waiter);
+}
+
+TEST_F(RoomTest_c, WaiterExecutesRoomsCallbackWithRetainedState)
+{
+    auto promise = nexilis_promise_create();
+    auto future = promise->promise->get_future();
+    auto waiter = nexilis_waiter_create_for_rooms_created(client_api, promise);
+    ASSERT_NE(waiter, nullptr);
+    nexilis::nx_data message;
+    const std::string json = R"({"command":"getting","type":"info_rooms","callback":0,"rooms":[{"room_id":1,"creator_id":1,"name":"room","context":1,"max_size":2}]})";
+    message.assign(json.begin(), json.end());
+    message.push_back('\n');
+    ASSERT_EQ(client_api->api->readMessage(message), nexilis::client::ReadResult::success);
+    nexilis_promise_destroy(promise);
+    nexilis_client_api_destroy(client_api);
+    client_api = nullptr;
+    nexilis_waiter_wait(waiter);
+    ASSERT_EQ(future.wait_for(std::chrono::milliseconds(0)), std::future_status::ready);
+    EXPECT_NO_THROW(future.get());
+    nexilis_waiter_destroy(waiter);
 }

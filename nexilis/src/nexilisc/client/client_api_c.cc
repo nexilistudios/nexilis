@@ -17,6 +17,7 @@
 #include <boost/json.hpp>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <nexilisc/client/client_api_c.h>
 #include <nexilisc/client/client_session_c.h>
 #include <nexilisc/room_data_c.h>
@@ -25,25 +26,24 @@ nexilis_ClientAPI* nexilis_client_api_create(nexilis_ClientConfigC* config)
 {
     if (config && config->data)
     {
-        auto client_api = new nexilis_ClientAPI();
-        auto cpp_client_api = new nexilis::client::ClientAPI(*config->data);
-        client_api->api = cpp_client_api;
-        return client_api;
+        try
+        {
+            auto client_api = std::make_unique<nexilis_ClientAPI>();
+            client_api->owner = std::make_shared<nexilis::client::ClientAPI>(*config->data);
+            client_api->api = client_api->owner.get();
+            return client_api.release();
+        }
+        catch (...)
+        {
+            return nullptr;
+        }
     }
     return nullptr;
 }
 
 void nexilis_client_api_destroy(nexilis_ClientAPI* client_api)
 {
-    if (client_api)
-    {
-        if (client_api->api)
-        {
-            delete client_api->api;
-            client_api->api = nullptr;
-        }
-        delete client_api;
-    }
+    delete client_api;
 }
 
 bool nexilis_client_api_is_inet_udp_ready(const nexilis_ClientAPI* client_api)
@@ -310,10 +310,17 @@ nexilis_Room* nexilis_client_api_get_room(const nexilis_ClientAPI* client_api, u
         return nullptr;
     }
 
-    auto const_room = new nexilis_Room;
-    const_room->room = room;
-    const_room->owned = false;
-    return const_room;
+    try
+    {
+        auto wrapper = std::make_unique<nexilis_Room>();
+        wrapper->room = room.release();
+        wrapper->owned = true;
+        return wrapper.release();
+    }
+    catch (...)
+    {
+        return nullptr;
+    }
 }
 
 nexilis_ClientSession* nexilis_client_api_get_client_from_room(const nexilis_ClientAPI* client_api, uint64_t client_id)
@@ -330,9 +337,16 @@ nexilis_ClientSession* nexilis_client_api_get_client_from_room(const nexilis_Cli
         return nullptr;
     }
 
-    auto client_session = new nexilis_ClientSession;
-    client_session->client = client;
-    return client_session;
+    try
+    {
+        auto wrapper = std::make_unique<nexilis_ClientSession>();
+        wrapper->client = client.release();
+        return wrapper.release();
+    }
+    catch (...)
+    {
+        return nullptr;
+    }
 }
 
 char* nexilis_client_api_drain_game_events(nexilis_ClientAPI* client_api, size_t chat_since)

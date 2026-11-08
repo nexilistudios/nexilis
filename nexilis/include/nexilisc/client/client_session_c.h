@@ -41,7 +41,7 @@ extern "C"
     nexilis_ClientSession* nexilis_client_session_clone(const nexilis_ClientSession* session);
     void nexilis_client_session_destroy(nexilis_ClientSession* session);
     // Release a wrapper returned by nexilis_client_api_get_client_from_room.
-    // Its ClientSession belongs to the ClientAPI and must not be deleted here.
+    // That getter now returns an owned snapshot; this legacy name destroys it.
     void nexilis_client_session_release_borrowed(nexilis_ClientSession* session);
     // Free a nexilis_ClientSession wrapper struct without destroying the
     // underlying ClientSession it points to. Use this when a wrapper was

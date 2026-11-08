@@ -140,6 +140,34 @@ protected:
     }
 };
 
+TEST_F(RoomSpecTest, OwnedLookupsSurviveReplacementAndMirrorUsernameUpdates)
+{
+    ASSERT_EQ(readMessage(infoRoomsMessage({CLIENT_A})), client::ReadResult::success);
+    auto room = api->getRoom(ROOM_ID);
+    auto session = api->getClientFromRoom(CLIENT_A);
+    ASSERT_NE(room, nullptr);
+    ASSERT_NE(session, nullptr);
+    boost::json::object update{{"command", "setting"}, {"type", "username"}, {"client_id", CLIENT_A}, {"username", "updated"}, {"callback", 0}};
+    ASSERT_EQ(readMessage(update), client::ReadResult::success);
+    EXPECT_EQ(api->getClientUsername(CLIENT_A), "updated");
+    EXPECT_NE(session->getUsername(), "updated");
+    ASSERT_EQ(readMessage(infoRoomsMessage({CLIENT_B})), client::ReadResult::success);
+    EXPECT_EQ(session->getId(), CLIENT_A);
+    ASSERT_EQ(room->getClients().size(), 1);
+    EXPECT_EQ(room->getClients()[0].getId(), CLIENT_A);
+}
+
+TEST(ClientRoomLifetimeTest, CommunicationRetainsSenderSnapshot)
+{
+    auto sender = std::make_unique<client::ClientSession>(42, nullptr);
+    sender->setUsername("sender");
+    client::Room::Communication message("hello", sender.get());
+    sender.reset();
+    ASSERT_NE(message.getClient(), nullptr);
+    EXPECT_EQ(message.getClient()->getId(), 42);
+    EXPECT_EQ(message.getClient()->getUsername(), "sender");
+}
+
 TEST_F(RoomSpecTest, InfoRoomsCreatesSessions)
 {
     ASSERT_EQ(readMessage(infoRoomsMessage({CLIENT_A})), client::ReadResult::success);

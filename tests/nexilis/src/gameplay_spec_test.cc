@@ -2404,7 +2404,7 @@ TEST(ClientGameplayParseTest, ParsesCreateMovingObject2D)
 
     ASSERT_EQ(readClientMessage(api, json), client::ReadResult::success);
 
-    auto* room = api.getRoom(ROOM_ID);
+    auto room = api.getRoom(ROOM_ID);
     ASSERT_NE(room, nullptr);
     ASSERT_EQ(room->getObjects2D().size(), 1);
     const auto& object = room->getObjects2D()[0];
@@ -2476,7 +2476,7 @@ TEST(ClientGameplayParseTest, ParsesCreateMovingObject2DUpdate)
     create["filepath"] = "sprites/ball.png";
     ASSERT_EQ(readClientMessage(api, create), client::ReadResult::success);
 
-    auto* room = api.getRoom(ROOM_ID);
+    auto room = api.getRoom(ROOM_ID);
     ASSERT_NE(room, nullptr);
     ASSERT_EQ(room->getObjects2D().size(), 1);
 
@@ -2494,6 +2494,9 @@ TEST(ClientGameplayParseTest, ParsesCreateMovingObject2DUpdate)
     update["y"] = 8.0;
     ASSERT_EQ(readClientMessage(api, update), client::ReadResult::success);
 
+    // Room accessors return owned snapshots, so re-fetch after each update.
+    room = api.getRoom(ROOM_ID);
+    ASSERT_NE(room, nullptr);
     ASSERT_EQ(room->getObjects2D().size(), 1);
     const auto& object = room->getObjects2D()[0];
     EXPECT_EQ(object.getId(), OBJECT_ID);
@@ -2579,7 +2582,7 @@ TEST(ClientGameplayParseTest, ParsesObject2DCreateDestroyMove)
 
     ASSERT_EQ(readClientMessage(api, create), client::ReadResult::success);
 
-    auto* room = api.getRoom(ROOM_ID);
+    auto room = api.getRoom(ROOM_ID);
     ASSERT_NE(room, nullptr);
     ASSERT_EQ(room->getObjects2D().size(), 1);
     EXPECT_EQ(room->getObjects2D()[0].getId(), OBJECT_ID);
@@ -2597,6 +2600,8 @@ TEST(ClientGameplayParseTest, ParsesObject2DCreateDestroyMove)
     move["y"] = 20.0;
 
     ASSERT_EQ(readClientMessage(api, move), client::ReadResult::success);
+    room = api.getRoom(ROOM_ID);
+    ASSERT_NE(room, nullptr);
     EXPECT_FLOAT_EQ(room->getObjects2D()[0].getPosition().x, 10.0f);
     EXPECT_FLOAT_EQ(room->getObjects2D()[0].getPosition().y, 20.0f);
 
@@ -2610,6 +2615,8 @@ TEST(ClientGameplayParseTest, ParsesObject2DCreateDestroyMove)
     destroy["id"] = OBJECT_ID;
 
     ASSERT_EQ(readClientMessage(api, destroy), client::ReadResult::success);
+    room = api.getRoom(ROOM_ID);
+    ASSERT_NE(room, nullptr);
     EXPECT_TRUE(room->getObjects2D().empty());
 }
 
@@ -2722,7 +2729,7 @@ TEST(ClientGameplayParseTest, ParsesPlayer2DPositionAndDimension)
 
     ASSERT_EQ(readClientMessage(api, position), client::ReadResult::success);
 
-    auto* room = api.getRoom(ROOM_ID);
+    auto room = api.getRoom(ROOM_ID);
     ASSERT_NE(room, nullptr);
     auto& clients = room->getClients();
     ASSERT_EQ(clients.size(), 1);
@@ -2741,8 +2748,12 @@ TEST(ClientGameplayParseTest, ParsesPlayer2DPositionAndDimension)
     dimension["y"] = 5.0;
 
     ASSERT_EQ(readClientMessage(api, dimension), client::ReadResult::success);
-    EXPECT_FLOAT_EQ(clients[0].getObject2D().getDimensions().x, 3.0f);
-    EXPECT_FLOAT_EQ(clients[0].getObject2D().getDimensions().y, 5.0f);
+    room = api.getRoom(ROOM_ID);
+    ASSERT_NE(room, nullptr);
+    auto& updatedClients = room->getClients();
+    ASSERT_EQ(updatedClients.size(), 1);
+    EXPECT_FLOAT_EQ(updatedClients[0].getObject2D().getDimensions().x, 3.0f);
+    EXPECT_FLOAT_EQ(updatedClients[0].getObject2D().getDimensions().y, 5.0f);
 }
 
 // ---------------------------------------------------------------------------

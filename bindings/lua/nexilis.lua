@@ -338,7 +338,7 @@ function Client:remote_client(client_id)
     self:assert_open()
     local session = native.nexilis_client_api_get_client_from_room(self.state.api, id(client_id))
     if session == null then return nil end
-    -- The wrapper is ours; the underlying session belongs to ClientAPI.
+    -- This getter returns an owned snapshot, released after reading it.
     local x, y, z = ffi.new("float[1]"), ffi.new("float[1]"), ffi.new("float[1]")
     local position = nil
     if native.nexilis_client_session_get_position_3D_values(session, x, y, z) then

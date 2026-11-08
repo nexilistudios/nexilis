@@ -48,7 +48,7 @@ bool waitFor(Predicate&& predicate,
 void printNewMessages(nexilis::client::ClientAPI& api, uint64_t room_id,
                       const std::string& listener, std::size_t& printed)
 {
-    auto* room = api.getRoom(room_id);
+    auto room = api.getRoom(room_id);
     if (!room)
     {
         return;
@@ -147,7 +147,7 @@ int main(int argc, char** argv)
 
     if (!waitFor([&]()
                  {
-                     auto* room = alice_api.getRoom(room_id);
+                     auto room = alice_api.getRoom(room_id);
                      return room && room->getClients().size() == 2; }))
     {
         std::cerr << "Alice never saw Bob join the chat room" << std::endl;
@@ -189,8 +189,8 @@ int main(int argc, char** argv)
                                    {
                                        printNewMessages(alice_api, room_id, "Alice", alice_printed);
                                        printNewMessages(bob_api, room_id, "Bob", bob_printed);
-                                       auto* alice_room = alice_api.getRoom(room_id);
-                                       auto* bob_room = bob_api.getRoom(room_id);
+                                       auto alice_room = alice_api.getRoom(room_id);
+                                       auto bob_room = bob_api.getRoom(room_id);
                                        return alice_room && bob_room &&
                                               alice_room->getMessages().size() >= expected &&
                                               bob_room->getMessages().size() >= expected; },

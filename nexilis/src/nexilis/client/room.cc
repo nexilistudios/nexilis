@@ -21,7 +21,7 @@ namespace nexilis::client
 
 Room::Communication::Communication(const std::string& payload, ClientSession* client)
     : m_payload(payload),
-      m_client(client),
+      m_client(client ? std::make_shared<ClientSession>(*client) : nullptr),
       m_senderId(client ? client->getId() : 0),
       m_id(Util::getRandomUint64())
 {

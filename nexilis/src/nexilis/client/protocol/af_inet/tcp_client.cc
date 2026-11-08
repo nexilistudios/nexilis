@@ -160,45 +160,31 @@ void TCPClient::sendMessage(const nx_data& message, const std::function<void()>&
 
 std::future<void> TCPClient::sendMessageAsync(const nx_data& message)
 {
-    if (m_clientSocket == -1)
+    std::promise<void> promise;
+    auto future = promise.get_future();
+    try
     {
-        std::promise<void> promise;
-        promise.set_exception(std::make_exception_ptr(std::runtime_error("Socket is not open")));
-        return promise.get_future();
-    }
-
-    auto promise = std::make_shared<std::promise<void>>();
-    auto future = promise->get_future();
-
-    auto request = authenticate(message);
-    if (request.empty())
-    {
-        promise->set_exception(std::make_exception_ptr(std::runtime_error("Cannot authenticate request")));
-        return future;
-    }
-    auto messageCopy = std::make_shared<nx_data>(std::move(request));
-
-    std::thread([this, messageCopy, promise]()
-                {
-        try
+        if (m_clientSocket == -1)
         {
-            if (m_clientSocket == -1)
-            {
-                throw std::runtime_error("Socket is not open");
-            }
-
-            if (!sendFrame(reinterpret_cast<const char*>(messageCopy->data()), messageCopy->size()))
-            {
-                throw std::runtime_error(std::string("Failed to send message: ") + std::strerror(errno));
-            }
-            promise->set_value();
+            throw std::runtime_error("Socket is not open");
         }
-        catch (...)
-        {
-            promise->set_exception(std::current_exception());
-        } })
-            .detach();
 
+        auto request = authenticate(message);
+        if (request.empty())
+        {
+            throw std::runtime_error("Cannot authenticate request");
+        }
+
+        if (!sendFrame(reinterpret_cast<const char*>(request.data()), request.size()))
+        {
+            throw std::runtime_error(std::string("Failed to send message: ") + std::strerror(errno));
+        }
+        promise.set_value();
+    }
+    catch (...)
+    {
+        promise.set_exception(std::current_exception());
+    }
     return future;
 }
 

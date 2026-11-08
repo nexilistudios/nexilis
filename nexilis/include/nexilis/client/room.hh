@@ -66,7 +66,7 @@ public:
         /// Get client identification.
         const ClientSession* getClient() const
         {
-            return m_client;
+            return m_client.get();
         }
 
         uint64_t getSenderId() const
@@ -84,7 +84,7 @@ public:
         std::string m_payload;
 
         /// The id of the message.
-        const ClientSession* m_client;
+        std::shared_ptr<const ClientSession> m_client;
         uint64_t m_senderId;
 
         /// The id of the message.

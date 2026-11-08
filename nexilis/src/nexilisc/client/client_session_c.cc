@@ -56,7 +56,7 @@ void nexilis_client_session_destroy(nexilis_ClientSession* client)
 
 void nexilis_client_session_release_borrowed(nexilis_ClientSession* session)
 {
-    delete session;
+    nexilis_client_session_destroy(session);
 }
 
 void nexilis_client_session_free_wrapper(nexilis_ClientSession* session)

@@ -19,8 +19,10 @@
 #include <nexilisc/client/client_api_c.h>
 #include <nexilisc/client/client_config_c.h>
 #include <nexilisc/client/client_session_c.h>
+#include <nexilisc/client/room_c.h>
 
 #include <cstdlib>
+#include <cstring>
 
 class ClientSessionTest_c : public ::testing::Test
 {
@@ -177,4 +179,31 @@ TEST_F(ClientSessionTest_c, GetClientUsernameOfUnknownClientIsEmpty)
     ASSERT_NE(username, nullptr);
     EXPECT_STREQ(username, "");
     free((void*)username);
+}
+
+TEST_F(ClientSessionTest_c, OwnedLookupsSurviveRoomReplacement)
+{
+    auto deliver = [&](const char* json)
+    {
+        nexilis::nx_data message(json, json + std::strlen(json));
+        message.push_back('\n');
+        ASSERT_EQ(client_api->api->readMessage(message), nexilis::client::ReadResult::success);
+    };
+
+    deliver(R"({"command":"getting","type":"info_rooms","callback":0,"rooms":[{"room_id":1,"creator_id":1,"name":"room","context":1,"max_size":2,"clients":[{"id":42,"name":"player","x":0,"y":0,"width":1,"height":1}]}]})");
+
+    auto* room = nexilis_client_api_get_room(client_api, 1);
+    auto* session = nexilis_client_api_get_client_from_room(client_api, 42);
+    ASSERT_NE(room, nullptr);
+    ASSERT_NE(session, nullptr);
+
+    // Replacing the client's room state must not invalidate the snapshots.
+    deliver(R"({"command":"getting","type":"info_rooms","callback":0,"rooms":[{"room_id":1,"creator_id":1,"name":"room","context":1,"max_size":2,"clients":[{"id":7,"name":"other","x":0,"y":0,"width":1,"height":1}]}]})");
+
+    EXPECT_EQ(nexilis_room_get_id(room), 1u);
+    EXPECT_EQ(nexilis_client_session_get_id(session), 42u);
+    EXPECT_EQ(nexilis_client_api_get_client_from_room(client_api, 42), nullptr);
+
+    nexilis_room_destroy(room);
+    nexilis_client_session_destroy(session);
 }

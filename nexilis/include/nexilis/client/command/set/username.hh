@@ -30,20 +30,14 @@ public:
     {
     }
 
-    ReadResult execute(ClientAPI& api, ClientAPI::ClientAPIData&) override
+    ReadResult execute(ClientAPI& api, ClientAPI::ClientAPIData& data) override
     {
-        uint64_t id = m_client_id == 0 ? api.getClientId() : m_client_id;
-
-        auto* client = api.getClientFromRoom(id);
-        if (!client)
-        {
-            // The client has not joined a room yet, so there is no local
-            // session to mirror the username onto. The server still stores it
-            // and delivers it with the join response, so this is a success.
-            return ReadResult::success;
-        }
-
-        client->setUsername(m_username);
+        const uint64_t id = m_client_id == 0 ? api.getClientId() : m_client_id;
+        std::lock_guard lock(*data.getRoomsMutex());
+        for (auto& room : data.getCurrentlyActiveRooms())
+            for (auto& client : room.getClients())
+                if (client.getId() == id)
+                    client.setUsername(m_username);
         return ReadResult::success;
     }
 
