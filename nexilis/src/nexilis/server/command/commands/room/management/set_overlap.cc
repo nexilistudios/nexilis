@@ -35,7 +35,7 @@ CommandResult ServerImpl::room_management_setOverlap(const DefaultArgs& args)
     }
     bool allowed = payload.front() != 0;
 
-    auto* room = RoomStorage::getRoomById(user.getRoomId());
+    auto room = RoomStorage::getRoomById(user.getRoomId());
     if (!room)
     {
         Log::error("Set overlap: User not in room!");

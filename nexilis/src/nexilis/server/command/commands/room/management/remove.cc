@@ -34,7 +34,7 @@ CommandResult ServerImpl::room_management_remove(const DefaultArgs& args)
     }
     uint64_t roomId = Util::convertToType<uint64_t>(payload);
 
-    auto* room = RoomStorage::getRoomById(roomId);
+    auto room = RoomStorage::getRoomById(roomId);
 
     if (!room)
     {
@@ -66,14 +66,9 @@ CommandResult ServerImpl::room_management_remove(const DefaultArgs& args)
         }
     }
 
-    // Remove the room from storage.
-    auto& rooms = RoomStorage::getAllRooms();
-    rooms.erase(std::remove_if(rooms.begin(), rooms.end(),
-                               [roomId](const Room& r)
-                               {
-                                   return r.getId() == roomId;
-                               }),
-                rooms.end());
+    // Atomically remove the registry entry; keep our handle until dispatch ends.
+    if (!RoomStorage::remove(roomId))
+        return CommandResult::invalid_input;
 
     std::map<std::string, boost::json::value> params{
             {"action", boost::json::value("remove")},

@@ -22,70 +22,102 @@
 namespace nexilis::server
 {
 
-std::vector<Room> RoomStorage::m_rooms = {};
+std::vector<std::shared_ptr<Room>> RoomStorage::m_rooms;
+std::mutex RoomStorage::m_mutex;
 std::function<void(Room&)> RoomStorage::m_createHandler;
 
 void RoomStorage::setCreateHandler(std::function<void(Room&)> handler)
 {
-    m_createHandler = std::move(handler);
+    // Destroy the old callable outside the storage lock.
+    {
+        std::lock_guard lock(m_mutex);
+        m_createHandler.swap(handler);
+    }
 }
 
-std::vector<Room>& RoomStorage::getAllRooms()
+std::vector<std::shared_ptr<Room>> RoomStorage::getAllRooms()
 {
+    std::lock_guard lock(m_mutex);
     return m_rooms;
 }
 
-void RoomStorage::add(Room&& room)
+bool RoomStorage::add(Room&& room, std::size_t maxRooms, std::size_t maxRoomsPerCreator)
 {
-    Log::info("New room: ", room.getName(), " id: ", room.getId());
-    m_rooms.emplace_back(std::move(room));
-    if (m_createHandler)
-        m_createHandler(m_rooms.back());
-    Log::info("Total room amount = ", m_rooms.size());
+    std::shared_ptr<Room> stored;
+    std::function<void(Room&)> handler;
+    {
+        std::lock_guard lock(m_mutex);
+        if (m_rooms.size() >= maxRooms ||
+            std::any_of(m_rooms.begin(), m_rooms.end(), [&](const auto& existing)
+                        { return existing->getId() == room.getId(); }) ||
+            static_cast<std::size_t>(std::count_if(m_rooms.begin(), m_rooms.end(),
+                                                   [&](const auto& existing)
+                                                   { return existing->getCreatorId() == room.getCreatorId(); })) >= maxRoomsPerCreator)
+            return false;
+        handler = m_createHandler;
+        stored = std::make_shared<Room>(std::move(room));
+        m_rooms.emplace_back(stored);
+    }
+    // Callbacks may re-enter storage and may remove this room. Keep ownership
+    // until the callback returns and never call application code under the lock.
+    if (handler)
+        handler(*stored);
+    return true;
 }
 
 bool RoomStorage::contains(uint64_t id)
 {
-    return std::find_if(m_rooms.begin(), m_rooms.end(),
-                        [id](const Room& room)
-                        {
-                            return room.getId() == id;
-                        }) != m_rooms.end();
+    return getRoomById(id) != nullptr;
 }
 
 std::size_t RoomStorage::getRoomCount()
 {
+    std::lock_guard lock(m_mutex);
     return m_rooms.size();
 }
 
 std::size_t RoomStorage::getRoomCountByCreator(uint64_t creatorId)
 {
+    std::lock_guard lock(m_mutex);
     return static_cast<std::size_t>(std::count_if(
-            m_rooms.begin(), m_rooms.end(), [creatorId](const Room& room)
-            { return room.getCreatorId() == creatorId; }));
+            m_rooms.begin(), m_rooms.end(), [creatorId](const auto& room)
+            { return room->getCreatorId() == creatorId; }));
 }
 
-Room* RoomStorage::getRoomById(uint64_t id)
+std::shared_ptr<Room> RoomStorage::getRoomById(uint64_t id)
 {
+    std::lock_guard lock(m_mutex);
     auto it = std::find_if(m_rooms.begin(), m_rooms.end(),
-                           [id](const Room& room)
-                           {
-                               return room.getId() == id;
-                           });
+                           [id](const auto& room)
+                           { return room->getId() == id; });
+    return it == m_rooms.end() ? nullptr : *it;
+}
 
-    if (it != m_rooms.end())
+bool RoomStorage::remove(uint64_t id)
+{
+    std::shared_ptr<Room> removed;
     {
-        return &(*it);
+        std::lock_guard lock(m_mutex);
+        auto it = std::find_if(m_rooms.begin(), m_rooms.end(),
+                               [id](const auto& room)
+                               { return room->getId() == id; });
+        if (it == m_rooms.end())
+            return false;
+        removed = std::move(*it);
+        m_rooms.erase(it);
     }
-    else
-    {
-        return nullptr;
-    }
+    return true;
 }
 
 void RoomStorage::clear()
 {
-    m_rooms.clear();
+    std::vector<std::shared_ptr<Room>> removed;
+    {
+        std::lock_guard lock(m_mutex);
+        removed.swap(m_rooms);
+    }
+
+    removed.clear();
 }
 
 } // namespace nexilis::server

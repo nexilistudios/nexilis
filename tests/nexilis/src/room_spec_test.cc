@@ -16,8 +16,11 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <nexilis/client/client_api.hh>
+#include <nexilis/server/room_storage.hh>
 #include <nexilis/util.hh>
+#include <thread>
 
 #include <boost/json/parse.hpp>
 #include <boost/json/serialize.hpp>
@@ -240,4 +243,113 @@ TEST_F(RoomSpecTest, LeaveRemovesClientSessions)
     EXPECT_TRUE(players.empty());
 }
 
+} // namespace
+
+namespace
+{
+class RoomStorageSpecTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        server::RoomStorage::setCreateHandler({});
+        server::RoomStorage::clear();
+    }
+    void TearDown() override
+    {
+        server::RoomStorage::setCreateHandler({});
+        server::RoomStorage::clear();
+    }
+};
+
+TEST_F(RoomStorageSpecTest, HandlesAndSnapshotsSurviveRegistryChanges)
+{
+    ASSERT_TRUE(server::RoomStorage::add(server::Room(RoomData(1, "retained", 1))));
+    auto held = server::RoomStorage::getRoomById(1);
+    ASSERT_NE(held, nullptr);
+    auto snapshot = server::RoomStorage::getAllRooms();
+    std::weak_ptr<server::Room> lifetime = held;
+    for (uint64_t id = 2; id < 100; ++id)
+        ASSERT_TRUE(server::RoomStorage::add(server::Room(RoomData(1, "growth", id))));
+    ASSERT_TRUE(server::RoomStorage::remove(1));
+    EXPECT_FALSE(server::RoomStorage::contains(1));
+    EXPECT_EQ(server::RoomStorage::getRoomById(1), nullptr);
+    EXPECT_FALSE(server::RoomStorage::remove(1));
+    server::RoomStorage::clear();
+    EXPECT_EQ(held->getName(), "retained");
+    ASSERT_EQ(snapshot.size(), 1);
+    EXPECT_EQ(snapshot[0], held);
+    held.reset();
+    EXPECT_FALSE(lifetime.expired());
+    snapshot.clear();
+    EXPECT_TRUE(lifetime.expired());
+}
+
+TEST_F(RoomStorageSpecTest, CreationCallbackCanReenterAndRemoveRoom)
+{
+    bool called = false;
+    server::RoomStorage::setCreateHandler([&](server::Room& room)
+                                          {
+        called = true;
+        EXPECT_EQ(server::RoomStorage::getRoomCount(), 1);
+        EXPECT_EQ(server::RoomStorage::getRoomById(room.getId()).get(), &room);
+        EXPECT_TRUE(server::RoomStorage::remove(room.getId()));
+        EXPECT_EQ(room.getName(), "callback"); });
+    EXPECT_TRUE(server::RoomStorage::add(server::Room(RoomData(1, "callback", 1))));
+    EXPECT_TRUE(called);
+    EXPECT_EQ(server::RoomStorage::getRoomCount(), 0);
+}
+
+TEST_F(RoomStorageSpecTest, DuplicateIdsAreRejected)
+{
+    ASSERT_TRUE(server::RoomStorage::add(server::Room(RoomData(1, "original", 1))));
+    EXPECT_FALSE(server::RoomStorage::add(server::Room(RoomData(2, "duplicate", 1))));
+    EXPECT_EQ(server::RoomStorage::getRoomById(1)->getName(), "original");
+    EXPECT_EQ(server::RoomStorage::getRoomCount(), 1);
+}
+
+TEST_F(RoomStorageSpecTest, ConcurrentInsertionsEnforceBothCaps)
+{
+    std::atomic<bool> start{false};
+    std::atomic<unsigned> accepted{0};
+    std::vector<std::thread> workers;
+    for (uint64_t id = 1; id <= 8; ++id)
+        workers.emplace_back([&, id]
+                             {
+            while (!start.load())
+                std::this_thread::yield();
+            if (server::RoomStorage::add(server::Room(RoomData(1, "capped", id)), 3, 2))
+                ++accepted; });
+    start.store(true);
+    for (auto& worker : workers)
+        worker.join();
+    EXPECT_EQ(accepted.load(), 2);
+    EXPECT_EQ(server::RoomStorage::getRoomCountByCreator(1), 2);
+    EXPECT_TRUE(server::RoomStorage::add(server::Room(RoomData(2, "other", 10)), 3, 2));
+    EXPECT_FALSE(server::RoomStorage::add(server::Room(RoomData(3, "full", 11)), 3, 2));
+}
+
+TEST_F(RoomStorageSpecTest, ConcurrentMutationAndEnumerationKeepHandlesAlive)
+{
+    std::vector<std::thread> workers;
+    for (uint64_t worker = 0; worker < 4; ++worker)
+        workers.emplace_back([worker]
+                             {
+            for (uint64_t index = 1; index <= 100; ++index)
+            {
+                const auto id = worker * 100 + index;
+                EXPECT_TRUE(server::RoomStorage::add(server::Room(RoomData(worker, "stress", id))));
+                auto held = server::RoomStorage::getRoomById(id);
+                EXPECT_NE(held, nullptr);
+                auto snapshot = server::RoomStorage::getAllRooms();
+                EXPECT_TRUE(server::RoomStorage::remove(id));
+                if (held)
+                    EXPECT_EQ(held->getId(), id);
+                for (const auto& room : snapshot)
+                    EXPECT_EQ(room->getName(), "stress");
+            } });
+    for (auto& worker : workers)
+        worker.join();
+    EXPECT_EQ(server::RoomStorage::getRoomCount(), 0);
+}
 } // namespace

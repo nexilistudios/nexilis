@@ -87,7 +87,7 @@ protected:
     BoostTCPServerProtocol protocol;
     server::Command command{settings};
 
-    server::Room* room() const
+    std::shared_ptr<server::Room> room() const
     {
         return server::RoomStorage::getRoomById(ROOM_ID);
     }

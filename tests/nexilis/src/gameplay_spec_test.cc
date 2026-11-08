@@ -451,7 +451,7 @@ protected:
     void setUpRoom()
     {
         server::RoomStorage::add(server::Room(RoomData(SENDER_ID, "gameplay_room", ROOM_ID)));
-        auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+        auto room = server::RoomStorage::getRoomById(ROOM_ID);
         room->joinRoom(SENDER_ID);
         m_sender->setRoomId(ROOM_ID);
         m_sender->setBoostTCPSend([](const nx_data&) {});
@@ -477,7 +477,7 @@ protected:
     /// accepts damage dealt to a member of another team.
     void setUpOpposingTeams()
     {
-        auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+        auto room = server::RoomStorage::getRoomById(ROOM_ID);
         room->setPlayerTeam(SENDER_ID, "Terrorist");
         room->setPlayerTeam(TARGET_ID, "Counter Terrorist");
     }
@@ -528,7 +528,7 @@ TEST_F(GameplaySpecTest, ShootRequiresServerHitResolver)
 {
     setUpRoom();
     setUpOpposingTeams();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     room->setShotHandler({});
 
     EXPECT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender),
@@ -542,7 +542,7 @@ TEST_F(GameplaySpecTest, ShootRejectsClientSelectedHitWithHandler)
 {
     setUpRoom();
     setUpOpposingTeams();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
 
     EXPECT_EQ(read(legacyShootBytes(TARGET_ID, 35.0f), *m_sender),
               server::CommandResult::invalid_input);
@@ -560,7 +560,7 @@ TEST_F(GameplaySpecTest, ShootTargetNotInRoomFails)
 {
     setUpRoom();
     // Only the sender is a member of the room; the target is not.
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     room->leaveRoom(TARGET_ID);
 
     EXPECT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender), server::CommandResult::failure);
@@ -574,7 +574,7 @@ TEST_F(GameplaySpecTest, ShootAppliesDamageAndBroadcastsHit)
 
     ASSERT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender), server::CommandResult::success);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH - 25.0f);
 
     // A non-lethal hit never records kills/deaths or invokes the death path.
@@ -616,7 +616,7 @@ TEST_F(GameplaySpecTest, ShootKillTriggersDeathPathAndRecordsStats)
 
     ASSERT_EQ(read(shootBytes(TARGET_ID, 30.0f), *m_sender), server::CommandResult::success);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), 0.0f);
     EXPECT_EQ(room->getPlayerKills(SENDER_ID), 1);
     EXPECT_EQ(room->getPlayerDeaths(TARGET_ID), 1);
@@ -649,7 +649,7 @@ TEST_F(GameplaySpecTest, ShootOnDeadTargetDoesNotRecordSecondKill)
     // Second shot at the already-dead (not yet respawned) target is a no-op.
     ASSERT_EQ(read(shootBytes(TARGET_ID, 30.0f), *m_sender), server::CommandResult::success);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), 0.0f);
     EXPECT_EQ(room->getPlayerKills(SENDER_ID), 1);
     EXPECT_EQ(room->getPlayerDeaths(TARGET_ID), 1);
@@ -667,7 +667,7 @@ TEST_F(GameplaySpecTest, ShootRequiresOpposingTeams)
     // Nobody has a team yet, so the shot is rejected.
     EXPECT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender), server::CommandResult::invalid_input);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     room->setPlayerTeam(SENDER_ID, "Terrorist");
     room->setPlayerTeam(TARGET_ID, "Terrorist");
 
@@ -688,7 +688,7 @@ TEST_F(GameplaySpecTest, ShootClampsDamageAbovePerShotCap)
 
     ASSERT_EQ(read(shootBytes(TARGET_ID, 35.1f), *m_sender), server::CommandResult::success);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH - 35.0f);
 }
 
@@ -700,7 +700,7 @@ TEST_F(GameplaySpecTest, ShootRejectsSelfTargetingAndNonPositiveDamage)
     EXPECT_EQ(read(shootBytes(SENDER_ID, 25.0f), *m_sender), server::CommandResult::invalid_input);
     EXPECT_EQ(read(shootBytes(TARGET_ID, 0.0f), *m_sender), server::CommandResult::invalid_input);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH);
 }
 
@@ -816,7 +816,7 @@ TEST_F(GameplaySpecTest, ShootRateLimitDropsFastFollowUpShot)
     // and is dropped.
     EXPECT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender), server::CommandResult::invalid_input);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH - 25.0f);
 }
 
@@ -845,7 +845,7 @@ TEST_F(GameplaySpecTest, ShootRateLimitAllowsShotAfterInterval)
     std::this_thread::sleep_for(std::chrono::milliseconds(110));
     ASSERT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender), server::CommandResult::success);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH - 50.0f);
 }
 
@@ -880,7 +880,7 @@ TEST(UserShotRateLimitTest, ConcurrentShotsReserveOnlyOneInterval)
 TEST_F(GameplaySpecTest, GameItemMutationsRequireRoomOptIn)
 {
     setUpRoom();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     ASSERT_FALSE(room->isClientGameItemCreationAllowed());
     room->addGameItem(GameItem(OBJECT_ID, "health", {1.0f, 2.0f, 3.0f},
                                {1.0f, 1.0f, 1.0f}, "ready", "items/health.png"));
@@ -900,7 +900,7 @@ TEST_F(GameplaySpecTest, GameItemMutationsRequireRoomOptIn)
 TEST_F(GameplaySpecTest, GameItemPickupHandlerAuthorizesOnlyPickup)
 {
     setUpRoom();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     room->addGameItem(GameItem(OBJECT_ID, "health", {1.0f, 2.0f, 3.0f},
                                {1.0f, 1.0f, 1.0f}, "ready", "items/health.png"));
     room->setGameItemPickupHandler([](server::Room& currentRoom, uint64_t playerId,
@@ -928,7 +928,7 @@ TEST_F(GameplaySpecTest, GameItemPickupHandlerAuthorizesOnlyPickup)
 TEST_F(GameplaySpecTest, GameItemOptInValidatesPayloadAndAllowsValidItem)
 {
     setUpRoom();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     room->setClientGameItemCreationAllowed(true);
     const Vector3f position{1.0f, 2.0f, 3.0f};
     const Vector3f dimensions{1.0f, 1.0f, 1.0f};
@@ -1002,7 +1002,7 @@ TEST_F(GameplaySpecTest, SetTeamRoomNotFoundFails)
 TEST_F(GameplaySpecTest, SetTeamValidatesTeamValueAndStoresIt)
 {
     setUpRoom();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     room->setTeamSelectionHandler([](uint64_t)
                                   { return true; });
 
@@ -1016,7 +1016,7 @@ TEST_F(GameplaySpecTest, SetTeamValidatesTeamValueAndStoresIt)
 TEST_F(GameplaySpecTest, SetTeamRequiresApplicationApproval)
 {
     setUpRoom();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
 
     EXPECT_EQ(read(setTeamBytes("Terrorist"), *m_sender), server::CommandResult::invalid_input);
     EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "");
@@ -1048,7 +1048,7 @@ TEST_F(GameplaySpecTest, SetTeamAnnouncesLeaderboardToRoomAndSeedsJoiner)
 
     ASSERT_EQ(read(setTeamBytes("Terrorist"), *m_sender), server::CommandResult::success);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "Terrorist");
 
     // The joining player receives the room broadcast plus the seed of every
@@ -1095,7 +1095,7 @@ TEST_F(GameplaySpecTest, PlayerStatsEntriesBuildsFullRows)
     m_sender->setUsername("shooters");
     m_target->setUsername("victims");
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     room->setPlayerTeam(SENDER_ID, "Terrorist");
     room->recordKill(SENDER_ID, TARGET_ID);
     room->recordKill(SENDER_ID, TARGET_ID);
@@ -1171,7 +1171,7 @@ TEST_F(GameplaySpecTest, RespawnFlowAllowsTargetToBeDamagedAgain)
 
     ASSERT_EQ(read(shootBytes(TARGET_ID, 30.0f), *m_sender), server::CommandResult::success);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     // The handler respawned the victim immediately, so health is back to full.
     EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH);
     EXPECT_EQ(room->getPlayerKills(SENDER_ID), 1);
@@ -1335,7 +1335,7 @@ TEST_F(GameplaySpecTest, CreateMovingObject2DAddsObjectAndBroadcastsCreate)
                                      MovementType::eased, "sprites/ball.png");
     ASSERT_EQ(read(bytes, *m_sender), server::CommandResult::success);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     ASSERT_EQ(room->getObjects2D().size(), 1);
     const auto& object = room->getObjects2D()[0];
     EXPECT_FLOAT_EQ(object.getPosition().x, start.x + 1.0f);
@@ -1377,7 +1377,7 @@ TEST_F(GameplaySpecTest, CreateMovingObject3DAddsObjectAndBroadcastsCreate)
                                      MovementType::linear, "models/crate.obj");
     ASSERT_EQ(read(bytes, *m_sender), server::CommandResult::success);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     ASSERT_EQ(room->getObjects3D().size(), 1);
     const auto& object = room->getObjects3D()[0];
     EXPECT_FLOAT_EQ(object.getPosition().x, start.x + 1.0f);
@@ -1437,7 +1437,7 @@ TEST_F(GameplaySpecTest, CreateMovingLinearObjectCompletesDuringDispatch)
                                      Vector2f(10.0f, 0.0f), delta, MovementType::linear, "");
     ASSERT_EQ(read(bytes, *m_sender), server::CommandResult::success);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     ASSERT_EQ(room->getObjects2D().size(), 1);
     auto position = room->getObjects2D()[0].getPosition();
 
@@ -1510,7 +1510,7 @@ TEST_F(GameplaySpecTest, Player3DPositionWithYawUpdatesServerAndBroadcasts)
 TEST_F(GameplaySpecTest, JoiningPlayerReceivesExistingPlayerYaw)
 {
     server::RoomStorage::add(server::Room(RoomData(SENDER_ID, "gameplay_room", ROOM_ID)));
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     room->joinRoom(SENDER_ID);
     m_sender->setRoomId(ROOM_ID);
     m_sender->setBoostTCPSend([](const nx_data&) {});
@@ -1614,7 +1614,7 @@ TEST_F(GameplaySpecTest, Player2DPositionNotInRoomFails)
 TEST_F(GameplaySpecTest, Player2DPositionRequiresRoomOptIn)
 {
     setUpRoom();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     room->setClientPositionAllowed(false);
     auto targetMessages = receivedMessages(*m_target);
 
@@ -1752,7 +1752,7 @@ TEST_F(GameplaySpecTest, CreateObject2DAddsStaticObjectAndBroadcasts)
     ASSERT_EQ(read(createObject2DBytes(position, dimensions, "sprites/tree.png"), *m_sender),
               server::CommandResult::success);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     ASSERT_EQ(room->getObjects2D().size(), 1);
     const auto& object = room->getObjects2D()[0];
     EXPECT_FLOAT_EQ(object.getPosition().x, position.x);
@@ -1778,7 +1778,7 @@ TEST_F(GameplaySpecTest, DestroyObject2DRemovesObjectAndBroadcasts)
 {
     setUpRoom();
     allowClientObjects();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     room->addObject(Object2D(OBJECT_ID, Vector2f(1.0f, 2.0f), Vector2f(3.0f, 4.0f)));
 
     auto targetMessages = receivedMessages(*m_target);
@@ -1797,7 +1797,7 @@ TEST_F(GameplaySpecTest, MoveObject2DOffsetsPositionAndBroadcasts)
 {
     setUpRoom();
     allowClientObjects();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     room->addObject(Object2D(OBJECT_ID, Vector2f(1.0f, 2.0f), Vector2f(3.0f, 4.0f)));
 
     auto targetMessages = receivedMessages(*m_target);
@@ -1836,7 +1836,7 @@ TEST_F(GameplaySpecTest, CreateObject3DAddsStaticObjectAndBroadcasts)
     ASSERT_EQ(read(createObject3DBytes(position, dimensions, "models/house.obj"), *m_sender),
               server::CommandResult::success);
 
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     ASSERT_EQ(room->getObjects3D().size(), 1);
     const auto& object = room->getObjects3D()[0];
     EXPECT_FLOAT_EQ(object.getPosition().x, position.x);
@@ -1866,7 +1866,7 @@ TEST_F(GameplaySpecTest, DestroyObject3DRemovesObjectAndBroadcasts)
 {
     setUpRoom();
     allowClientObjects();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     room->addObject(Object3D(OBJECT_ID, Vector3f(1.0f, 2.0f, 3.0f), Vector3f(4.0f, 5.0f, 6.0f)));
 
     auto targetMessages = receivedMessages(*m_target);
@@ -1885,7 +1885,7 @@ TEST_F(GameplaySpecTest, MoveObject3DOffsetsPositionAndBroadcasts)
 {
     setUpRoom();
     allowClientObjects();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     room->addObject(Object3D(OBJECT_ID, Vector3f(1.0f, 2.0f, 3.0f), Vector3f(4.0f, 5.0f, 6.0f)));
 
     auto targetMessages = receivedMessages(*m_target);
@@ -1918,7 +1918,7 @@ TEST_F(GameplaySpecTest, MoveObject3DUnknownObjectFails)
 TEST_F(GameplaySpecTest, ObjectMutationsRequireRoomOptIn)
 {
     setUpRoom();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     ASSERT_FALSE(room->isClientObjectCreationAllowed());
     auto targetMessages = receivedMessages(*m_target);
 
@@ -1954,7 +1954,7 @@ TEST_F(GameplaySpecTest, ObjectCreationValidatesPayloadAndAllowsValidObjects)
 {
     setUpRoom();
     allowClientObjects();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
 
     const Vector2f position2D(7.0f, 8.0f);
     const Vector2f dimensions2D(2.0f, 3.0f);
@@ -2013,7 +2013,7 @@ TEST_F(GameplaySpecTest, ObjectMoveRejectsNonFiniteAndClampsToWorldBounds)
 {
     setUpRoom();
     allowClientObjects();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     const auto& limits = server::GameplayLimits::get();
 
     room->addObject(Object2D(OBJECT_ID, Vector2f(1.0f, 2.0f), Vector2f(3.0f, 4.0f)));
@@ -2046,7 +2046,7 @@ TEST_F(GameplaySpecTest, ObjectDestroyValidatesTheObjectId)
 {
     setUpRoom();
     allowClientObjects();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
 
     auto truncated = destroyObject2DBytes(OBJECT_ID);
     truncated.resize(3 + 7);
@@ -2061,7 +2061,7 @@ TEST_F(GameplaySpecTest, MovingObjectCreationValidatesTimingAndMovement)
 {
     setUpRoom();
     allowClientObjects();
-    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
     const Vector2f start(1.0f, 2.0f);
     const Vector2f dimensions(1.0f, 1.0f);
     const Vector2f movement(1.0f, 0.0f);

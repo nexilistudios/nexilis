@@ -46,7 +46,7 @@ CommandResult ServerImpl::room_communicate_broadcast(const DefaultArgs& args)
         return CommandResult::error;
     }
 
-    auto* room = RoomStorage::getRoomById(user.getRoomId());
+    auto room = RoomStorage::getRoomById(user.getRoomId());
     if (!room)
     {
         Log::error("Cannot find room for broadcast!");

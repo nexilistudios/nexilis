@@ -30,7 +30,7 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
 
     auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 3);
     uint64_t roomId = Util::convertToType<uint64_t>(payload);
-    auto* room = RoomStorage::getRoomById(roomId);
+    auto room = RoomStorage::getRoomById(roomId);
 
     if (!room)
     {
@@ -38,7 +38,7 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
         return CommandResult::invalid_input;
     }
 
-    if (RoomStorage::getRoomById(roomId)->contains(user_id))
+    if (room->contains(user_id))
     {
         Log::error("Cannot join room where the client already is!");
         return CommandResult::error;
@@ -51,7 +51,7 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
 
     args.getUser().setRoomId(room->getId());
     assert(ClientStorage::getClientById(user_id)->getRoomId() == room->getId());
-    assert(RoomStorage::getRoomById(roomId)->contains(user_id));
+    assert(room->contains(user_id));
     assert(args.getUser().getRoomId() == roomId);
 
     auto roomCommand = Command::createRoomCommand(roomId, args.getUser(), args.getData(),

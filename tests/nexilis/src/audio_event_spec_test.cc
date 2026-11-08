@@ -107,7 +107,7 @@ protected:
     void setUpRoom(bool includeOther = true)
     {
         server::RoomStorage::add(server::Room(RoomData(SENDER_ID, "audio_room", ROOM_ID)));
-        auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+        auto room = server::RoomStorage::getRoomById(ROOM_ID);
         room->joinRoom(SENDER_ID);
         m_sender->setRoomId(ROOM_ID);
         m_sender->setBoostTCPSend([](const nx_data&) {});

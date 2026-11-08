@@ -22,6 +22,7 @@
 
 #include <boost/json/object.hpp>
 
+#include <memory>
 #include <vector>
 
 namespace nexilis::server
@@ -44,7 +45,7 @@ public:
 
 private:
     // Get json data from room vector.
-    static boost::json::array roomsToJSON(const std::vector<Room>& rooms);
+    static boost::json::array roomsToJSON(const std::vector<std::shared_ptr<Room>>& rooms);
 
     /// Get json data from client vector.
     static boost::json::array clientsToJSON(const std::vector<std::unique_ptr<User>>& clients);

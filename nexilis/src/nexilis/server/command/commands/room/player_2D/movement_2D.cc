@@ -44,7 +44,7 @@ CommandResult ServerImpl::room_player2d_movement(const DefaultArgs& args)
         return CommandResult::invalid_input;
 
     auto& user = args.getUser();
-    auto* room = RoomStorage::getRoomById(user.getRoomId());
+    auto room = RoomStorage::getRoomById(user.getRoomId());
     if (!room)
         return CommandResult::failure;
 

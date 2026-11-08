@@ -24,7 +24,7 @@ namespace nexilis::server
 CommandResult ServerImpl::room_management_leave(const DefaultArgs& args)
 {
     auto& user = args.getUser();
-    auto* currentRoom = RoomStorage::getRoomById(user.getRoomId());
+    auto currentRoom = RoomStorage::getRoomById(user.getRoomId());
 
     if (!currentRoom)
     {

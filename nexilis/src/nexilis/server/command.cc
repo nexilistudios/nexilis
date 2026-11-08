@@ -413,7 +413,7 @@ CommandResult Command::read(const nx_data& command, User& user, NXProtocol& prot
                         // Game-defined round action: plant, defuse, or cancel.
                         case 8:
                         {
-                            auto* room = RoomStorage::getRoomById(user.getRoomId());
+                            auto room = RoomStorage::getRoomById(user.getRoomId());
                             if (!room || args.getData().size() != 4)
                                 return CommandResult::invalid_input;
                             return room->onPlayerAction(user.getId(), args.getData()[3])
@@ -747,13 +747,13 @@ nx_data Command::createRoomLeaderboardCommand(uint64_t roomId, User& user,
 
 bool Command::sendRoomCommand(const nx_data& data, User& user, NXProtocol& protocol)
 {
-    auto& rooms = RoomStorage::getAllRooms();
+    auto rooms = RoomStorage::getAllRooms();
     for (auto& room : rooms)
     {
-        if (room.getId() == user.getRoomId())
+        if (room->getId() == user.getRoomId())
         {
             bool all_success = true;
-            for (auto& roomClient : room.getClients())
+            for (auto& roomClient : room->getClients())
             {
                 auto* client = ClientStorage::getClientById(roomClient);
                 if (!sendMessageToClient(data, *client, protocol))

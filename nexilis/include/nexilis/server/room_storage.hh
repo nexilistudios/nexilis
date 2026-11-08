@@ -22,6 +22,9 @@
 
 #include <cstddef>
 #include <functional>
+#include <limits>
+#include <memory>
+#include <mutex>
 #include <vector>
 
 namespace nexilis::server
@@ -35,7 +38,10 @@ public:
     RoomStorage() = default;
 
     /// Add new room to the server.
-    static void add(Room&& room);
+    /// Reject duplicate IDs and enforce both caps atomically with insertion.
+    static bool add(Room&& room,
+                    std::size_t maxRooms = std::numeric_limits<std::size_t>::max(),
+                    std::size_t maxRoomsPerCreator = std::numeric_limits<std::size_t>::max());
     /// Called for each room after it is stored, before creation is acknowledged.
     static void setCreateHandler(std::function<void(Room&)> handler);
 
@@ -49,17 +55,22 @@ public:
     /// Get the number of stored rooms created by a client.
     static std::size_t getRoomCountByCreator(uint64_t creatorId);
 
-    /// Get all the rooms in the server.
-    static std::vector<Room>& getAllRooms();
+    /// Snapshot of owning handles, safe to iterate during add/remove/clear.
+    /// Room contents require their own synchronization.
+    static std::vector<std::shared_ptr<Room>> getAllRooms();
 
-    /// Get pointer of the room.
+    /// Keep this owning handle alive for the entire operation on the room.
     /// \param id The id of the room.
-    static Room* getRoomById(uint64_t id);
+    static std::shared_ptr<Room> getRoomById(uint64_t id);
+
+    /// Remove from future lookups. Existing handles keep the room alive.
+    static bool remove(uint64_t id);
 
     static void clear();
 
 private:
-    static std::vector<Room> m_rooms;
+    static std::vector<std::shared_ptr<Room>> m_rooms;
+    static std::mutex m_mutex;
     static std::function<void(Room&)> m_createHandler;
 };
 

@@ -52,7 +52,7 @@ void Movement::object2D(std::unique_ptr<Movement2D> movement, User& user, NXProt
 {
     if (!movement)
         return;
-    auto* room = RoomStorage::getRoomById(user.getRoomId());
+    auto room = RoomStorage::getRoomById(user.getRoomId());
     auto* object = room ? room->getObject2DById(movement->getObjectId()) : nullptr;
     if (!object)
         return;
@@ -81,7 +81,7 @@ void Movement::object3D(std::unique_ptr<Movement3D> movement, User& user, NXProt
 {
     if (!movement)
         return;
-    auto* room = RoomStorage::getRoomById(user.getRoomId());
+    auto room = RoomStorage::getRoomById(user.getRoomId());
     auto* object = room ? room->getObject3DById(movement->getObjectId()) : nullptr;
     if (!object)
         return;

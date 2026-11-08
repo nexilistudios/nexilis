@@ -268,3 +268,23 @@ replaced.
 `ClientAPI::setMessageEncryption(true)` affects room broadcasts when the client has a nonempty password. It does not encrypt othercast or unicast messages. The message key is derived from that same password and the room ID; the server holds the password, so this feature does **not** hide message contents from the server.
 
 The current broadcast implementation also falls back to the plaintext payload if key derivation or encryption fails. Treat this option as experimental and do not rely on it for confidentiality until that behavior is changed and tested. TLS-PSK protects only the Boost TCP transport when both peers leave it enabled and use the same passphrase.
+
+## Server room storage ownership
+
+The C++ `server::RoomStorage::getRoomById` returns `std::shared_ptr<Room>`.
+Keep that handle alive while accessing the room. `getAllRooms()` returns a
+copied vector of shared handles; it no longer exposes the registry itself.
+Use `RoomStorage::remove(id)` to unpublish a room. Existing handles remain valid
+after removal or `clear()`, so operations already holding a handle may finish.
+Callers using `auto*` for lookups must change to `auto`; callers must not keep a
+raw pointer obtained from a temporary handle.
+
+`RoomStorage::add` returns `bool`, rejects duplicate IDs, and accepts optional
+server/per-creator caps checked atomically with insertion. Client-requested
+creation passes the configured caps. Create callbacks run after publication,
+outside the registry mutex, and may reenter storage. The callback's room remains
+alive until the callback returns, even if the callback removes it.
+
+The registry mutex protects lookup, insertion, enumeration, removal, and callback
+registration. Shared handles protect lifetime; they do not lock mutable room
+contents. Applications must synchronize simultaneous changes to room state.

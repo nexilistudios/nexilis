@@ -60,7 +60,7 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
         Log::warning("Movement yaw ", rawYaw, " normalized to ", yaw);
     }
 
-    auto* inputRoom = RoomStorage::getRoomById(user.getRoomId());
+    auto inputRoom = RoomStorage::getRoomById(user.getRoomId());
     if (inputRoom && inputRoom->hasMovementInputHandler())
         return inputRoom->onMovementInput(user.getId(), Vector3f(vec_x, vec_y, vec_z), yaw)
                        ? CommandResult::success
@@ -84,7 +84,7 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
     auto movement_vector = Vector3f(vec_x, vec_y, vec_z);
     try
     {
-        auto* room = RoomStorage::getRoomById(user.getRoomId());
+        auto room = RoomStorage::getRoomById(user.getRoomId());
         if (!room)
         {
             Log::warning("room_player3d_movement: room not found for user ", user.getRoomId());

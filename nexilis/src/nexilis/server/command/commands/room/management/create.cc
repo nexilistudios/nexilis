@@ -53,27 +53,15 @@ CommandResult ServerImpl::room_management_create(const DefaultArgs& args)
         Log::error("Room name cannot be equal to \" \" ");
         return CommandResult::invalid_input;
     }
-    else if (RoomStorage::getRoomCount() >= roomLimits.getMaxRooms())
-    {
-        Log::warning("Room create rejected: server room limit of ",
-                     roomLimits.getMaxRooms(), " reached");
-        return CommandResult::failure;
-    }
-    else if (RoomStorage::getRoomCountByCreator(creatorId) >=
-             roomLimits.getMaxRoomsPerClient())
-    {
-        Log::warning("Room create rejected: client ", creatorId,
-                     " reached the per-client room limit of ",
-                     roomLimits.getMaxRoomsPerClient());
-        return CommandResult::failure;
-    }
     else
     {
         auto room_data = RoomData(creatorId, roomName, Util::getRandomUint64(), static_cast<RoomData::Context>(context), maxSize);
         auto newRoom = nexilis::server::Room(room_data);
 
         auto newRoomId = newRoom.getId();
-        RoomStorage::add(std::move(newRoom));
+        if (!RoomStorage::add(std::move(newRoom), roomLimits.getMaxRooms(),
+                              roomLimits.getMaxRoomsPerClient()))
+            return CommandResult::failure;
 
         std::map<std::string, boost::json::value> params{
                 {"room_name", boost::json::value(roomName)},
