@@ -219,6 +219,9 @@ void UDPServer::receiveFromClients()
                 auto bound = m_clientEndpoints.find(user->getId());
                 if (bound != m_clientEndpoints.end() && bound->second != senderEndpoint)
                     continue;
+                // MessageHandler independently verifies MAC and replay IDs. Preserve
+                // the signed request; readSession returns the untagged payload.
+                payload.assign(received_message.begin() + 4, received_message.end());
             }
             else
             {

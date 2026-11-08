@@ -286,6 +286,9 @@ void UDPServer::receiveFromClients()
                 (bound->second.sin_addr.s_addr != clientAddress.sin_addr.s_addr ||
                  bound->second.sin_port != clientAddress.sin_port))
                 continue;
+            // MessageHandler independently verifies MAC and replay IDs. Preserve
+            // the signed request; readSession returns the untagged payload.
+            payload.assign(buffer.begin() + 4, buffer.end());
         }
         else
         {
