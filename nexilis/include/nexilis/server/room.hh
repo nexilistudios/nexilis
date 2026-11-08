@@ -157,7 +157,7 @@ public:
     void setTeamSelectionHandler(TeamSelectionHandler handler);
     bool canSelectTeam(uint64_t playerId) const;
     /// Allow or disallow direct client position requests
-    /// (`room/player_3D/position`). Disallowed by default: a game must
+    /// (`room/player_2D/position` and `room/player_3D/position`). Disallowed by default: a game must
     /// explicitly opt in to client-authoritative position, or install a
     /// movement input handler for server-authoritative movement.
     void setClientPositionAllowed(bool allowed);

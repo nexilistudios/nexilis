@@ -1594,6 +1594,57 @@ TEST_F(GameplaySpecTest, Player2DPositionNotInRoomFails)
     EXPECT_EQ(read(player2DPositionBytes({1.0f, 2.0f}), *m_sender), server::CommandResult::error);
 }
 
+TEST_F(GameplaySpecTest, Player2DPositionRequiresRoomOptIn)
+{
+    setUpRoom();
+    auto* room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->setClientPositionAllowed(false);
+    auto targetMessages = receivedMessages(*m_target);
+
+    EXPECT_EQ(read(player2DPositionBytes({1.0f, 2.0f}), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_FLOAT_EQ(m_sender->getObject2D().getPosition().x, 0.0f);
+    EXPECT_TRUE(targetMessages.empty());
+}
+
+TEST_F(GameplaySpecTest, Player2DPositionRejectsMalformedAndNonFiniteValues)
+{
+    setUpRoom();
+    auto targetMessages = receivedMessages(*m_target);
+    const auto valid = player2DPositionBytes({1.0f, 2.0f});
+    auto truncated = valid;
+    truncated.pop_back();
+    auto extended = valid;
+    extended.push_back(0);
+
+    EXPECT_EQ(read(truncated, *m_sender), server::CommandResult::invalid_input);
+    EXPECT_EQ(read(extended, *m_sender), server::CommandResult::invalid_input);
+    EXPECT_EQ(read(player2DPositionBytes({std::numeric_limits<float>::quiet_NaN(), 2.0f}),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(player2DPositionBytes({1.0f, std::numeric_limits<float>::infinity()}),
+                   *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_FLOAT_EQ(m_sender->getObject2D().getPosition().x, 0.0f);
+    EXPECT_TRUE(targetMessages.empty());
+}
+
+TEST_F(GameplaySpecTest, Player2DPositionClampsToConfiguredWorldBounds)
+{
+    setUpRoom();
+    command.getServerConfig().getGameplayLimits().setMaxHorizontalPosition(50.0f);
+    auto targetMessages = receivedMessages(*m_target);
+
+    ASSERT_EQ(read(player2DPositionBytes({100.0f, -100.0f}), *m_sender),
+              server::CommandResult::success);
+    const auto position = m_sender->getObject2D().getPosition();
+    EXPECT_FLOAT_EQ(position.x, 50.0f);
+    EXPECT_FLOAT_EQ(position.y, -50.0f);
+    ASSERT_EQ(targetMessages.size(), 1);
+    EXPECT_DOUBLE_EQ(targetMessages[0].at("x").as_double(), 50.0);
+    EXPECT_DOUBLE_EQ(targetMessages[0].at("y").as_double(), -50.0);
+}
+
 TEST_F(GameplaySpecTest, Player2DPositionUpdatesServerAndBroadcasts)
 {
     setUpRoom();

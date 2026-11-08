@@ -87,6 +87,11 @@ are disabled by default; a room that wants client-authoritative positions must
 explicitly call `setClientPositionAllowed(true)`. Other rooms retain the legacy
 movement behavior.
 
+The same room setting gates `room/player_2D/position`. This request requires
+exactly two finite floats; the server clamps both 2D coordinates to the
+configured maximum horizontal position before storing and broadcasting them.
+Malformed or non-finite positions are rejected.
+
 An application room must install a shot handler to accept shots.
 `room/player_3D/shoot` requires three floats for aim direction followed by one
 byte for weapon slot (1 primary, 2 secondary, 3 knife) and one action byte

@@ -36,11 +36,17 @@ CommandResult ServerImpl::room_player2d_position(const DefaultArgs& args)
     }
 
     auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 3);
+    if (payload.size() != sizeof(float) * 2)
+        return CommandResult::invalid_input;
     auto vector = Util::convertToVector2(payload);
-    Log::debug("Position x:", vector.x, " y:", vector.y);
 
     if (!std::isfinite(vector.x) || !std::isfinite(vector.y))
         return CommandResult::invalid_input;
+
+    const auto& limits = GameplayLimits::get();
+    const Vector2f position(limits.clampHorizontal(vector.x),
+                            limits.clampHorizontal(vector.y));
+    Log::debug("Position x:", position.x, " y:", position.y);
 
     auto currentRoom = RoomStorage::getRoomById(user.getRoomId());
 
@@ -53,11 +59,11 @@ CommandResult ServerImpl::room_player2d_position(const DefaultArgs& args)
     if (!currentRoom->isClientPositionAllowed())
         return CommandResult::invalid_input;
 
-    user.getObject2D().setPosition(vector);
+    user.getObject2D().setPosition(position);
 
     std::map<std::string, boost::json::value> params{
-            {"x", boost::json::value(vector.x)},
-            {"y", boost::json::value(vector.y)}};
+            {"x", boost::json::value(position.x)},
+            {"y", boost::json::value(position.y)}};
 
     auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, args.getData(), params, args.getMessageId());
     if (Command::sendRoomCommand(roomCommand, user, args.getProtocol()))
