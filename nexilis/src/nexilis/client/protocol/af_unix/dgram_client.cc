@@ -19,6 +19,7 @@
 #include <nexilis/client/protocol/af_unix/dgram_client.hh>
 #include <nexilis/logger/log.hh>
 #include <nexilis/nexilis_constants.hh>
+#include <nexilis/unix_socket.hh>
 
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -68,11 +69,19 @@ DgramClient::DgramClient(ClientAPI& clientApi)
 DgramClient::~DgramClient()
 {
     stop();
-    unlink(m_clientSocketPath.c_str());
+    if (m_bound)
+        unlink(m_clientSocketPath.c_str());
+}
+
+DgramClient& DgramClient::movable(DgramClient& protocol)
+{
+    if (protocol.m_receiveThread.joinable())
+        throw std::logic_error("Stop a Unix datagram protocol before moving it");
+    return protocol;
 }
 
 DgramClient::DgramClient(DgramClient&& other)
-    : NxClass(std::move(other)),
+    : NxClass(std::move(movable(other))),
       NXProtocol(std::move(other)),
       ClientProtocol(std::move(other)),
       m_serverSocketPath(std::move(other.m_serverSocketPath)),
@@ -83,6 +92,8 @@ DgramClient::DgramClient(DgramClient&& other)
       m_mutex(std::move(other.m_mutex)),
       m_stopped(std::move(other.m_stopped))
 {
+    m_bound = other.m_bound;
+    other.m_bound = false;
     other.m_clientSocket = -1;
     if (!m_mutex)
     {
@@ -98,6 +109,10 @@ DgramClient& DgramClient::operator=(DgramClient&& other)
 {
     if (this != &other)
     {
+        movable(other);
+        stop();
+        if (m_bound)
+            unlink(m_clientSocketPath.c_str());
         static_cast<NxClass&>(*this) = static_cast<NxClass&&>(other);
         static_cast<NXProtocol&>(*this) = static_cast<NXProtocol&&>(other);
         static_cast<ClientProtocol&>(*this) = static_cast<ClientProtocol&&>(other);
@@ -110,6 +125,8 @@ DgramClient& DgramClient::operator=(DgramClient&& other)
         m_mutex = std::move(other.m_mutex);
         m_stopped = std::move(other.m_stopped);
 
+        m_bound = other.m_bound;
+        other.m_bound = false;
         other.m_clientSocket = -1;
         if (!m_mutex)
         {
@@ -125,44 +142,33 @@ DgramClient& DgramClient::operator=(DgramClient&& other)
 
 void DgramClient::createSocket()
 {
+    // Validate both the configured path and the longer generated reply path
+    // before creating or binding any descriptor.
+    m_serverAddr = unix_socket::address(m_serverSocketPath);
+    unix_socket::address(m_clientSocketPath);
     m_clientSocket = socket(AF_UNIX, SOCK_DGRAM, 0);
-
     if (m_clientSocket == -1)
+        throw std::system_error(errno, std::generic_category(), "Unix client socket failed");
+    try
     {
-        Log::error("Error creating DgramClient socket: ", strerror(errno));
-        return;
+        const int enabled = 1;
+        if (setsockopt(m_clientSocket, SOL_SOCKET, SO_PASSCRED, &enabled, sizeof(enabled)) == -1)
+            throw std::system_error(errno, std::generic_category(), "Unix client credentials failed");
+        unix_socket::bindPrivate(m_clientSocket, m_clientSocketPath);
+        m_bound = true;
+        timeval timeout{};
+        timeout.tv_usec = 100000;
+        if (setsockopt(m_clientSocket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1)
+            throw std::system_error(errno, std::generic_category(), "Unix client timeout failed");
     }
-
-    // Bind the client to its own socket path so the server can reply to it.
-    sockaddr_un clientAddr{};
-    memset(&clientAddr, 0, sizeof(clientAddr));
-    clientAddr.sun_family = AF_UNIX;
-    strcpy(clientAddr.sun_path, m_clientSocketPath.c_str());
-
-    unlink(m_clientSocketPath.c_str());
-
-    auto clientAddress = reinterpret_cast<sockaddr*>(&clientAddr);
-    if (bind(m_clientSocket, clientAddress, sizeof(clientAddr)) == -1)
+    catch (...)
     {
-        Log::error("Failed to bind client socket to: ", m_clientSocketPath, " - ", strerror(errno));
         close(m_clientSocket);
         m_clientSocket = -1;
-        return;
-    }
-
-    // Server address.
-    memset(&m_serverAddr, 0, sizeof(m_serverAddr));
-    m_serverAddr.sun_family = AF_UNIX;
-    strcpy(m_serverAddr.sun_path, m_serverSocketPath.c_str());
-
-    // Set a receive timeout so the receive loop can periodically check the
-    // stopped flag and exit cleanly on stop() instead of blocking forever.
-    timeval timeout{};
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 100000; // 100 ms
-    if (setsockopt(m_clientSocket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1)
-    {
-        Log::error("Error setting DgramClient receive timeout: ", strerror(errno));
+        if (m_bound)
+            unlink(m_clientSocketPath.c_str());
+        m_bound = false;
+        throw;
     }
 }
 
@@ -204,25 +210,17 @@ void DgramClient::stop()
         return;
     }
 
-    std::unique_lock<std::mutex> lock(*m_mutex);
-
+    if (m_receiveThread.joinable())
+        m_receiveThread.join();
+    std::lock_guard lock(*m_mutex);
     if (m_clientSocket != -1)
     {
-        if (close(m_clientSocket) == -1)
-        {
-            Log::error("Error closing client socket: ", strerror(errno));
-        }
+        close(m_clientSocket);
         m_clientSocket = -1;
     }
-    lock.unlock();
-
-    if (m_receiveThread.joinable())
-    {
-        Log::debug("DgramClient closing receiveThread");
-        m_receiveThread.join();
-    }
-
-    unlink(m_clientSocketPath.c_str());
+    if (m_bound)
+        unlink(m_clientSocketPath.c_str());
+    m_bound = false;
 
     Log::debug("DgramClient stopped");
 }
@@ -233,9 +231,16 @@ void DgramClient::receiveLoop()
     {
         nx_data buffer(NEXILIS_BUFFER);
 
-        ssize_t bytesRead = recv(m_clientSocket, buffer.data(), buffer.size(), 0);
+        iovec vector{buffer.data(), buffer.size()};
+        alignas(cmsghdr) char control[CMSG_SPACE(sizeof(ucred))]{};
+        msghdr message{};
+        message.msg_iov = &vector;
+        message.msg_iovlen = 1;
+        message.msg_control = control;
+        message.msg_controllen = sizeof(control);
+        const ssize_t bytesRead = recvmsg(m_clientSocket, &message, 0);
 
-        if (bytesRead > 0)
+        if (bytesRead > 0 && unix_socket::sameUser(message))
         {
             buffer.resize(bytesRead);
             Log::info("DgramClient received ", bytesRead, " bytes");

@@ -84,6 +84,7 @@ public:
     std::future<void> sendMessageAsync(const nx_data& message) override;
 
 private:
+    static DgramClient& movable(DgramClient& protocol);
     void createSocket();
     void receiveLoop();
 
@@ -91,6 +92,7 @@ private:
     std::string m_serverSocketPath;
     std::string m_clientSocketPath;
     int m_clientSocket = -1;
+    bool m_bound = false;
     sockaddr_un m_serverAddr{};
     std::thread m_receiveThread;
     std::unique_ptr<std::mutex> m_mutex;

@@ -19,6 +19,7 @@
 #include <nexilis/client/protocol/af_unix/stream_client.hh>
 #include <nexilis/logger/log.hh>
 #include <nexilis/nexilis_constants.hh>
+#include <nexilis/unix_socket.hh>
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -34,6 +35,7 @@ StreamClient::StreamClient(ClientAPI& clientApi)
       m_mutex(std::make_unique<std::mutex>()),
       m_running(std::make_unique<std::atomic<bool>>(false))
 {
+    unix_socket::address(m_serverSocketPath);
     createSocket();
     connectToServer();
 }
@@ -65,6 +67,7 @@ StreamClient::StreamClient(StreamClient&& other)
       m_mutex(std::move(other.m_mutex)),
       m_running(std::move(other.m_running))
 {
+    other.m_clientSocket = -1;
 }
 
 StreamClient& StreamClient::operator=(StreamClient&& other)
@@ -100,10 +103,11 @@ void StreamClient::connectToServer()
 {
     std::lock_guard<std::mutex> lock(*m_mutex);
     m_serverAddr.sun_family = AF_UNIX;
-    strcpy(m_serverAddr.sun_path, m_serverSocketPath.c_str());
+    m_serverAddr = unix_socket::address(m_serverSocketPath);
 
     auto address = reinterpret_cast<sockaddr*>(&m_serverAddr);
-    if (connect(m_clientSocket, address, sizeof(m_serverAddr)) == -1)
+    if (connect(m_clientSocket, address, sizeof(m_serverAddr)) == -1 ||
+        !unix_socket::sameUser(m_clientSocket))
     {
         Log::error("Failed to connect to: ", m_serverSocketPath, " - ", strerror(errno));
         close(m_clientSocket);

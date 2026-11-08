@@ -21,6 +21,8 @@
 #include <nexilis/server/command/command_result.hh>
 #include <nexilis/server/message/auth_message.hh>
 #include <nexilis/server/protocol/af_unix/stream_server.hh>
+#include <nexilis/unix_socket.hh>
+#include <utility>
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -30,39 +32,103 @@
 namespace nexilis::server::af_unix
 {
 
-StreamServer::StreamServer(const ServerConfig& settings, const std::string& socketPath)
-    : ServerProtocol(settings),
-      m_socketPath(socketPath),
-      m_buffer(NEXILIS_BUFFER)
+struct StreamServer::Connection
 {
+    explicit Connection(int socket) : fd(socket)
+    {
+    }
+    ~Connection()
+    {
+        close();
+    }
+
+    void shutdown()
+    {
+        std::lock_guard lock(mutex);
+        open = false;
+        if (fd != -1)
+            ::shutdown(fd, SHUT_RDWR);
+    }
+    void close()
+    {
+        std::lock_guard lock(mutex);
+        open = false;
+        if (fd != -1)
+        {
+            ::shutdown(fd, SHUT_RDWR);
+            ::close(fd);
+            fd = -1;
+        }
+    }
+    void send(const nx_data& bytes)
+    {
+        std::lock_guard lock(mutex);
+        if (!open)
+            throw std::runtime_error("Unix stream connection is closed");
+        std::size_t offset = 0;
+        while (offset < bytes.size())
+        {
+            const auto sent = ::send(fd, bytes.data() + offset, bytes.size() - offset, MSG_NOSIGNAL | MSG_DONTWAIT);
+            if (sent < 0 && errno == EINTR)
+                continue;
+            if (sent <= 0)
+            {
+                open = false;
+                ::shutdown(fd, SHUT_RDWR);
+                throw std::runtime_error("Unix stream send failed");
+            }
+            offset += static_cast<std::size_t>(sent);
+        }
+    }
+    // Only the receiving worker closes fd. stop() only shuts it down to wake
+    // recv; stale send callbacks retain this state and cannot use a recycled fd.
+    int fd;
+    bool open = true;
+    std::mutex mutex;
+};
+
+StreamServer::StreamServer(const ServerConfig& settings, const std::string& socketPath)
+    : ServerProtocol(settings), m_socketPath(socketPath)
+{
+    unix_socket::address(m_socketPath);
     createSocket();
-    bindSocket();
+    try
+    {
+        bindSocket();
+    }
+    catch (...)
+    {
+        ::close(m_serverSocket);
+        m_serverSocket = -1;
+        if (m_bound)
+            unlink(m_socketPath.c_str());
+        throw;
+    }
 }
 
 StreamServer::~StreamServer()
 {
-    if (m_receiveThread.joinable())
-    {
-        m_receiveThread.join();
-    }
+    stop();
+    if (m_bound)
+        unlink(m_socketPath.c_str());
+}
 
-    if (m_serverSocket != -1)
-    {
-        close(m_serverSocket);
-    }
-
-    // Remove the filesystem socket entry so no stale file convinces a client
-    // (or a readiness check) that the server is still listening.
-    unlink(m_socketPath.c_str());
+StreamServer& StreamServer::movable(StreamServer& server)
+{
+    if (server.m_receiveThread.joinable())
+        throw std::logic_error("Stop a Unix stream server before moving it");
+    return server;
 }
 
 StreamServer::StreamServer(StreamServer&& other)
-    : NXProtocol(std::move(other)),
+    : NXProtocol(std::move(movable(other))),
       ServerProtocol(std::move(other)),
       m_socketPath(std::move(other.m_socketPath)),
-      m_serverSocket(std::move(other.m_serverSocket)),
-      m_buffer(std::move(std::move(other.m_buffer))),
-      m_receiveThread(std::move(other.m_receiveThread))
+      m_serverSocket(std::exchange(other.m_serverSocket, -1)),
+      m_bound(std::exchange(other.m_bound, false)),
+      m_stopped(std::move(other.m_stopped)),
+      m_mutex(std::move(other.m_mutex)),
+      m_client(std::move(other.m_client))
 {
 }
 
@@ -70,69 +136,73 @@ StreamServer& StreamServer::operator=(StreamServer&& other)
 {
     if (this != &other)
     {
-        static_cast<NXProtocol&>(*this) = static_cast<NXProtocol&&>(other);
-        static_cast<ServerProtocol&>(*this) = static_cast<ServerProtocol&&>(other);
-
+        movable(other);
+        stop();
+        if (m_bound)
+            unlink(m_socketPath.c_str());
+        static_cast<NXProtocol&>(*this) = std::move(static_cast<NXProtocol&>(other));
+        static_cast<ServerProtocol&>(*this) = std::move(static_cast<ServerProtocol&>(other));
         m_socketPath = std::move(other.m_socketPath);
-        m_serverSocket = std::move(other.m_serverSocket);
-        m_buffer = std::move(other.m_buffer);
-        m_receiveThread = std::move(other.m_receiveThread);
+        m_serverSocket = std::exchange(other.m_serverSocket, -1);
+        m_bound = std::exchange(other.m_bound, false);
+        m_stopped = std::move(other.m_stopped);
+        m_mutex = std::move(other.m_mutex);
+        m_client = std::move(other.m_client);
     }
     return *this;
 }
 
 void StreamServer::start()
 {
-    m_receiveThread = std::thread([this]()
+    if (!m_stopped || m_stopped->load() || m_receiveThread.joinable() || m_serverSocket == -1)
+        return;
+    m_receiveThread = std::thread([this]
                                   {
-        while (true)
+        while (!m_stopped->load())
         {
-            handleMessages();
+            try { handleMessages(); }
+            catch (...) { /* Drop this connection and continue accepting. */ }
         } });
+}
+
+void StreamServer::stop()
+{
+    if (!m_stopped)
+        return;
+    m_stopped->store(true);
+    {
+        std::lock_guard lock(*m_mutex);
+        if (m_serverSocket != -1)
+            ::shutdown(m_serverSocket, SHUT_RDWR);
+        if (m_client)
+            m_client->shutdown();
+    }
+    if (m_receiveThread.joinable())
+    {
+        if (m_receiveThread.get_id() == std::this_thread::get_id())
+            return;
+        m_receiveThread.join();
+    }
+    if (m_serverSocket != -1)
+    {
+        ::close(m_serverSocket);
+        m_serverSocket = -1;
+    }
 }
 
 void StreamServer::createSocket()
 {
     m_serverSocket = socket(AF_UNIX, SOCK_STREAM, 0);
     if (m_serverSocket == -1)
-    {
-        Log::error("Couldn't create socket");
-    }
+        throw std::system_error(errno, std::generic_category(), "Unix server socket failed");
 }
 
 void StreamServer::bindSocket()
 {
-    sockaddr_un serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sun_family = AF_UNIX;
-    strcpy(serverAddr.sun_path, m_socketPath.c_str());
-
-    // Remove old socket file.
-    // This operation will fail if this is the first usage and it's okay.
-    unlink(m_socketPath.c_str());
-
-    auto address = reinterpret_cast<sockaddr*>(&serverAddr);
-    if (bind(m_serverSocket, address, sizeof(serverAddr)) == -1)
-    {
-        Log::error("Failed to bind socket");
-        close(m_serverSocket);
-    }
-
+    unix_socket::bindPrivate(m_serverSocket, m_socketPath);
+    m_bound = true;
     if (listen(m_serverSocket, 30) == -1)
-    {
-        Log::error("Failed to listen to socket");
-        close(m_serverSocket);
-    }
-}
-
-void StreamServer::sendMessage(int clientSocket, const nx_data& message)
-{
-    ssize_t sentBytes = send(clientSocket, message.data(), message.size(), 0);
-
-    if (sentBytes == -1)
-    {
-        Log::error("Failed to send message");
-    }
+        throw std::system_error(errno, std::generic_category(), "Unix listen failed");
 }
 
 nx_data StreamServer::receiveMessage(int socket)
@@ -166,14 +236,40 @@ nx_data StreamServer::receiveMessage(int socket)
 
 void StreamServer::handleMessages()
 {
-    int clientSocket = accept(m_serverSocket, nullptr, nullptr);
+    const int clientSocket = accept(m_serverSocket, nullptr, nullptr);
     if (clientSocket == -1)
+        return;
+    if (!unix_socket::sameUser(clientSocket))
     {
-        Log::error("Failed to accept connection");
+        ::close(clientSocket);
         return;
     }
+    std::shared_ptr<Connection> connection;
+    try
+    {
+        connection = std::make_shared<Connection>(clientSocket);
+    }
+    catch (...)
+    {
+        ::close(clientSocket);
+        throw;
+    }
+    {
+        std::lock_guard lock(*m_mutex);
+        if (m_stopped->load())
+            return;
+        m_client = connection;
+    }
 
-    while (true)
+    struct CloseConnection
+    {
+        std::shared_ptr<Connection> connection;
+        ~CloseConnection()
+        {
+            connection->close();
+        }
+    } closeOnExit{connection};
+    while (!m_stopped->load())
     {
         nx_data message = receiveMessage(clientSocket);
 
@@ -193,8 +289,8 @@ void StreamServer::handleMessages()
         auto* user = handledMessage->getUser();
         if (!user->isUnixStreamSet())
         {
-            user->setUnixStreamSend([this, clientSocket](const nx_data& bytes)
-                                    { sendMessage(clientSocket, bytes); });
+            user->setUnixStreamSend([connection](const nx_data& bytes)
+                                    { connection->send(bytes); });
         }
 
         auto type = handledMessage->getType();
@@ -223,6 +319,11 @@ void StreamServer::handleMessages()
                 Log::debug("StreamServer: Passed");
             }
         }
+    }
+    connection->close();
+    {
+        std::lock_guard lock(*m_mutex);
+        m_client.reset();
     }
 }
 

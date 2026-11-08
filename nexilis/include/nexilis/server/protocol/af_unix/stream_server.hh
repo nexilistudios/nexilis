@@ -23,6 +23,9 @@
 #include <nexilis/server/server_config.hh>
 #include <nexilis/server/server_protocol.hh>
 
+#include <atomic>
+#include <memory>
+#include <mutex>
 #include <thread>
 
 namespace nexilis::server::af_unix
@@ -53,9 +56,7 @@ public:
     /// NXProtocol start() implementation.
     void start() override;
 
-    void stop() override
-    {
-    }
+    void stop() override;
 
     NXProtocol::Type getType() override
     {
@@ -67,12 +68,16 @@ private:
     void bindSocket();
     void handleMessages();
     nx_data receiveMessage(int socket);
-    void sendMessage(int clientSocket, const nx_data& message);
+    struct Connection;
+    static StreamServer& movable(StreamServer& server);
 
 private:
     std::string m_socketPath;
-    int m_serverSocket;
-    nx_data m_buffer;
+    int m_serverSocket = -1;
+    bool m_bound = false;
+    std::shared_ptr<std::atomic<bool>> m_stopped = std::make_shared<std::atomic<bool>>(false);
+    std::shared_ptr<std::mutex> m_mutex = std::make_shared<std::mutex>();
+    std::shared_ptr<Connection> m_client;
     std::thread m_receiveThread;
 };
 

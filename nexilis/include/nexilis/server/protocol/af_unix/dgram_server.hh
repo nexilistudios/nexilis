@@ -72,6 +72,7 @@ public:
     }
 
 private:
+    static DgramServer& movable(DgramServer& protocol);
     void createSocket();
     void bindSocket();
     void receiveFromClients();
@@ -80,6 +81,7 @@ private:
 private:
     std::string m_socketPath;
     int m_serverSocket = -1;
+    bool m_bound = false;
     std::thread m_receiveThread;
     std::unique_ptr<std::mutex> m_mutex;
     std::unique_ptr<std::atomic<bool>> m_stopped;
