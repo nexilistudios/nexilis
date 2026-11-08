@@ -16,6 +16,11 @@ Each TCP and Unix stream request is prefixed with a **4-byte big-endian uint32_t
 
 The receiver reads exactly 4 bytes for the length, then exactly that many bytes for the payload. The tag authenticates the client ID, message ID, and complete command using the random per-session `udp_token` key delivered in the initial `client_id` response. The key is never included in later requests. Initial password or `skip` authentication has no session key yet and is the only unsigned request. The server rejects unsigned or incorrectly signed commands before dispatch.
 
+Clients send the initial authentication payload after their transport socket is
+set up. Boost TCP also completes its TCP and TLS-PSK connection before sending
+the payload. The client's `waitUntil*Ready()` checks run after this exchange
+because they wait for the server's authentication response.
+
 UDP messages do not use a length prefix — each datagram is a single message.
 The Boost UDP and af_inet UDP transports add an authentication envelope. A
 new client sends a 20-byte `NXUH` hello and receives a 20-byte `NXUC` cookie

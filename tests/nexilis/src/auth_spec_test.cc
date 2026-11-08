@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <nexilis/auth_config.hh>
+#include <nexilis/client/client_protocol.hh>
 #include <nexilis/command_type.hh>
 #include <nexilis/message_auth.hh>
 #include <nexilis/nx_protocol.hh>
@@ -38,6 +39,65 @@ using namespace nexilis;
 
 namespace
 {
+
+class HandshakeProbe final : public client::ClientProtocol
+{
+public:
+    explicit HandshakeProbe(client::ClientAPI& api)
+        : NxClass("HandshakeProbe"),
+          ClientProtocol(&api)
+    {
+    }
+
+    void startHandshake(NXProtocol::Type type)
+    {
+        ClientProtocol::start(type);
+    }
+
+    void sendMessage(const nx_data& message) override
+    {
+        sent.emplace_back(message);
+    }
+
+    void sendMessage(const nx_data& message, const std::function<void()>&) override
+    {
+        sendMessage(message);
+    }
+
+    std::future<void> sendMessageAsync(const nx_data& message) override
+    {
+        sendMessage(message);
+        std::promise<void> promise;
+        promise.set_value();
+        return promise.get_future();
+    }
+
+    std::vector<nx_data> sent;
+};
+
+TEST(ClientHandshake, DoesNotSendBeforeTransportIsReady)
+{
+    client::ClientConfig config;
+    config.setMode(AuthenticationMode::password_protected);
+    config.setPassword("secret");
+    client::ClientAPI api(config);
+    HandshakeProbe protocol(api);
+
+    protocol.startHandshake(NXProtocol::Type::BOOST_TCP_CLIENT);
+    EXPECT_TRUE(protocol.sent.empty());
+
+    protocol.updateProtocolStatus(client::ProtocolStatus::connecting);
+    protocol.startHandshake(NXProtocol::Type::BOOST_TCP_CLIENT);
+    EXPECT_TRUE(protocol.sent.empty());
+
+    protocol.updateProtocolStatus(client::ProtocolStatus::error);
+    protocol.startHandshake(NXProtocol::Type::AF_INET_TCP_CLIENT);
+    EXPECT_TRUE(protocol.sent.empty());
+
+    protocol.updateProtocolStatus(client::ProtocolStatus::undefined);
+    protocol.startHandshake(NXProtocol::Type::BOOST_TCP_SERVER);
+    EXPECT_TRUE(protocol.sent.empty());
+}
 
 TEST(ConstantTimeEquals, MatchesIdenticalStrings)
 {

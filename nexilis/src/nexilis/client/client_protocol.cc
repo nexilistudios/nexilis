@@ -127,6 +127,24 @@ std::pair<uint64_t, std::function<void()>> ClientProtocol::createCallback(const 
 
 void ClientProtocol::start(NXProtocol::Type type)
 {
+    if (NXProtocol::getMode(type) != NXProtocol::Mode::CLIENT)
+    {
+        Log::error(header(), "Authentication requires a client protocol");
+        return;
+    }
+
+    // The readiness methods below wait for the authentication response. They
+    // cannot be called before sending the handshake; check transport status
+    // separately so a failed or pending connection cannot send credentials.
+    const auto status = getProtocolStatus();
+    if (status == ProtocolStatus::error || status == ProtocolStatus::connecting ||
+        status == ProtocolStatus::switching_ports ||
+        (type == NXProtocol::Type::BOOST_TCP_CLIENT && status != ProtocolStatus::connected))
+    {
+        Log::error(header(), "Transport is not ready for authentication");
+        return;
+    }
+
     if (m_api->isInitialized())
     {
         Log::debug(header(), "Password already sent using another protocol, waiting for ready");
