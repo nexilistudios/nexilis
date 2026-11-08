@@ -34,20 +34,21 @@ CommandResult ServerImpl::room_player2d_shoot(const DefaultArgs& args)
 
     // Get messagedata: direction vector (x, y)
     auto payload = Util::removeAmountOfBytesFromVector(data, 3);
+    if (payload.size() != 8)
+        return CommandResult::invalid_input;
     auto dirX = Util::floatFromFront(payload);
     auto dirY = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 4));
     Vector2f direction(dirX, dirY);
 
-    // Normalize direction
-    float length = std::sqrt(direction.x * direction.x + direction.y * direction.y);
-    if (length > 0.0f)
-    {
-        direction.x /= length;
-        direction.y /= length;
-    }
-
-    if (length == 0.0f)
+    if (!std::isfinite(dirX) || !std::isfinite(dirY))
+        return CommandResult::invalid_input;
+    // Widen before computing length: squaring finite floats can overflow or
+    // underflow, producing a zero or non-unit visual direction.
+    const double length = std::hypot(static_cast<double>(dirX), static_cast<double>(dirY));
+    if (length == 0.0)
         return CommandResult::failure;
+    direction.x = static_cast<float>(dirX / length);
+    direction.y = static_cast<float>(dirY / length);
 
     // Clients simulate one visual projectile per shoot event. Broadcast its direction.
     std::map<std::string, boost::json::value> params{

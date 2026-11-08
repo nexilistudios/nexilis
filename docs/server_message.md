@@ -378,3 +378,18 @@ a resource mutex shared with server additions and deletions. Direct server
 resources still count against subsequent client creation. These methods do
 not synchronize outstanding pointers/references returned by room accessors.
 Applications must synchronize concurrent access to mutable room contents.
+
+## Numeric gameplay validation
+
+Player dimension requests require exactly two floats in 2D or three in 3D.
+Every dimension must be finite, positive, and at most the configured maximum
+horizontal position. Rejected requests neither change dimensions nor broadcast.
+
+2D visual shot requests require exactly two finite direction floats; zero
+vectors are rejected. The server normalizes accepted directions using a wider
+length calculation to handle extreme finite float values safely. Audio-event
+payloads require exactly one sound byte and three finite position floats within
+the configured world bounds; trailing bytes are rejected.
+
+These checks bound numerical inputs. Applications still decide whether clients
+may select collider dimensions and enforce authoritative collision/game rules.

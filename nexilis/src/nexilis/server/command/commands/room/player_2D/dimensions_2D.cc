@@ -17,6 +17,7 @@
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
 #include <nexilis/server/room_storage.hh>
+#include <nexilis/server/validation.hh>
 
 namespace nexilis::server
 {
@@ -25,7 +26,11 @@ CommandResult ServerImpl::room_player2d_dimension(const DefaultArgs& args)
 {
     auto& user = args.getUser();
     auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 3);
+    if (payload.size() != 8)
+        return CommandResult::invalid_input;
     auto vector = Util::convertToVector2(payload);
+    if (!validation::isValidDimensions(vector))
+        return CommandResult::invalid_input;
     Log::debug("Dimension x:", vector.x, " y:", vector.y);
 
     auto currentRoom = RoomStorage::getRoomById(user.getRoomId());

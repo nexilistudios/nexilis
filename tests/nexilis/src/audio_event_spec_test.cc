@@ -30,6 +30,7 @@
 #include <boost/json/object.hpp>
 #include <boost/json/serialize.hpp>
 
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -266,3 +267,18 @@ TEST_F(AudioEventSpecTest, ClientParsesServerAnimationEvent)
 }
 
 } // namespace
+
+TEST_F(AudioEventSpecTest, RejectsNonFiniteOutOfBoundsAndTrailingPayload)
+{
+    setUpRoom();
+    auto messages = receivedMessages(*m_other);
+    for (const auto position : {Vector3f{std::numeric_limits<float>::quiet_NaN(), 1, 1},
+                                Vector3f{1, std::numeric_limits<float>::infinity(), 1},
+                                Vector3f{10001, 1, 1}})
+        EXPECT_EQ(command.read(audioEventBytes(SOUND, position), *m_sender, protocol, 1),
+                  server::CommandResult::invalid_input);
+    auto extended = audioEventBytes(SOUND, {1, 2, 3});
+    extended.push_back(0);
+    EXPECT_EQ(command.read(extended, *m_sender, protocol, 1), server::CommandResult::invalid_input);
+    EXPECT_TRUE(messages.empty());
+}

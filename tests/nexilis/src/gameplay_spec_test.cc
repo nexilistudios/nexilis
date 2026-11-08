@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <limits>
 #include <optional>
 #include <thread>
@@ -1722,6 +1723,64 @@ TEST_F(GameplaySpecTest, Player2DPositionUpdatesServerAndBroadcasts)
     EXPECT_EQ(Util::toUint64(msg.at("callback")), MESSAGE_ID);
     EXPECT_DOUBLE_EQ(msg.at("x").as_double(), position.x);
     EXPECT_DOUBLE_EQ(msg.at("y").as_double(), position.y);
+}
+
+TEST_F(GameplaySpecTest, PlayerDimensionsRejectUnsafeValuesWithoutMutationOrBroadcast)
+{
+    setUpRoom();
+    auto messages = receivedMessages(*m_target);
+    command.getServerConfig().getGameplayLimits().setMaxHorizontalPosition(10.0f);
+    for (const float invalid : {0.0f, -1.0f, 11.0f,
+                                std::numeric_limits<float>::quiet_NaN(),
+                                std::numeric_limits<float>::infinity()})
+    {
+        EXPECT_EQ(read(player2DDimensionBytes({invalid, 1}), *m_sender), server::CommandResult::invalid_input);
+        EXPECT_EQ(read(player3DDimensionBytes({1, 1, invalid}), *m_sender), server::CommandResult::invalid_input);
+    }
+    auto truncated = player2DDimensionBytes({1, 1});
+    truncated.pop_back();
+    EXPECT_EQ(read(truncated, *m_sender), server::CommandResult::invalid_input);
+    auto extended = player3DDimensionBytes({1, 1, 1});
+    extended.push_back(0);
+    EXPECT_EQ(read(extended, *m_sender), server::CommandResult::invalid_input);
+    EXPECT_TRUE(messages.empty());
+    EXPECT_FLOAT_EQ(m_sender->getObject2D().getDimensions().x, 1.0f);
+    EXPECT_FLOAT_EQ(m_sender->getObject3D().getDimensions().z, 1.0f);
+    EXPECT_EQ(read(player2DDimensionBytes({10, 10}), *m_sender), server::CommandResult::success);
+    EXPECT_EQ(read(player3DDimensionBytes({10, 10, 10}), *m_sender), server::CommandResult::success);
+}
+
+TEST_F(GameplaySpecTest, Player2DShootRejectsMalformedAndNonFiniteDirections)
+{
+    setUpRoom();
+    auto messages = receivedMessages(*m_target);
+    auto request = [](Vector2f direction)
+    {
+        nx_data bytes{static_cast<uint8_t>(CommandType::room),
+                      static_cast<uint8_t>(RoomCommandType::Root::player_2D),
+                      static_cast<uint8_t>(RoomCommandType::PlayerType::shoot)};
+        auto payload = Util::convertToByteVector(direction);
+        bytes.insert(bytes.end(), payload.begin(), payload.end());
+        return bytes;
+    };
+    for (const auto direction : {Vector2f{std::numeric_limits<float>::quiet_NaN(), 1},
+                                 Vector2f{1, std::numeric_limits<float>::infinity()}})
+        EXPECT_EQ(read(request(direction), *m_sender), server::CommandResult::invalid_input);
+    auto malformed = request({1, 0});
+    malformed.pop_back();
+    EXPECT_EQ(read(malformed, *m_sender), server::CommandResult::invalid_input);
+    malformed = request({1, 0});
+    malformed.push_back(0);
+    EXPECT_EQ(read(malformed, *m_sender), server::CommandResult::invalid_input);
+    EXPECT_EQ(read(request({0, 0}), *m_sender), server::CommandResult::failure);
+    EXPECT_TRUE(messages.empty());
+    for (const float magnitude : {std::numeric_limits<float>::max(), std::numeric_limits<float>::min()})
+    {
+        ASSERT_EQ(read(request({magnitude, magnitude}), *m_sender), server::CommandResult::success);
+        const auto& message = messages.back();
+        EXPECT_NEAR(message.at("x").as_double(), std::sqrt(0.5), 0.00001);
+        EXPECT_NEAR(message.at("y").as_double(), std::sqrt(0.5), 0.00001);
+    }
 }
 
 TEST_F(GameplaySpecTest, Player2DDimensionUpdatesServerAndBroadcasts)

@@ -20,6 +20,7 @@
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
 #include <nexilis/server/room_storage.hh>
+#include <nexilis/server/validation.hh>
 #include <nexilis/util.hh>
 
 namespace nexilis::server
@@ -36,7 +37,7 @@ CommandResult ServerImpl::room_player3d_audioEvent(const DefaultArgs& args)
 
     // Payload: [sound (1 byte)][x (4)][y (4)][z (4)]
     auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 3);
-    if (payload.size() < 13)
+    if (payload.size() != 13)
     {
         Log::error("AudioEvent: Insufficient payload");
         return CommandResult::invalid_input;
@@ -45,6 +46,8 @@ CommandResult ServerImpl::room_player3d_audioEvent(const DefaultArgs& args)
     const uint8_t sound = payload[0];
     payload = Util::removeAmountOfBytesFromVector(payload, 1);
     auto position = Util::vector3fFromFront(payload);
+    if (!validation::isValidPosition(position))
+        return CommandResult::invalid_input;
 
     auto room = RoomStorage::getRoomById(user.getRoomId());
     if (!room)
