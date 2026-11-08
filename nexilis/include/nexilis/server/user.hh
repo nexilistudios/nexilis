@@ -139,6 +139,17 @@ public:
         return true;
     }
 
+    /// Atomically check and consume one command from a token bucket.
+    /// \param now Current steady-clock time.
+    /// \param ratePerSecond Sustained commands per second. A non-positive
+    ///        value disables the limit.
+    /// \param burstCapacity Maximum tokens the bucket may hold. Values below
+    ///        one are raised to one so a single command is always possible.
+    /// \return True when the command may be dispatched.
+    bool acceptCommand(std::chrono::steady_clock::time_point now,
+                       float ratePerSecond,
+                       float burstCapacity);
+
     void setUsername(const std::string& username)
     {
         BaseClient::setBaseUsername(username);
@@ -283,6 +294,10 @@ private:
     std::chrono::steady_clock::time_point m_lastShotTime{};
     mutable std::mutex m_broadcastMutex;
     std::chrono::steady_clock::time_point m_lastBroadcastTime{};
+    mutable std::mutex m_commandMutex;
+    bool m_commandLimiterInitialized = false;
+    std::chrono::steady_clock::time_point m_commandLastRefill{};
+    double m_commandTokens = 0.0;
 
 private:
     std::function<void(nx_data)> m_boostTCPSendToClient = nullptr;

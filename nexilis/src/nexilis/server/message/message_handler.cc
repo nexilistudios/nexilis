@@ -108,6 +108,17 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
             Log::warning(header(), "Rejected duplicate or stale message ID");
             return nullptr;
         }
+
+        // Drop excess authenticated traffic before parsing or dispatching it.
+        // The token bucket allows a one-second burst at the configured rate;
+        // a non-positive rate disables the limit.
+        const float maxCommandRate = authentication->getMaxCommandRate();
+        if (!user->acceptCommand(std::chrono::steady_clock::now(), maxCommandRate, maxCommandRate))
+        {
+            Log::debug(header(), "Dropped command over the per-client rate limit");
+            return nullptr;
+        }
+
         return std::make_unique<Message>(handlePayload(verified, user, address));
     };
 

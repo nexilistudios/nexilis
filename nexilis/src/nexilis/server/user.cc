@@ -19,6 +19,7 @@
 
 #include <openssl/rand.h>
 
+#include <algorithm>
 #include <array>
 #include <stdexcept>
 
@@ -56,6 +57,10 @@ User::User(User&& other) noexcept
     m_lastShotTime = other.m_lastShotTime;
     std::lock_guard<std::mutex> broadcastLock(other.m_broadcastMutex);
     m_lastBroadcastTime = other.m_lastBroadcastTime;
+    std::lock_guard<std::mutex> commandLock(other.m_commandMutex);
+    m_commandLimiterInitialized = other.m_commandLimiterInitialized;
+    m_commandLastRefill = other.m_commandLastRefill;
+    m_commandTokens = other.m_commandTokens;
 }
 
 /// Move assignment operator.
@@ -76,6 +81,12 @@ User& User::operator=(User&& other) noexcept
         {
             std::scoped_lock lock(m_broadcastMutex, other.m_broadcastMutex);
             m_lastBroadcastTime = other.m_lastBroadcastTime;
+        }
+        {
+            std::scoped_lock lock(m_commandMutex, other.m_commandMutex);
+            m_commandLimiterInitialized = other.m_commandLimiterInitialized;
+            m_commandLastRefill = other.m_commandLastRefill;
+            m_commandTokens = other.m_commandTokens;
         }
         m_boostTCPSendToClient = std::move(other.m_boostTCPSendToClient);
         m_boostUDPSendToClient = std::move(other.m_boostUDPSendToClient);
@@ -119,6 +130,37 @@ bool User::acceptMessageId(uint64_t id)
     if (behind >= window.seen.size() || window.seen.test(behind))
         return false;
     window.seen.set(behind);
+    return true;
+}
+
+bool User::acceptCommand(std::chrono::steady_clock::time_point now,
+                         float ratePerSecond,
+                         float burstCapacity)
+{
+    if (!(ratePerSecond > 0.0f))
+        return true;
+
+    const double capacity = std::max(1.0, static_cast<double>(burstCapacity));
+    const double rate = static_cast<double>(ratePerSecond);
+
+    std::lock_guard<std::mutex> lock(m_commandMutex);
+    if (!m_commandLimiterInitialized)
+    {
+        m_commandTokens = capacity;
+        m_commandLastRefill = now;
+        m_commandLimiterInitialized = true;
+    }
+    else if (now > m_commandLastRefill)
+    {
+        const double elapsed = std::chrono::duration<double>(now - m_commandLastRefill).count();
+        m_commandTokens = std::min(capacity, m_commandTokens + elapsed * rate);
+        m_commandLastRefill = now;
+    }
+
+    if (m_commandTokens < 1.0)
+        return false;
+
+    m_commandTokens -= 1.0;
     return true;
 }
 

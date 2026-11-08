@@ -118,7 +118,7 @@ inline bool readSession(const nx_data& packet, std::string_view token, nx_data& 
     nx_data verified;
     if (!message_auth::verify(signedPayload, token, verified))
         return false;
-    payload = std::move(signedPayload);
+    payload = std::move(verified);
     return true;
 }
 

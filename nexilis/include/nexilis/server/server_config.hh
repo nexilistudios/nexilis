@@ -68,6 +68,19 @@ public:
         return m_tickrate;
     }
 
+    /// Maximum sustained commands per second accepted from one client.
+    /// Commands over the limit are dropped before dispatch. The limiter
+    /// allows a burst of up to one second's worth of commands. A
+    /// non-positive value disables the limit.
+    void setMaxCommandRate(float maxCommandRate)
+    {
+        m_maxCommandRate = maxCommandRate;
+    }
+    float getMaxCommandRate() const
+    {
+        return m_maxCommandRate;
+    }
+
     /// Gameplay limits enforced on player actions.
     GameplayLimits& getGameplayLimits()
     {
@@ -105,6 +118,7 @@ public:
 private:
     std::string m_rootPassword;
     float m_tickrate = 60.f;
+    float m_maxCommandRate = NEXILIS_DEFAULT_MAX_COMMAND_RATE;
     bool m_tls = true;
     GameplayLimits m_gameplayLimits;
     RoomLimits m_roomLimits;

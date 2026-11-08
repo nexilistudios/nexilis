@@ -16,6 +16,8 @@ Each TCP and Unix stream request is prefixed with a **4-byte big-endian uint32_t
 
 The receiver reads exactly 4 bytes for the length, then exactly that many bytes for the payload. The tag authenticates the client ID, message ID, and complete command using the random per-session `udp_token` key delivered in the initial `client_id` response. The key is never included in later requests. Initial password or `skip` authentication has no session key yet and is the only unsigned request. The server rejects unsigned or incorrectly signed commands before dispatch.
 
+After a request is authenticated and accepted by the replay window, the server applies a per-client command throughput limit before parsing or dispatching it. The limiter is a token bucket with a default rate of 120 commands per second and a burst allowance of one second's worth; excess commands are dropped without a response. Configure it with `nexilis::server::ServerConfig::setMaxCommandRate`; zero or a negative value disables the limit.
+
 Clients send the initial authentication payload after their transport socket is
 set up. Boost TCP also completes its TCP and TLS-PSK connection before sending
 the payload. The client's `waitUntil*Ready()` checks run after this exchange

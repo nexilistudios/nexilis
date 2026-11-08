@@ -33,6 +33,7 @@
 #include <nexilis/util.hh>
 
 #include <algorithm>
+#include <chrono>
 #include <string>
 #include <thread>
 
@@ -160,6 +161,36 @@ TEST(ServerConfig, IsRootPasswordMatches)
     EXPECT_FALSE(config.isRootPassword("rootsec"));
     EXPECT_FALSE(config.isRootPassword("rootsecretpassword"));
     EXPECT_FALSE(config.isRootPassword("rootsecr"));
+}
+
+TEST(ServerConfig, CommandRateDefaultsAndConfigures)
+{
+    server::ServerConfig config;
+    EXPECT_FLOAT_EQ(config.getMaxCommandRate(), NEXILIS_DEFAULT_MAX_COMMAND_RATE);
+    config.setMaxCommandRate(12.0f);
+    EXPECT_FLOAT_EQ(config.getMaxCommandRate(), 12.0f);
+}
+
+TEST(UserCommandRateLimit, ConsumesBurstRefillsAndCanBeDisabled)
+{
+    server::User user(1, "address");
+    const auto start = std::chrono::steady_clock::now();
+
+    EXPECT_TRUE(user.acceptCommand(start, 2.0f, 2.0f));
+    EXPECT_TRUE(user.acceptCommand(start, 2.0f, 2.0f));
+    EXPECT_FALSE(user.acceptCommand(start, 2.0f, 2.0f));
+
+    const auto halfSecond = start + std::chrono::milliseconds(500);
+    EXPECT_TRUE(user.acceptCommand(halfSecond, 2.0f, 2.0f));
+    EXPECT_FALSE(user.acceptCommand(halfSecond, 2.0f, 2.0f));
+
+    const auto later = halfSecond + std::chrono::seconds(10);
+    EXPECT_TRUE(user.acceptCommand(later, 2.0f, 2.0f));
+    EXPECT_TRUE(user.acceptCommand(later, 2.0f, 2.0f));
+    EXPECT_FALSE(user.acceptCommand(later, 2.0f, 2.0f));
+
+    EXPECT_TRUE(user.acceptCommand(later, 0.0f, 0.0f));
+    EXPECT_TRUE(user.acceptCommand(later, -1.0f, -1.0f));
 }
 
 TEST(MessageAuthentication, RejectsTamperingAndReplaysBeforeDispatch)
@@ -495,6 +526,36 @@ TEST_F(MessageHandlerSkipTest, NewClientReceivesAuthMessageWithId)
     auto stored = server::ClientStorage::getClientsByIpAddress("test_address");
     ASSERT_FALSE(stored.empty());
     EXPECT_NE(stored[0]->getId(), 0);
+}
+
+TEST_F(MessageHandlerSkipTest, DropsCommandsOverThePerClientRateLimit)
+{
+    auto first = sendHandshake();
+    ASSERT_NE(first, nullptr);
+    ASSERT_EQ(first->getType(), server::BaseMessage::Type::auth_message);
+
+    auto stored = server::ClientStorage::getClientsByIpAddress("test_address");
+    ASSERT_FALSE(stored.empty());
+    const auto clientId = stored[0]->getId();
+    const auto token = stored[0]->getUdpToken();
+
+    auto request = [&](uint64_t messageId)
+    {
+        nx_data payload = Util::convertToByteVector(clientId);
+        auto messageIdBytes = Util::convertToByteVector(messageId);
+        payload.insert(payload.end(), messageIdBytes.begin(), messageIdBytes.end());
+        payload.emplace_back(static_cast<uint8_t>(CommandType::getting));
+        payload.emplace_back(0);
+        payload.emplace_back(0);
+        return message_auth::sign(payload, token);
+    };
+
+    config.setMaxCommandRate(0.000001f);
+    ASSERT_NE(handler.readMessage("test_address", request(200), &config), nullptr);
+    EXPECT_EQ(handler.readMessage("test_address", request(201), &config), nullptr);
+
+    config.setMaxCommandRate(0.0f);
+    ASSERT_NE(handler.readMessage("test_address", request(202), &config), nullptr);
 }
 
 TEST_F(MessageHandlerSkipTest, SecondMessageFromSameClientIsHandledAsCommand)
