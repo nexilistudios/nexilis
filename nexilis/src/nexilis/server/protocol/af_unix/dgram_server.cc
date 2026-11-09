@@ -31,14 +31,58 @@
 
 #include <cerrno>
 #include <cstring>
+#include <stdexcept>
+#include <system_error>
 
 namespace nexilis::server::af_unix
 {
 
+struct DgramServer::SocketState
+{
+    ~SocketState()
+    {
+        close();
+    }
+
+    void disableSends()
+    {
+        std::lock_guard lock(mutex);
+        acceptingSends = false;
+    }
+
+    void close()
+    {
+        std::lock_guard lock(mutex);
+        acceptingSends = false;
+        if (fd != -1)
+        {
+            ::close(fd);
+            fd = -1;
+        }
+    }
+
+    void send(const sockaddr_un& address, const nx_data& bytes)
+    {
+        std::lock_guard lock(mutex);
+        if (!acceptingSends || fd == -1)
+            throw std::runtime_error("Unix datagram socket is closed");
+        const auto sent = sendto(fd, bytes.data(), bytes.size(), MSG_DONTWAIT | MSG_NOSIGNAL,
+                                 reinterpret_cast<const sockaddr*>(&address), sizeof(address));
+        if (sent == -1)
+            throw std::system_error(errno, std::generic_category(), "Unix datagram send failed");
+    }
+
+    // The descriptor stays unchanged while the receive worker runs. stop()
+    // disables callbacks first, joins that worker, then closes under the mutex.
+    int fd = -1;
+    bool acceptingSends = true;
+    std::mutex mutex;
+};
+
 DgramServer::DgramServer(const ServerConfig& settings, const std::string& socketPath)
     : ServerProtocol(settings),
       m_socketPath(socketPath),
-      m_mutex(std::make_unique<std::mutex>()),
+      m_socketState(std::make_shared<SocketState>()),
       m_stopped(std::make_unique<std::atomic<bool>>(false))
 {
     unix_socket::address(m_socketPath);
@@ -49,8 +93,7 @@ DgramServer::DgramServer(const ServerConfig& settings, const std::string& socket
     }
     catch (...)
     {
-        close(m_serverSocket);
-        m_serverSocket = -1;
+        m_socketState->close();
         throw;
     }
 }
@@ -73,18 +116,12 @@ DgramServer::DgramServer(DgramServer&& other)
     : NXProtocol(std::move(movable(other))),
       ServerProtocol(std::move(other)),
       m_socketPath(std::move(other.m_socketPath)),
-      m_serverSocket(std::move(other.m_serverSocket)),
+      m_socketState(std::move(other.m_socketState)),
       m_receiveThread(std::move(other.m_receiveThread)),
-      m_mutex(std::move(other.m_mutex)),
       m_stopped(std::move(other.m_stopped))
 {
     m_bound = other.m_bound;
     other.m_bound = false;
-    other.m_serverSocket = -1;
-    if (!m_mutex)
-    {
-        m_mutex = std::make_unique<std::mutex>();
-    }
     if (!m_stopped)
     {
         m_stopped = std::make_unique<std::atomic<bool>>(false);
@@ -103,18 +140,12 @@ DgramServer& DgramServer::operator=(DgramServer&& other)
         static_cast<ServerProtocol&>(*this) = static_cast<ServerProtocol&&>(other);
 
         m_socketPath = std::move(other.m_socketPath);
-        m_serverSocket = std::move(other.m_serverSocket);
+        m_socketState = std::move(other.m_socketState);
         m_receiveThread = std::move(other.m_receiveThread);
-        m_mutex = std::move(other.m_mutex);
         m_stopped = std::move(other.m_stopped);
 
         m_bound = other.m_bound;
         other.m_bound = false;
-        other.m_serverSocket = -1;
-        if (!m_mutex)
-        {
-            m_mutex = std::make_unique<std::mutex>();
-        }
         if (!m_stopped)
         {
             m_stopped = std::make_unique<std::atomic<bool>>(false);
@@ -131,7 +162,7 @@ void DgramServer::start()
         return;
     }
 
-    if (m_serverSocket == -1)
+    if (m_socketState->fd == -1)
     {
         Log::error("DgramServer: cannot start, socket is not open");
         return;
@@ -149,65 +180,40 @@ void DgramServer::stop()
         return;
     }
 
+    m_socketState->disableSends();
     if (m_receiveThread.joinable())
         m_receiveThread.join();
-    std::lock_guard lock(*m_mutex);
-    if (m_serverSocket != -1)
-    {
-        close(m_serverSocket);
-        m_serverSocket = -1;
-    }
+    m_socketState->close();
 
     Log::debug("DgramServer stopped");
 }
 
 void DgramServer::createSocket()
 {
-    m_serverSocket = socket(AF_UNIX, SOCK_DGRAM, 0);
-    if (m_serverSocket == -1)
+    m_socketState->fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+    if (m_socketState->fd == -1)
         throw std::system_error(errno, std::generic_category(), "Unix server socket failed");
     const int enabled = 1;
     timeval timeout{};
     timeout.tv_usec = 100000;
-    if (setsockopt(m_serverSocket, SOL_SOCKET, SO_PASSCRED, &enabled, sizeof(enabled)) == -1 ||
-        setsockopt(m_serverSocket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1)
+    if (setsockopt(m_socketState->fd, SOL_SOCKET, SO_PASSCRED, &enabled, sizeof(enabled)) == -1 ||
+        setsockopt(m_socketState->fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1)
     {
         const auto error = errno;
-        close(m_serverSocket);
-        m_serverSocket = -1;
+        m_socketState->close();
         throw std::system_error(error, std::generic_category(), "Unix server socket setup failed");
     }
 }
 
 void DgramServer::bindSocket()
 {
-    unix_socket::bindPrivate(m_serverSocket, m_socketPath);
+    unix_socket::bindPrivate(m_socketState->fd, m_socketPath);
     m_bound = true;
-}
-
-void DgramServer::sendToClient(const sockaddr_un& clientAddress, const nx_data& message)
-{
-    std::lock_guard<std::mutex> lock(*m_mutex);
-
-    if (m_serverSocket == -1)
-    {
-        Log::error("DgramServer: cannot send, socket is not open");
-        return;
-    }
-
-    ssize_t sentBytes = sendto(m_serverSocket, message.data(), message.size(), MSG_DONTWAIT | MSG_NOSIGNAL,
-                               reinterpret_cast<const sockaddr*>(&clientAddress),
-                               sizeof(clientAddress));
-
-    if (sentBytes == -1)
-    {
-        Log::error("Failed to send message to client: ", strerror(errno));
-    }
 }
 
 void DgramServer::receiveFromClients()
 {
-    while (!m_stopped->load() && m_serverSocket != -1)
+    while (!m_stopped->load() && m_socketState->fd != -1)
     {
         sockaddr_un clientAddress{};
         nx_data buffer(NEXILIS_BUFFER);
@@ -220,7 +226,7 @@ void DgramServer::receiveFromClients()
         message.msg_iovlen = 1;
         message.msg_control = control;
         message.msg_controllen = sizeof(control);
-        const ssize_t bytesReceived = recvmsg(m_serverSocket, &message, 0);
+        const ssize_t bytesReceived = recvmsg(m_socketState->fd, &message, 0);
 
         if (bytesReceived <= 0)
         {
@@ -254,8 +260,8 @@ void DgramServer::receiveFromClients()
         if (!user->isUnixDgramSet())
         {
             auto senderAddress = clientAddress;
-            user->setUnixDgramSend([this, senderAddress](const nx_data& bytes)
-                                   { sendToClient(senderAddress, bytes); });
+            user->setUnixDgramSend([socket = m_socketState, senderAddress](const nx_data& bytes)
+                                   { socket->send(senderAddress, bytes); });
         }
 
         auto msgType = handledMessage->getType();

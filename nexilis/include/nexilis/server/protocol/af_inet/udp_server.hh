@@ -81,14 +81,14 @@ private:
     void createSocket();
     void bindSocket();
     void receiveFromClients();
-    void sendToClient(const sockaddr_in& clientAddress, const nx_data& message);
+    static UDPServer& movable(UDPServer& protocol);
+    struct SocketState;
 
 private:
     uint16_t m_port;
-    int m_serverSocket = -1;
+    std::shared_ptr<SocketState> m_socketState;
     sockaddr_in m_serverAddr;
     std::thread m_receiveThread;
-    std::unique_ptr<std::mutex> m_mutex;
     std::unique_ptr<std::atomic<bool>> m_stopped;
     std::array<uint8_t, 32> m_cookieKey{};
     std::unordered_map<uint64_t, sockaddr_in> m_clientEndpoints;

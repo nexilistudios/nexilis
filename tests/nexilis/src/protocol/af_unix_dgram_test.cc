@@ -24,12 +24,15 @@
 #include <nexilis/client/protocol/af_unix/dgram_client.hh>
 #include <nexilis/server/protocol/af_unix/dgram_server.hh>
 
+#include <atomic>
+#include <cerrno>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <nexilis/client/protocol/af_unix/stream_client.hh>
 #include <nexilis/server/protocol/af_unix/stream_server.hh>
 #include <nexilis/unix_socket.hh>
+#include <system_error>
 
 class AFUnixDgramTest : public ::testing::Test
 {
@@ -208,6 +211,139 @@ struct TestFd
     TestFd(const TestFd&) = delete;
     TestFd& operator=(const TestFd&) = delete;
 };
+
+std::shared_ptr<nexilis::server::User> authenticateDatagram(int peer, const std::string& path,
+                                                            const std::string& peerPath)
+{
+    const auto endpoint = nexilis::unix_socket::address(path);
+    const std::string password = "secret";
+    EXPECT_EQ(sendto(peer, password.data(), password.size(), 0,
+                     reinterpret_cast<const sockaddr*>(&endpoint), sizeof(endpoint)),
+              static_cast<ssize_t>(password.size()));
+    timeval timeout{};
+    timeout.tv_sec = 2;
+    EXPECT_EQ(setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0);
+    char response[1024];
+    // The reply follows callback installation, so no sender races its setup.
+    if (recv(peer, response, sizeof(response), 0) <= 0)
+    {
+        ADD_FAILURE() << "Datagram authentication did not reply";
+        return {};
+    }
+    const auto users = nexilis::server::ClientStorage::getClientsByIpAddress(peerPath);
+    if (users.size() != 1)
+    {
+        ADD_FAILURE() << "Expected one authenticated datagram user";
+        return {};
+    }
+    return users.front();
+}
+
+TEST_F(UnixSocketSecurityTest, DatagramCallbackIsClosedAfterStopAndServerReplacement)
+{
+    const auto path = directory + "/server";
+    const auto peerPath = directory + "/peer";
+    TestFd peer(socket(AF_UNIX, SOCK_DGRAM, 0));
+    ASSERT_NE(peer.fd, -1);
+    nexilis::unix_socket::bindPrivate(peer.fd, peerPath);
+    std::shared_ptr<nexilis::server::User> retained;
+    {
+        nexilis::server::af_unix::DgramServer server(settings, path);
+        server.start();
+        retained = authenticateDatagram(peer.fd, path, peerPath);
+        ASSERT_NE(retained, nullptr);
+        ASSERT_TRUE(retained->unixDgramSend({42}));
+        char byte{};
+        ASSERT_EQ(recv(peer.fd, &byte, 1, 0), 1);
+        EXPECT_EQ(byte, 42);
+        server.stop();
+        EXPECT_THROW(retained->unixDgramSend({42}), std::runtime_error);
+    }
+    EXPECT_THROW(retained->unixDgramSend({42}), std::runtime_error);
+
+    // Reusing the server path/socket must not reactivate the old callback.
+    nexilis::server::ClientStorage::clear();
+    nexilis::server::af_unix::DgramServer replacement(settings, path);
+    replacement.start();
+    const auto current = authenticateDatagram(peer.fd, path, peerPath);
+    ASSERT_NE(current, nullptr);
+    EXPECT_THROW(retained->unixDgramSend({42}), std::runtime_error);
+    ASSERT_TRUE(current->unixDgramSend({43}));
+    char byte{};
+    ASSERT_EQ(recv(peer.fd, &byte, 1, 0), 1);
+    EXPECT_EQ(byte, 43);
+}
+
+TEST_F(UnixSocketSecurityTest, DatagramStopAndDestructionSerializeWithConcurrentSends)
+{
+    const auto path = directory + "/server";
+    const auto peerPath = directory + "/peer";
+    TestFd peer(socket(AF_UNIX, SOCK_DGRAM, 0));
+    ASSERT_NE(peer.fd, -1);
+    nexilis::unix_socket::bindPrivate(peer.fd, peerPath);
+    auto server = std::make_unique<nexilis::server::af_unix::DgramServer>(settings, path);
+    server->start();
+    const auto retained = authenticateDatagram(peer.fd, path, peerPath);
+    ASSERT_NE(retained, nullptr);
+
+    std::promise<void> sending;
+    auto started = sending.get_future();
+    std::atomic<bool> queueFull{false};
+    std::jthread sender([&](std::stop_token stop)
+                        {
+                            sending.set_value();
+                            while (!stop.stop_requested())
+                            {
+                                try
+                                {
+                                    retained->unixDgramSend({42});
+                                }
+                                catch (const std::system_error& error)
+                                {
+                                    if (error.code().value() == EAGAIN || error.code().value() == EWOULDBLOCK)
+                                        queueFull = true;
+                                }
+                                catch (const std::runtime_error&)
+                                {
+                                    // Shutdown has disabled this callback.
+                                }
+                            } });
+    started.wait();
+    // Fill the undrained peer queue, exercising the nonblocking send path.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (!queueFull.load() && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::yield();
+    EXPECT_TRUE(queueFull.load());
+    const auto before = std::chrono::steady_clock::now();
+    server->stop();
+    server.reset();
+    EXPECT_LT(std::chrono::steady_clock::now() - before, std::chrono::seconds(1));
+    EXPECT_THROW(retained->unixDgramSend({42}), std::runtime_error);
+    sender.request_stop();
+}
+
+TEST_F(UnixSocketSecurityTest, DatagramMoveAssignmentClosesPreviousCallbacks)
+{
+    const auto path = directory + "/server";
+    const auto peerPath = directory + "/peer";
+    TestFd peer(socket(AF_UNIX, SOCK_DGRAM, 0));
+    ASSERT_NE(peer.fd, -1);
+    nexilis::unix_socket::bindPrivate(peer.fd, peerPath);
+    nexilis::server::af_unix::DgramServer server(settings, path);
+    server.start();
+    const auto retained = authenticateDatagram(peer.fd, path, peerPath);
+    ASSERT_NE(retained, nullptr);
+
+    const auto replacementPath = directory + "/replacement";
+    nexilis::server::af_unix::DgramServer replacement(settings, replacementPath);
+    server = std::move(replacement);
+    EXPECT_THROW(retained->unixDgramSend({42}), std::runtime_error);
+    EXPECT_FALSE(std::filesystem::exists(path));
+    // The transferred socket is usable and independent of the old callback.
+    nexilis::server::ClientStorage::clear();
+    server.start();
+    ASSERT_NE(authenticateDatagram(peer.fd, replacementPath, peerPath), nullptr);
+}
 
 TEST_F(UnixSocketSecurityTest, AddressRejectsInvalidPathsWithoutTruncating)
 {

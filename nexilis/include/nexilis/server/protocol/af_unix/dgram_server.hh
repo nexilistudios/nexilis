@@ -76,14 +76,13 @@ private:
     void createSocket();
     void bindSocket();
     void receiveFromClients();
-    void sendToClient(const sockaddr_un& clientAddress, const nx_data& message);
+    struct SocketState;
 
 private:
     std::string m_socketPath;
-    int m_serverSocket = -1;
+    std::shared_ptr<SocketState> m_socketState;
     bool m_bound = false;
     std::thread m_receiveThread;
-    std::unique_ptr<std::mutex> m_mutex;
     std::unique_ptr<std::atomic<bool>> m_stopped;
 };
 

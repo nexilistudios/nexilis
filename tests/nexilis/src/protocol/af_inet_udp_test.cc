@@ -28,7 +28,10 @@
 #include <nexilis/server/protocol/af_inet/udp_server.hh>
 
 #include <arpa/inet.h>
+#include <atomic>
 #include <chrono>
+#include <future>
+#include <stdexcept>
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
@@ -197,4 +200,140 @@ TEST_F(AFInetUDPTest, RejectsClientIdFromAnotherEndpoint)
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     EXPECT_EQ(nexilis::server::RoomStorage::getAllRooms().size(), before);
     EXPECT_EQ(nexilis::server::ClientStorage::getAllClients().size(), beforeClients);
+}
+
+namespace
+{
+struct UDPTestPeer
+{
+    UDPTestPeer()
+        : fd(socket(AF_INET, SOCK_DGRAM, 0))
+    {
+    }
+    ~UDPTestPeer()
+    {
+        if (fd != -1)
+            close(fd);
+    }
+    UDPTestPeer(const UDPTestPeer&) = delete;
+    UDPTestPeer& operator=(const UDPTestPeer&) = delete;
+
+    std::shared_ptr<nexilis::server::User> authenticate(uint16_t port)
+    {
+        sockaddr_in target{};
+        target.sin_family = AF_INET;
+        target.sin_port = htons(port);
+        target.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        timeval timeout{};
+        timeout.tv_sec = 2;
+        if (fd == -1 || setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1)
+            return {};
+        const auto send = [&](const nexilis::nx_data& bytes)
+        {
+            return sendto(fd, bytes.data(), bytes.size(), 0,
+                          reinterpret_cast<const sockaddr*>(&target), sizeof(target)) == static_cast<ssize_t>(bytes.size());
+        };
+        if (!send(nexilis::udp_auth::makeHello()))
+            return {};
+        nexilis::nx_data response(1024);
+        auto received = recv(fd, response.data(), response.size(), 0);
+        if (received != 4 + nexilis::udp_auth::cookie_size ||
+            !nexilis::udp_auth::hasPrefix(response, nexilis::udp_auth::challenge))
+            return {};
+        nexilis::nx_data cookie(response.begin() + 4, response.begin() + received);
+        if (!send(nexilis::udp_auth::makeAuthentication(cookie, {'s', 'a', 'l', 'a', 's', 'a', 'n', 'a'})))
+            return {};
+        // The authentication reply follows callback installation.
+        if (recv(fd, response.data(), response.size(), 0) <= 0)
+            return {};
+        const auto users = nexilis::server::ClientStorage::getClientsByIpAddress("127.0.0.1");
+        return users.size() == 1 ? users.front() : nullptr;
+    }
+
+    int fd;
+};
+} // namespace
+
+TEST_F(AFInetUDPTest, RetainedCallbackRejectsAfterStopDestructionAndReplacement)
+{
+    UDPTestPeer peer;
+    const auto retained = peer.authenticate(port);
+    ASSERT_NE(retained, nullptr);
+    ASSERT_TRUE(retained->inetUDPSend({42}));
+    char response[1024];
+    ssize_t received;
+    do
+    {
+        received = recv(peer.fd, response, sizeof(response), 0);
+    } while (received > 1);
+    ASSERT_EQ(received, 1);
+    EXPECT_EQ(response[0], 42);
+    server->stop();
+    EXPECT_THROW(retained->inetUDPSend({42}), std::runtime_error);
+    server.reset();
+    EXPECT_THROW(retained->inetUDPSend({42}), std::runtime_error);
+
+    nexilis::server::ClientStorage::clear();
+    server = std::make_shared<nexilis::server::af_inet::UDPServer>(settings, port);
+    server->start();
+    ASSERT_NE(peer.authenticate(port), nullptr);
+    EXPECT_THROW(retained->inetUDPSend({42}), std::runtime_error);
+}
+
+TEST_F(AFInetUDPTest, StopAndDestructionSerializeWithConcurrentCallbackSends)
+{
+    UDPTestPeer peer;
+    const auto retained = peer.authenticate(port);
+    ASSERT_NE(retained, nullptr);
+    std::promise<void> sending;
+    auto started = sending.get_future();
+    std::atomic<unsigned> sent{0};
+    std::jthread sender([&](std::stop_token stop)
+                        {
+                            try
+                            {
+                                retained->inetUDPSend({42});
+                                ++sent;
+                            }
+                            catch (...)
+                            {
+                            }
+                            sending.set_value();
+                            while (!stop.stop_requested())
+                            {
+                                try
+                                {
+                                    retained->inetUDPSend({42});
+                                    ++sent;
+                                }
+                                catch (const std::runtime_error&)
+                                {
+                                }
+                            } });
+    started.wait();
+    EXPECT_GT(sent.load(), 0u);
+    const auto before = std::chrono::steady_clock::now();
+    server.reset();
+    EXPECT_LT(std::chrono::steady_clock::now() - before, std::chrono::seconds(1));
+    EXPECT_THROW(retained->inetUDPSend({42}), std::runtime_error);
+    sender.request_stop();
+}
+
+TEST_F(AFInetUDPTest, MoveAssignmentClosesOldCallbacksAndRejectsRunningSource)
+{
+    UDPTestPeer peer;
+    const auto retained = peer.authenticate(port);
+    ASSERT_NE(retained, nullptr);
+    // The receiver captures its owner, so moving a running source is rejected.
+    EXPECT_THROW(nexilis::server::af_inet::UDPServer(std::move(*server)), std::logic_error);
+    nexilis::server::af_inet::UDPServer replacement(settings, port + 1);
+    replacement.start();
+    EXPECT_THROW(*server = std::move(replacement), std::logic_error);
+    replacement.stop();
+    nexilis::server::af_inet::UDPServer unstarted(settings, port + 1);
+    *server = std::move(unstarted);
+    EXPECT_THROW(retained->inetUDPSend({42}), std::runtime_error);
+    server->start();
+    nexilis::server::ClientStorage::clear();
+    ASSERT_NE(peer.authenticate(port + 1), nullptr);
 }

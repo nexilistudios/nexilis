@@ -349,6 +349,30 @@ Its stored send callbacks retain connection state and reject sends after closure
 including after the server is destroyed. Unix stream servers and datagram
 protocols must be stopped before moving them while a worker is joinable.
 
+Unix datagram server callbacks also retain socket state independently of the
+server object. Shutdown disables sends, joins the receive worker, and closes the
+descriptor while holding the send mutex. Retained callbacks throw
+`std::runtime_error` after shutdown, including after destruction or replacement
+of the server. Sends are nonblocking; socket errors (including a full peer queue)
+throw `std::system_error`. A callback does not keep a stopped server's socket open.
+
+## IPv4 UDP server callback lifetime
+
+Raw `af_inet` UDP server callbacks retain socket state independently of the
+server object. Shutdown disables sends, joins the receive worker, and closes the
+descriptor under the send mutex. Retained callbacks throw `std::runtime_error`
+after stop, destruction, or move assignment replacing their server. Sends are
+nonblocking and socket errors throw `std::system_error`; callback ownership does
+not keep a stopped socket open. Datagram-processing exceptions are contained by
+the receive worker so send failures during shutdown cannot terminate the process.
+Socket creation, receive-timeout setup, and bind failures throw during construction.
+
+An IPv4 UDP server with a joinable receive worker must be stopped before moving
+it; attempting to move a running source throws `std::logic_error`. Move assignment
+stops the destination before replacing its socket. Repeated `start()` calls are
+ignored while its worker is joinable, and a stopped server cannot restart.
+These changes do not synchronize mutable user fields or callback installation.
+
 ## Random identifiers
 
 The C++ `Util` random helpers use OpenSSL `RAND_bytes` for identifiers, integer
