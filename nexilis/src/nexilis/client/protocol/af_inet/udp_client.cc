@@ -322,6 +322,8 @@ std::future<void> UDPClient::sendMessageAsync(const nx_data& message)
             throw std::runtime_error("Client is stopped");
         }
 
+        // Keep the socket check and send synchronized with stop().
+        std::lock_guard<std::mutex> lock(*m_mutex);
         if (m_clientSocket == -1)
         {
             throw std::runtime_error("Socket is not open");
@@ -331,12 +333,6 @@ std::future<void> UDPClient::sendMessageAsync(const nx_data& message)
         if (packet.empty())
         {
             throw std::runtime_error("UDP session is not authenticated");
-        }
-
-        std::lock_guard<std::mutex> lock(*m_mutex);
-        if (m_clientSocket == -1)
-        {
-            throw std::runtime_error("Socket is not open");
         }
 
         if (!sendData(reinterpret_cast<const char*>(packet.data()), packet.size()))

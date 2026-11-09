@@ -317,6 +317,8 @@ std::future<void> DgramClient::sendMessageAsync(const nx_data& message)
             throw std::runtime_error("Client is stopped");
         }
 
+        // Keep the socket check and send synchronized with stop().
+        std::lock_guard<std::mutex> lock(*m_mutex);
         if (m_clientSocket == -1)
         {
             throw std::runtime_error("Socket is not open");
@@ -326,12 +328,6 @@ std::future<void> DgramClient::sendMessageAsync(const nx_data& message)
         if (request.empty())
         {
             throw std::runtime_error("Cannot authenticate request");
-        }
-
-        std::lock_guard<std::mutex> lock(*m_mutex);
-        if (m_clientSocket == -1)
-        {
-            throw std::runtime_error("Socket is not open");
         }
 
         ssize_t sentBytes = sendto(m_clientSocket, request.data(), request.size(), 0,
