@@ -373,6 +373,23 @@ stops the destination before replacing its socket. Repeated `start()` calls are
 ignored while its worker is joinable, and a stopped server cannot restart.
 These changes do not synchronize mutable user fields or callback installation.
 
+## Boost UDP server callback lifetime
+
+Boost UDP send callbacks retain shared socket state independently of the server.
+All socket operations use the same mutex; receives and sends are nonblocking.
+Shutdown disables sends, joins the receive worker, then closes the socket under
+that mutex. Retained callbacks throw `std::runtime_error` after shutdown,
+destruction, or move assignment replacing their server. Socket errors throw
+`boost::system::system_error`. The shared state also owns the Asio context, so
+retained callbacks cannot outlive the context their socket requires.
+
+Moving a source with a joinable receive worker throws `std::logic_error` before
+changing it. Move assignment stops the destination first. Repeated `start()`
+calls are ignored, and stopped instances cannot restart. Call lifecycle methods
+from one controlling thread. A receive-thread callback can request stop; an
+external call to `stop()` must then join the worker before destruction or moving.
+These changes do not synchronize user callback installation or remove idle users.
+
 ## Random identifiers
 
 The C++ `Util` random helpers use OpenSSL `RAND_bytes` for identifiers, integer

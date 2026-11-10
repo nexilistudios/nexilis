@@ -25,6 +25,9 @@
 #include <boost/asio/ip/udp.hpp>
 
 #include <array>
+#include <atomic>
+#include <memory>
+#include <mutex>
 #include <thread>
 #include <unordered_map>
 
@@ -74,17 +77,14 @@ public:
 
 private:
     void receiveFromClients();
+    static UDPServer& movable(UDPServer& protocol);
+    struct SocketState;
 
 private:
     std::unique_ptr<std::atomic<bool>> m_stopped;
-    std::unique_ptr<boost::asio::io_context> m_ioContext;
-    std::unique_ptr<std::mutex> m_mutex;
-    boost::asio::ip::udp::endpoint m_remoteEndpoint;
-    boost::asio::ip::udp::socket m_socket;
-    nx_data m_receiveBuffer;
-    std::thread m_ioContextThread;
+    std::shared_ptr<SocketState> m_socketState;
     std::thread m_receiveThread;
-    uint16_t m_serverPort;
+    uint16_t m_serverPort = 0;
     std::array<uint8_t, 32> m_cookieKey{};
     std::unordered_map<uint64_t, boost::asio::ip::udp::endpoint> m_clientEndpoints;
 };

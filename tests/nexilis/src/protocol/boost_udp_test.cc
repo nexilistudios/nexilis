@@ -225,3 +225,67 @@ TEST_F(BoostUDPTest, MalformedCommandDoesNotStopSubsequentDatagrams)
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     EXPECT_EQ(nexilis::server::RoomStorage::getRoomCount(), before + 1);
 }
+
+TEST_F(BoostUDPTest, RetainedCallbackRejectsAfterStopDestructionAndReplacement)
+{
+    client->start();
+    ASSERT_TRUE(client->isConnected());
+    const auto retained = nexilis::server::ClientStorage::getClientById(api->getClientId());
+    ASSERT_NE(retained, nullptr);
+    ASSERT_TRUE(retained->isBoostUDPSet());
+    server->stop();
+    EXPECT_THROW(retained->boostUDPSend({42}), std::runtime_error);
+    server.reset();
+    EXPECT_THROW(retained->boostUDPSend({42}), std::runtime_error);
+    server = std::make_shared<nexilis::server::nxboost::UDPServer>(settings);
+    server->start();
+    EXPECT_THROW(retained->boostUDPSend({42}), std::runtime_error);
+}
+
+TEST_F(BoostUDPTest, DoubleStartAndMovesPreserveLifecycle)
+{
+    EXPECT_NO_THROW(server->start());
+    EXPECT_THROW(nexilis::server::nxboost::UDPServer(std::move(*server)), std::logic_error);
+    client->start();
+    ASSERT_TRUE(client->isConnected());
+    const auto retained = nexilis::server::ClientStorage::getClientById(api->getClientId());
+    ASSERT_NE(retained, nullptr);
+    server->stop();
+    nexilis::server::nxboost::UDPServer replacement(settings);
+    replacement.start();
+    EXPECT_THROW(*server = std::move(replacement), std::logic_error);
+    replacement.stop();
+    *server = std::move(replacement);
+    EXPECT_THROW(retained->boostUDPSend({42}), std::runtime_error);
+    // A stopped instance stays stopped after a move and a repeated start.
+    EXPECT_NO_THROW(server->start());
+    EXPECT_NO_THROW(server->stop());
+}
+
+TEST_F(BoostUDPTest, DestructionSerializesWithConcurrentCallbackSends)
+{
+    client->start();
+    ASSERT_TRUE(client->isConnected());
+    const auto retained = nexilis::server::ClientStorage::getClientById(api->getClientId());
+    ASSERT_NE(retained, nullptr);
+    client->stop();
+    std::promise<void> sending;
+    auto started = sending.get_future();
+    std::jthread sender([&](std::stop_token stop)
+                        {
+                            sending.set_value();
+                            while (!stop.stop_requested())
+                            {
+                                try
+                                {
+                                    retained->boostUDPSend({42});
+                                }
+                                catch (const std::runtime_error&)
+                                {
+                                }
+                            } });
+    started.wait();
+    server.reset();
+    EXPECT_THROW(retained->boostUDPSend({42}), std::runtime_error);
+    sender.request_stop();
+}
