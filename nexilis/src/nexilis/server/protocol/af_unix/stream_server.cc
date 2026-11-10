@@ -17,9 +17,13 @@
 #ifdef __linux__
 
 #include <nexilis/nexilis_constants.hh>
+#include <nexilis/room_command_type.hh>
+#include <nexilis/server/client_storage.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/command_result.hh>
+#include <nexilis/server/command/commands.hh>
 #include <nexilis/server/message/auth_message.hh>
+#include <nexilis/server/room_storage.hh>
 #include <nexilis/server/protocol/af_unix/stream_server.hh>
 #include <nexilis/unix_socket.hh>
 #include <utility>
@@ -269,6 +273,7 @@ void StreamServer::handleMessages()
             connection->close();
         }
     } closeOnExit{connection};
+    uint64_t connectedUserId = 0;
     while (!m_stopped->load())
     {
         nx_data message = receiveMessage(clientSocket);
@@ -287,6 +292,8 @@ void StreamServer::handleMessages()
         }
 
         auto* user = handledMessage->getUser();
+        if (connectedUserId == 0)
+            connectedUserId = user->getId();
         if (!user->isUnixStreamSet())
         {
             user->setUnixStreamSend([connection](const nx_data& bytes)
@@ -320,6 +327,30 @@ void StreamServer::handleMessages()
             }
         }
     }
+    // --- Cleanup: remove disconnected user from their room and client storage ---
+    if (connectedUserId != 0)
+    {
+        auto user = ClientStorage::getClientById(connectedUserId);
+        if (user)
+        {
+            uint64_t roomId = user->getRoomId();
+            if (roomId != 0)
+            {
+                auto room = RoomStorage::getRoomById(roomId);
+                if (room)
+                {
+                    nx_data leaveData = {
+                            static_cast<uint8_t>(CommandType::room),
+                            static_cast<uint8_t>(RoomCommandType::Root::management),
+                            static_cast<uint8_t>(RoomCommandType::Management::leave)};
+                    DefaultArgs args(*user, *this, leaveData, 0);
+                    ServerImpl::room_management_leave(args);
+                }
+            }
+            ClientStorage::remove(connectedUserId);
+        }
+    }
+
     connection->close();
     {
         std::lock_guard lock(*m_mutex);

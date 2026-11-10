@@ -24,7 +24,15 @@
 #include <nexilis/client/protocol/af_inet/tcp_client.hh>
 #include <nexilis/server/protocol/af_inet/tcp_server.hh>
 
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <atomic>
 #include <chrono>
+#include <cstring>
+#include <future>
+#include <system_error>
 #include <thread>
 
 class AFInetTCPTest : public ::testing::Test
@@ -158,4 +166,166 @@ TEST_F(AFInetTCPTest, SendMessageAsyncDeliversMessage)
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     EXPECT_EQ(api->getActiveRooms().size(), 1);
+}
+
+namespace
+{
+class TCPTestPeer
+{
+public:
+    TCPTestPeer() : fd(socket(AF_INET, SOCK_STREAM, 0))
+    {
+    }
+
+    ~TCPTestPeer()
+    {
+        disconnect();
+    }
+
+    void disconnect()
+    {
+        if (fd != -1)
+        {
+            shutdown(fd, SHUT_RDWR);
+            close(fd);
+            fd = -1;
+        }
+    }
+
+    std::shared_ptr<nexilis::server::User> authenticate(uint16_t port)
+    {
+        sockaddr_in address{};
+        address.sin_family = AF_INET;
+        address.sin_port = htons(port);
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        timeval timeout{};
+        timeout.tv_sec = 2;
+        if (fd == -1 || setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1 ||
+            connect(fd, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == -1)
+            return {};
+        const uint32_t size = htonl(8);
+        nexilis::nx_data frame(sizeof(size));
+        std::memcpy(frame.data(), &size, sizeof(size));
+        const std::string password = "salasana";
+        frame.insert(frame.end(), password.begin(), password.end());
+        if (send(fd, frame.data(), frame.size(), MSG_NOSIGNAL) != static_cast<ssize_t>(frame.size()))
+            return {};
+        if (receive().empty())
+            return {};
+        const auto users = nexilis::server::ClientStorage::getClientsByIpAddress("127.0.0.1");
+        return users.size() == 1 ? users.front() : nullptr;
+    }
+
+    nexilis::nx_data receive()
+    {
+        uint32_t size;
+        if (recv(fd, &size, sizeof(size), MSG_WAITALL) != sizeof(size))
+            return {};
+        const auto length = ntohl(size);
+        if (length > 4096)
+            return {};
+        nexilis::nx_data bytes(length);
+        if (recv(fd, bytes.data(), bytes.size(), MSG_WAITALL) != static_cast<ssize_t>(bytes.size()))
+            return {};
+        return bytes;
+    }
+
+private:
+    int fd;
+};
+} // namespace
+
+TEST_F(AFInetTCPTest, RetainedCallbackRejectsAfterStopDestructionAndReplacement)
+{
+    TCPTestPeer peer;
+    const auto retained = peer.authenticate(port);
+    ASSERT_NE(retained, nullptr);
+    const nexilis::nx_data payload{42, 43};
+    EXPECT_TRUE(retained->inetTCPSend(payload));
+    EXPECT_EQ(peer.receive(), payload);
+    server->stop();
+    EXPECT_EQ(server->activeConnectionsCount(), 0);
+    EXPECT_THROW(retained->inetTCPSend(payload), std::runtime_error);
+    server.reset();
+    EXPECT_THROW(retained->inetTCPSend(payload), std::runtime_error);
+    server = std::make_shared<nexilis::server::af_inet::TCPServer>(settings, port);
+    server->start();
+    nexilis::server::ClientStorage::clear();
+    TCPTestPeer replacement;
+    const auto current = replacement.authenticate(port);
+    ASSERT_NE(current, nullptr);
+    EXPECT_THROW(retained->inetTCPSend(payload), std::runtime_error);
+    EXPECT_TRUE(current->inetTCPSend(payload));
+    EXPECT_EQ(replacement.receive(), payload);
+}
+
+TEST_F(AFInetTCPTest, DisconnectDisablesRetainedCallback)
+{
+    TCPTestPeer peer;
+    const auto retained = peer.authenticate(port);
+    ASSERT_NE(retained, nullptr);
+    peer.disconnect();
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (server->hasActiveConnections() && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    ASSERT_EQ(server->activeConnectionsCount(), 0);
+    EXPECT_THROW(retained->inetTCPSend({42}), std::runtime_error);
+}
+
+TEST_F(AFInetTCPTest, MoveAssignmentStopsDestinationAndRejectsRunningSource)
+{
+    TCPTestPeer peer;
+    const auto retained = peer.authenticate(port);
+    ASSERT_NE(retained, nullptr);
+    EXPECT_NO_THROW(server->start());
+    EXPECT_THROW(nexilis::server::af_inet::TCPServer(std::move(*server)), std::logic_error);
+    nexilis::server::af_inet::TCPServer replacement(settings, port + 1);
+    replacement.start();
+    EXPECT_THROW(*server = std::move(replacement), std::logic_error);
+    replacement.stop();
+    nexilis::server::af_inet::TCPServer unstarted(settings, port + 1);
+    *server = std::move(unstarted);
+    EXPECT_THROW(retained->inetTCPSend({42}), std::runtime_error);
+    EXPECT_NO_THROW(unstarted.stop());
+    server->start();
+    nexilis::server::ClientStorage::clear();
+    TCPTestPeer current;
+    ASSERT_NE(current.authenticate(port + 1), nullptr);
+    server->stop();
+    EXPECT_NO_THROW(server->start());
+    EXPECT_NO_THROW(server->stop());
+}
+
+TEST_F(AFInetTCPTest, DestructionSerializesWithConcurrentSends)
+{
+    TCPTestPeer peer;
+    const auto retained = peer.authenticate(port);
+    ASSERT_NE(retained, nullptr);
+    std::promise<void> sending;
+    auto started = sending.get_future();
+    std::jthread sender([&](std::stop_token stop)
+                        {
+                            try
+                            {
+                                retained->inetTCPSend({42});
+                            }
+                            catch (const std::runtime_error&)
+                            {
+                            }
+                            sending.set_value();
+                            const nexilis::nx_data bytes(4096, 42);
+                            while (!stop.stop_requested())
+                            {
+                                try
+                                {
+                                    retained->inetTCPSend(bytes);
+                                }
+                                catch (const std::runtime_error&)
+                                {
+                                }
+                            } });
+    started.wait();
+    server.reset();
+    EXPECT_THROW(retained->inetTCPSend({42}), std::runtime_error);
+    sender.request_stop();
 }

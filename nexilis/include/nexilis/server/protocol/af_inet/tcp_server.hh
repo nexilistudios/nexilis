@@ -24,6 +24,7 @@
 #include <netinet/in.h>
 
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -37,18 +38,16 @@ namespace nexilis::server::af_inet
 class TCPServer : public NXProtocol,
                   public ServerProtocol
 {
+private:
+    struct Connection;
+
 public:
     /// A connected client.
     class Client
     {
     public:
         /// Constructor.
-        Client(std::string address, uint16_t port, int socket)
-            : m_address(std::move(address)),
-              m_port(port),
-              m_socket(socket)
-        {
-        }
+        Client(std::string address, uint16_t port, int socket);
 
         /// Default constructor.
         Client() = default;
@@ -66,15 +65,13 @@ public:
         }
 
         /// Get the client socket.
-        int getSocket() const
-        {
-            return m_socket;
-        }
+        int getSocket() const;
 
     private:
+        friend class TCPServer;
         std::string m_address;
         uint16_t m_port = 0;
-        int m_socket = -1;
+        std::shared_ptr<Connection> m_connection;
     };
 
 public:
@@ -135,15 +132,12 @@ private:
 
     /// Handle a connected client.
     void handleClient(const std::shared_ptr<Client>& client);
-
-    /// Send a message to a connected client.
-    bool sendMessageToClient(const std::string& message, int clientSocket);
+    void receiveFromClient(const std::shared_ptr<Client>& client);
 
     /// Receive a framed message from a client.
     bool receiveMessage(int clientSocket, nx_data& receivedData);
 
-    /// Find a connected client by socket.
-    std::shared_ptr<Client> findClient(int clientSocket);
+    static TCPServer& movable(TCPServer& server);
 
 private:
     uint16_t m_port;

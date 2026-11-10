@@ -356,6 +356,28 @@ descriptor while holding the send mutex. Retained callbacks throw
 of the server. Sends are nonblocking; socket errors (including a full peer queue)
 throw `std::system_error`. A callback does not keep a stopped server's socket open.
 
+## IPv4 TCP server callback lifetime
+
+Raw `af_inet` TCP send callbacks retain shared connection state independently
+of the server. A connection mutex serializes complete length-prefixed response
+frames with shutdown and close. Sends are nonblocking; a send failure, including
+a full socket send buffer, shuts down the connection and throws
+`std::system_error` rather than leaving a partial frame usable.
+
+Disconnect closes the connection and disables retained callbacks. Server stop
+disables sends and wakes blocked reads, then joins workers before returning.
+Retained callbacks throw `std::runtime_error` after disconnect, stop, destruction,
+or move assignment replacing their server; they cannot target a recycled socket
+descriptor. `TCPServer::Client` now shares ownership of its connection, and
+`getSocket()` returns a borrowed descriptor, or `-1` after closure.
+
+Moving a server with any joinable worker throws `std::logic_error`. Move
+assignment stops the destination first. Repeated starts are ignored, and stopped
+instances cannot restart. Call lifecycle methods from one controlling thread.
+A dispatch callback can request stop, but an external `stop()` must join the
+workers before destruction or moving. User registry and room membership cleanup
+remain separate from connection closure, as does user callback synchronization.
+
 ## IPv4 UDP server callback lifetime
 
 Raw `af_inet` UDP server callbacks retain socket state independently of the

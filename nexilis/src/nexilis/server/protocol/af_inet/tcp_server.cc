@@ -19,18 +19,126 @@
 #include <nexilis/logger/log.hh>
 #include <nexilis/nexilis_constants.hh>
 #include <nexilis/ports.hh>
+#include <nexilis/server/client_storage.hh>
+#include <nexilis/room_command_type.hh>
 #include <nexilis/server/command/command_result.hh>
 #include <nexilis/server/message/auth_message.hh>
 #include <nexilis/server/message/message.hh>
+#include <nexilis/server/command/commands.hh>
+#include <nexilis/server/room_storage.hh>
 
 #include <arpa/inet.h>
 #include <poll.h>
 #include <unistd.h>
 
 #include <cstring>
+#include <limits>
+#include <stdexcept>
+#include <system_error>
+#include <utility>
 
 namespace nexilis::server::af_inet
 {
+
+struct TCPServer::Connection
+{
+    explicit Connection(int socket) : fd(socket)
+    {
+    }
+
+    ~Connection()
+    {
+        close();
+    }
+
+    void shutdown()
+    {
+        std::lock_guard lock(mutex);
+        acceptingSends = false;
+        if (fd != -1)
+            ::shutdown(fd, SHUT_RDWR);
+    }
+
+    void close()
+    {
+        std::lock_guard lock(mutex);
+        acceptingSends = false;
+        if (fd != -1)
+        {
+            ::shutdown(fd, SHUT_RDWR);
+            ::close(fd);
+            fd = -1;
+        }
+    }
+
+    int socket() const
+    {
+        std::lock_guard lock(mutex);
+        return fd;
+    }
+
+    void send(const nx_data& bytes)
+    {
+        std::lock_guard lock(mutex);
+        if (!acceptingSends || fd == -1)
+            throw std::runtime_error("IPv4 TCP connection is closed");
+        if (bytes.size() > std::numeric_limits<uint32_t>::max())
+            throw std::length_error("IPv4 TCP response is too large");
+        const uint32_t networkSize = htonl(static_cast<uint32_t>(bytes.size()));
+        const auto sendAll = [&](const void* buffer, size_t size)
+        {
+            const auto* data = static_cast<const char*>(buffer);
+            size_t offset = 0;
+            while (offset < size)
+            {
+                const auto sent = ::send(fd, data + offset, size - offset, MSG_NOSIGNAL | MSG_DONTWAIT);
+                if (sent < 0 && errno == EINTR)
+                    continue;
+                if (sent <= 0)
+                {
+                    const int error = sent < 0 ? errno : EPIPE;
+                    // A partial frame cannot be retried as a new message.
+                    acceptingSends = false;
+                    ::shutdown(fd, SHUT_RDWR);
+                    throw std::system_error(error, std::generic_category(), "IPv4 TCP send failed");
+                }
+                offset += static_cast<size_t>(sent);
+            }
+        };
+        sendAll(&networkSize, sizeof(networkSize));
+        sendAll(bytes.data(), bytes.size());
+    }
+
+    // Only the receive worker closes fd, after recv has finished. stop()
+    // shuts it down to wake reads. Retained callbacks cannot use a recycled fd.
+    int fd;
+    bool acceptingSends = true;
+    mutable std::mutex mutex;
+};
+
+TCPServer::Client::Client(std::string address, uint16_t port, int socket)
+    : m_address(std::move(address)),
+      m_port(port),
+      m_connection(std::make_shared<Connection>(socket))
+{
+}
+
+int TCPServer::Client::getSocket() const
+{
+    return m_connection ? m_connection->socket() : -1;
+}
+
+TCPServer& TCPServer::movable(TCPServer& server)
+{
+    if (server.m_acceptThread.joinable())
+        throw std::logic_error("Stop an IPv4 TCP server before moving it");
+    for (const auto& thread : server.m_clientThreads)
+    {
+        if (thread.joinable())
+            throw std::logic_error("Stop an IPv4 TCP server before moving it");
+    }
+    return server;
+}
 
 TCPServer::TCPServer(const ServerConfig& settings, uint16_t port)
     : NXProtocol(),
@@ -47,29 +155,17 @@ TCPServer::TCPServer(const ServerConfig& settings, uint16_t port)
 TCPServer::~TCPServer()
 {
     stop();
-
-    if (m_acceptThread.joinable())
-    {
-        m_acceptThread.join();
-    }
-
-    for (auto& clientThread : m_clientThreads)
-    {
-        if (clientThread.joinable())
-        {
-            clientThread.join();
-        }
-    }
 }
 
 TCPServer::TCPServer(TCPServer&& other)
-    : NXProtocol(std::move(other)),
+    : NXProtocol(std::move(movable(other))),
       ServerProtocol(std::move(other)),
       m_port(std::move(other.m_port)),
       m_serverSocket(std::move(other.m_serverSocket)),
       m_serverAddr(std::move(other.m_serverAddr)),
       m_acceptThread(std::move(other.m_acceptThread)),
       m_clientThreads(std::move(other.m_clientThreads)),
+      m_clients(std::move(other.m_clients)),
       m_stopped(std::move(other.m_stopped)),
       m_mutex(std::move(other.m_mutex))
 {
@@ -80,6 +176,13 @@ TCPServer& TCPServer::operator=(TCPServer&& other)
 {
     if (this != &other)
     {
+        movable(other);
+        for (const auto& thread : m_clientThreads)
+        {
+            if (thread.joinable() && thread.get_id() == std::this_thread::get_id())
+                throw std::logic_error("Cannot replace an IPv4 TCP server from its worker");
+        }
+        stop();
         static_cast<NXProtocol&>(*this) = static_cast<NXProtocol&&>(other);
         static_cast<ServerProtocol&>(*this) = static_cast<ServerProtocol&&>(other);
 
@@ -88,6 +191,7 @@ TCPServer& TCPServer::operator=(TCPServer&& other)
         m_serverAddr = std::move(other.m_serverAddr);
         m_acceptThread = std::move(other.m_acceptThread);
         m_clientThreads = std::move(other.m_clientThreads);
+        m_clients = std::move(other.m_clients);
         m_stopped = std::move(other.m_stopped);
         m_mutex = std::move(other.m_mutex);
 
@@ -98,10 +202,8 @@ TCPServer& TCPServer::operator=(TCPServer&& other)
 
 void TCPServer::start()
 {
-    if (m_stopped->load())
-    {
-        m_stopped->store(false);
-    }
+    if (!m_stopped || m_stopped->load() || m_acceptThread.joinable() || m_serverSocket == -1)
+        return;
 
     m_acceptThread = std::thread([this]()
                                  { acceptClients(); });
@@ -109,10 +211,12 @@ void TCPServer::start()
 
 void TCPServer::stop()
 {
-    if (!m_stopped || m_stopped->exchange(true))
+    if (!m_stopped)
     {
         return;
     }
+
+    m_stopped->store(true);
 
     // The accept loop polls the listening socket with a short timeout and
     // exits on its own once m_stopped is set. Join it before closing the
@@ -123,17 +227,32 @@ void TCPServer::stop()
         m_acceptThread.join();
     }
 
-    // Close the client sockets so the client handler threads unblock with EOF.
+    // Disable sends and wake reads; each worker closes its own connection.
     {
         std::lock_guard<std::mutex> lock(*m_mutex);
         for (auto& client : m_clients)
         {
             if (client)
             {
-                shutdown(client->getSocket(), SHUT_RDWR);
+                client->m_connection->shutdown();
             }
         }
     }
+
+    // A dispatch callback can request shutdown. The controlling thread must
+    // call stop() again to join workers before destruction or moving.
+    for (const auto& thread : m_clientThreads)
+    {
+        if (thread.joinable() && thread.get_id() == std::this_thread::get_id())
+            return;
+    }
+    for (auto& thread : m_clientThreads)
+    {
+        if (thread.joinable())
+            thread.join();
+    }
+    m_clientThreads.clear();
+    m_clients.clear();
 
     if (m_serverSocket != -1)
     {
@@ -215,10 +334,21 @@ void TCPServer::acceptClients()
             continue;
         }
 
-        std::string clientAddress = inet_ntoa(clientAddr.sin_addr);
-        uint16_t clientPort = ntohs(clientAddr.sin_port);
-        auto client = std::make_shared<Client>(clientAddress, clientPort, clientSocket);
-        handleClient(client);
+        std::shared_ptr<Client> client;
+        try
+        {
+            std::string clientAddress = inet_ntoa(clientAddr.sin_addr);
+            uint16_t clientPort = ntohs(clientAddr.sin_port);
+            client = std::make_shared<Client>(clientAddress, clientPort, clientSocket);
+            handleClient(client);
+        }
+        catch (...)
+        {
+            // Allocation or worker creation failure must not leak the accepted
+            // descriptor or escape the accept thread.
+            if (!client)
+                ::close(clientSocket);
+        }
     }
 }
 
@@ -228,131 +358,116 @@ void TCPServer::handleClient(const std::shared_ptr<Client>& client)
     m_clients.push_back(client);
     connectionEstablished();
 
-    m_clientThreads.emplace_back([this, client]()
-                                 {
-                                     nx_data receivedData;
-
-                                     while (!m_stopped->load())
-                                     {
-                                         if (!receiveMessage(client->getSocket(), receivedData))
-                                         {
-                                             break;
-                                         }
-
-                                         auto handledMessage = getMessageHandler().readMessage(
-                                                 client->getAddress(), receivedData, &getSettings());
-
-                                         if (!handledMessage || !handledMessage->getUser())
-                                         {
-                                             Log::error("TCPServer received invalid message or null user");
-                                             continue;
-                                         }
-
-                                         auto* user = handledMessage->getUser();
-                                         if (!user->isInetTCPSet())
-                                         {
-                                             int clientSocket = client->getSocket();
-                                             user->setInetTCPSend([this, clientSocket](const nx_data& bytes)
-                                                                  {
-                                                                      std::string message(bytes.begin(), bytes.end());
-                                                                      sendMessageToClient(message, clientSocket);
-                                                                  });
-                                         }
-
-                                         auto msgType = handledMessage->getType();
-
-                                         if (msgType == BaseMessage::Type::auth_message)
-                                         {
-                                             auto authPtr = static_cast<AuthMessage*>(handledMessage.get());
-                                             for (auto&& commandData : authPtr->getData())
-                                             {
-                                                 CommandResult result =
-                                                         getCommand().read(commandData, *authPtr->getUser(), *this,
-                                                                           authPtr->getMessageId());
-                                                 checkResult(result);
-                                             }
-                                         }
-                                         else if (msgType == BaseMessage::Type::message)
-                                         {
-                                             auto msgPtr = static_cast<Message*>(handledMessage.get());
-                                             CommandResult result =
-                                                     getCommand().read(msgPtr->getData(), *msgPtr->getUser(), *this,
-                                                                       msgPtr->getMessageId());
-
-                                             checkResult(result);
-
-                                             if (result == CommandResult::success)
-                                             {
-                                                 Log::debug("TCPServer: Passed");
-                                             }
-                                         }
-                                         else
-                                         {
-                                             Log::error("TCPServer: Unrecognized message type");
-                                         }
-                                     }
-
-                                     connectionClosed(); });
+    try
+    {
+        m_clientThreads.emplace_back(&TCPServer::receiveFromClient, this, client);
+    }
+    catch (...)
+    {
+        connectionClosed();
+        m_clients.pop_back();
+        throw;
+    }
 }
 
-std::shared_ptr<TCPServer::Client> TCPServer::findClient(int clientSocket)
+void TCPServer::receiveFromClient(const std::shared_ptr<Client>& client)
 {
-    std::lock_guard<std::mutex> lock(*m_mutex);
-    for (auto& client : m_clients)
+    const auto connection = client->m_connection;
+    const int clientSocket = connection->socket();
+    uint64_t connectedUserId = 0;
+    try
     {
-        if (client->getSocket() == clientSocket)
+        nx_data receivedData;
+
+        while (!m_stopped->load())
         {
-            return client;
+            if (!receiveMessage(clientSocket, receivedData))
+            {
+                break;
+            }
+
+            auto handledMessage = getMessageHandler().readMessage(
+                    client->getAddress(), receivedData, &getSettings());
+
+            if (!handledMessage || !handledMessage->getUser())
+            {
+                Log::error("TCPServer received invalid message or null user");
+                continue;
+            }
+
+            auto* user = handledMessage->getUser();
+            if (connectedUserId == 0)
+                connectedUserId = user->getId();
+            if (!user->isInetTCPSet())
+            {
+                user->setInetTCPSend([connection = client->m_connection](const nx_data& bytes)
+                                     { connection->send(bytes); });
+            }
+
+            auto msgType = handledMessage->getType();
+
+            if (msgType == BaseMessage::Type::auth_message)
+            {
+                auto authPtr = static_cast<AuthMessage*>(handledMessage.get());
+                for (auto&& commandData : authPtr->getData())
+                {
+                    CommandResult result =
+                            getCommand().read(commandData, *authPtr->getUser(), *this,
+                                              authPtr->getMessageId());
+                    checkResult(result);
+                }
+            }
+            else if (msgType == BaseMessage::Type::message)
+            {
+                auto msgPtr = static_cast<Message*>(handledMessage.get());
+                CommandResult result =
+                        getCommand().read(msgPtr->getData(), *msgPtr->getUser(), *this,
+                                          msgPtr->getMessageId());
+
+                checkResult(result);
+
+                if (result == CommandResult::success)
+                {
+                    Log::debug("TCPServer: Passed");
+                }
+            }
+            else
+            {
+                Log::error("TCPServer: Unrecognized message type");
+            }
         }
     }
-    return nullptr;
-}
-
-bool TCPServer::sendMessageToClient(const std::string& message, int clientSocket)
-{
-    std::lock_guard<std::mutex> lock(*m_mutex);
-
-    std::shared_ptr<Client> client;
-    for (auto& candidate : m_clients)
+    catch (...)
     {
-        if (candidate->getSocket() == clientSocket)
+        // Parsing or application callbacks must not escape a worker.
+    }
+
+    // --- Cleanup: remove disconnected user from their room and client storage ---
+    if (connectedUserId != 0)
+    {
+        auto user = ClientStorage::getClientById(connectedUserId);
+        if (user)
         {
-            client = candidate;
-            break;
+            uint64_t roomId = user->getRoomId();
+            if (roomId != 0)
+            {
+                auto room = RoomStorage::getRoomById(roomId);
+                if (room)
+                {
+                    nx_data leaveData = {
+                            static_cast<uint8_t>(CommandType::room),
+                            static_cast<uint8_t>(RoomCommandType::Root::management),
+                            static_cast<uint8_t>(RoomCommandType::Management::leave)};
+                    DefaultArgs args(*user, *this, leaveData, 0);
+                    ServerImpl::room_management_leave(args);
+                }
+            }
+            ClientStorage::remove(connectedUserId);
         }
     }
 
-    if (!client)
-    {
-        Log::error("TCPServer: Unknown client socket: ", clientSocket);
-        return false;
-    }
-
-    uint32_t frameSize = static_cast<uint32_t>(message.size());
-    uint32_t networkSize = htonl(frameSize);
-
-    if (send(client->getSocket(), &networkSize, sizeof(networkSize), MSG_NOSIGNAL) == -1)
-    {
-        Log::error("TCPServer: Error sending frame size: ", std::strerror(errno));
-        return false;
-    }
-
-    const char* data = message.data();
-    size_t remaining = message.size();
-
-    while (remaining > 0)
-    {
-        ssize_t sent = ::send(client->getSocket(), data, remaining, MSG_NOSIGNAL);
-        if (sent == -1)
-        {
-            Log::error("TCPServer: Error sending message: ", std::strerror(errno));
-            return false;
-        }
-        data += sent;
-        remaining -= static_cast<size_t>(sent);
-    }
-
-    return true;
+    connection->close();
+    connectionClosed();
 }
 
 bool TCPServer::receiveMessage(int clientSocket, nx_data& receivedData)
