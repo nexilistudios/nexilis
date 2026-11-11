@@ -23,8 +23,8 @@
 #include <nexilis/server/command/command_result.hh>
 #include <nexilis/server/command/commands.hh>
 #include <nexilis/server/message/auth_message.hh>
-#include <nexilis/server/room_storage.hh>
 #include <nexilis/server/protocol/af_unix/stream_server.hh>
+#include <nexilis/server/room_storage.hh>
 #include <nexilis/unix_socket.hh>
 #include <utility>
 

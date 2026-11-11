@@ -152,14 +152,20 @@ void TCPServer::stop()
 
     {
         std::lock_guard<std::mutex> lock(*m_mutex);
-        for (auto& thread : m_clientThreads)
+        // Wake and join client workers instead of detaching them so they cannot
+        // outlive the server object. Sockets are closed by the workers
+        // when receive fails after the io_context stops.
+    }
+
+    for (auto& thread : m_clientThreads)
+    {
+        if (thread.joinable())
         {
-            if (thread.joinable())
-            {
-                Log::debug(header(), "force closing client thread");
-                thread.detach();
-            }
+            thread.join();
         }
+    }
+    {
+        std::lock_guard<std::mutex> lock(*m_mutex);
         m_clientThreads.clear();
     }
 

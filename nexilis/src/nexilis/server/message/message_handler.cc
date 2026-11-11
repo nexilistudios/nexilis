@@ -78,6 +78,18 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
         return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::client_id_failure);
     }
 
+    // Authentication modes that never admit a client must not allocate a User:
+    // reject before creating registry state.
+    if (authentication->getMode() == AuthenticationMode::empty)
+    {
+        return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::empty_authentication_mode);
+    }
+    if (authentication->getMode() == AuthenticationMode::admin_access ||
+        authentication->getMode() == AuthenticationMode::root_access)
+    {
+        return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::not_implemented);
+    }
+
     bool newUser = false;
 
     // Does the user actually exist?

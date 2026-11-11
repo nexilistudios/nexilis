@@ -19,12 +19,12 @@
 #include <nexilis/logger/log.hh>
 #include <nexilis/nexilis_constants.hh>
 #include <nexilis/ports.hh>
-#include <nexilis/server/client_storage.hh>
 #include <nexilis/room_command_type.hh>
+#include <nexilis/server/client_storage.hh>
 #include <nexilis/server/command/command_result.hh>
+#include <nexilis/server/command/commands.hh>
 #include <nexilis/server/message/auth_message.hh>
 #include <nexilis/server/message/message.hh>
-#include <nexilis/server/command/commands.hh>
 #include <nexilis/server/room_storage.hh>
 
 #include <arpa/inet.h>
