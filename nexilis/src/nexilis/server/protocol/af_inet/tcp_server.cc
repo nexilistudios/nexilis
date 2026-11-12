@@ -31,6 +31,7 @@
 #include <poll.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -132,11 +133,10 @@ TCPServer& TCPServer::movable(TCPServer& server)
 {
     if (server.m_acceptThread.joinable())
         throw std::logic_error("Stop an IPv4 TCP server before moving it");
-    for (const auto& thread : server.m_clientThreads)
-    {
-        if (thread.joinable())
-            throw std::logic_error("Stop an IPv4 TCP server before moving it");
-    }
+    if (std::any_of(server.m_clientThreads.begin(), server.m_clientThreads.end(),
+                    [](const auto& thread)
+                    { return thread.joinable(); }))
+        throw std::logic_error("Stop an IPv4 TCP server before moving it");
     return server;
 }
 
@@ -177,11 +177,10 @@ TCPServer& TCPServer::operator=(TCPServer&& other)
     if (this != &other)
     {
         movable(other);
-        for (const auto& thread : m_clientThreads)
-        {
-            if (thread.joinable() && thread.get_id() == std::this_thread::get_id())
-                throw std::logic_error("Cannot replace an IPv4 TCP server from its worker");
-        }
+        if (std::any_of(m_clientThreads.begin(), m_clientThreads.end(),
+                        [](const auto& thread)
+                        { return thread.joinable() && thread.get_id() == std::this_thread::get_id(); }))
+            throw std::logic_error("Cannot replace an IPv4 TCP server from its worker");
         stop();
         static_cast<NXProtocol&>(*this) = static_cast<NXProtocol&&>(other);
         static_cast<ServerProtocol&>(*this) = static_cast<ServerProtocol&&>(other);
@@ -230,7 +229,7 @@ void TCPServer::stop()
     // Disable sends and wake reads; each worker closes its own connection.
     {
         std::lock_guard<std::mutex> lock(*m_mutex);
-        for (auto& client : m_clients)
+        for (const auto& client : m_clients)
         {
             if (client)
             {
@@ -241,11 +240,10 @@ void TCPServer::stop()
 
     // A dispatch callback can request shutdown. The controlling thread must
     // call stop() again to join workers before destruction or moving.
-    for (const auto& thread : m_clientThreads)
-    {
-        if (thread.joinable() && thread.get_id() == std::this_thread::get_id())
-            return;
-    }
+    if (std::any_of(m_clientThreads.begin(), m_clientThreads.end(),
+                    [](const auto& thread)
+                    { return thread.joinable() && thread.get_id() == std::this_thread::get_id(); }))
+        return;
     for (auto& thread : m_clientThreads)
     {
         if (thread.joinable())

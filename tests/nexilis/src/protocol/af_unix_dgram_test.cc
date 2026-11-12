@@ -472,12 +472,12 @@ TEST_F(UnixSocketSecurityTest, StreamStopWakesReadAndInvalidatesStoredCallback)
         ASSERT_EQ(setsockopt(peer.fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0);
         char response[1024];
         ASSERT_GT(recv(peer.fd, response, sizeof(response), 0), 0);
+        const auto users = nexilis::server::ClientStorage::getClientsByIpAddress("127.0.0.1");
+        ASSERT_EQ(users.size(), 1);
+        retained = users.front();
         const auto start = std::chrono::steady_clock::now();
         server.stop();
         EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::seconds(1));
-        const auto users = nexilis::server::ClientStorage::getClientsByIpAddress("127.0.0.1");
-        ASSERT_FALSE(users.empty());
-        retained = users[0];
     }
     // The callback outlives the server, but owns closed connection state.
     EXPECT_THROW(retained->unixStreamSend({1, 2, 3}), std::runtime_error);
