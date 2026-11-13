@@ -57,6 +57,7 @@ public:
         const std::string& getAddress() const;
 
         User* getUser() const;
+        std::shared_ptr<User> getUserHandle() const;
 
     private:
         uint64_t m_messageId;
@@ -94,6 +95,9 @@ public:
 
     /// Borrowed pointer, valid while this message retains its user handle.
     User* getUser() const;
+
+    /// Owning handle for cleanup paths that outlive this message.
+    std::shared_ptr<User> getUserHandle() const;
 
 private:
     Data m_data;

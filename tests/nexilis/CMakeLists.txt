@@ -1,4 +1,5 @@
 #     Copyright (C) 2026 Valtteri Viirret
+#     SPDX-License-Identifier: LGPL-3.0-or-later
 #     This file is part of the Nexilis Project.
 #
 #     This file is free software: you can redistribute it and/or modify

@@ -273,7 +273,7 @@ void StreamServer::handleMessages()
             connection->close();
         }
     } closeOnExit{connection};
-    uint64_t connectedUserId = 0;
+    std::shared_ptr<User> connectedUser;
     while (!m_stopped->load())
     {
         nx_data message = receiveMessage(clientSocket);
@@ -292,8 +292,12 @@ void StreamServer::handleMessages()
         }
 
         auto* user = handledMessage->getUser();
-        if (connectedUserId == 0)
-            connectedUserId = user->getId();
+        if (!connectedUser)
+        {
+            connectedUser = handledMessage->getUserHandle();
+            if (connectedUser)
+                registerStreamTransport(*connectedUser, User::Transport::unixStream);
+        }
         if (!user->isUnixStreamSet())
         {
             user->setUnixStreamSend([connection](const nx_data& bytes)
@@ -327,29 +331,9 @@ void StreamServer::handleMessages()
             }
         }
     }
-    // --- Cleanup: remove disconnected user from their room and client storage ---
-    if (connectedUserId != 0)
-    {
-        auto user = ClientStorage::getClientById(connectedUserId);
-        if (user)
-        {
-            uint64_t roomId = user->getRoomId();
-            if (roomId != 0)
-            {
-                auto room = RoomStorage::getRoomById(roomId);
-                if (room)
-                {
-                    nx_data leaveData = {
-                            static_cast<uint8_t>(CommandType::room),
-                            static_cast<uint8_t>(RoomCommandType::Root::management),
-                            static_cast<uint8_t>(RoomCommandType::Management::leave)};
-                    DefaultArgs args(*user, *this, leaveData, 0);
-                    ServerImpl::room_management_leave(args);
-                }
-            }
-            ClientStorage::remove(connectedUserId);
-        }
-    }
+
+    if (connectedUser)
+        streamTransportEnded(*connectedUser, User::Transport::unixStream, *this);
 
     connection->close();
     {

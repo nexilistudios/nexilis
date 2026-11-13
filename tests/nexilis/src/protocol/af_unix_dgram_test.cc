@@ -20,6 +20,7 @@
 #include <nexilis/logger/log.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/client_storage.hh>
+#include <nexilis/server/room_storage.hh>
 
 #include <nexilis/client/protocol/af_unix/dgram_client.hh>
 #include <nexilis/server/protocol/af_unix/dgram_server.hh>
@@ -76,6 +77,7 @@ protected:
         }
         nexilis::Log::stopLogging();
         nexilis::server::ClientStorage::clear();
+        nexilis::server::RoomStorage::clear();
     }
 
     nexilis::ProtocolManager protocol_manager;
@@ -192,6 +194,7 @@ protected:
     void TearDown() override
     {
         nexilis::server::ClientStorage::clear();
+        nexilis::server::RoomStorage::clear();
         if (!directory.empty())
             std::filesystem::remove_all(directory);
     }
@@ -237,6 +240,97 @@ std::shared_ptr<nexilis::server::User> authenticateDatagram(int peer, const std:
         return {};
     }
     return users.front();
+}
+
+uint64_t attachRoom(const std::shared_ptr<nexilis::server::User>& user, const std::string& name)
+{
+    const auto roomId = nexilis::Util::getRandomUint64();
+    if (!nexilis::server::RoomStorage::add(
+                nexilis::server::Room(nexilis::RoomData(user->getId(), name, roomId))))
+        return 0;
+
+    auto room = nexilis::server::RoomStorage::getRoomById(roomId);
+    if (!room)
+        return 0;
+
+    room->joinRoom(user->getId());
+    user->setRoomId(roomId);
+    return roomId;
+}
+
+TEST_F(UnixSocketSecurityTest, IdleDatagramTransportRemovesUserAndLeavesRoom)
+{
+    settings.setDatagramIdleTimeout(std::chrono::milliseconds(500));
+
+    const auto path = directory + "/idle-server";
+    const auto peerPath = directory + "/idle-peer";
+    TestFd peer(socket(AF_UNIX, SOCK_DGRAM, 0));
+    ASSERT_NE(peer.fd, -1);
+    nexilis::unix_socket::bindPrivate(peer.fd, peerPath);
+
+    nexilis::server::af_unix::DgramServer server(settings, path);
+    server.start();
+
+    const auto user = authenticateDatagram(peer.fd, path, peerPath);
+    ASSERT_NE(user, nullptr);
+    const auto userId = user->getId();
+
+    const auto roomId = attachRoom(user, "idle_unix_dgram_room");
+    ASSERT_NE(roomId, 0u);
+    auto room = nexilis::server::RoomStorage::getRoomById(roomId);
+    ASSERT_NE(room, nullptr);
+    ASSERT_TRUE(room->contains(userId));
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(4);
+    while (nexilis::server::ClientStorage::contains(userId) &&
+           std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    EXPECT_FALSE(nexilis::server::ClientStorage::contains(userId));
+    EXPECT_FALSE(room->contains(userId));
+}
+
+TEST_F(UnixSocketSecurityTest, StreamDisconnectRemovesUserAndLeavesRoom)
+{
+    const auto path = directory + "/stream-disconnect";
+    nexilis::server::af_unix::StreamServer server(settings, path);
+    server.start();
+
+    TestFd peer(socket(AF_UNIX, SOCK_STREAM, 0));
+    ASSERT_NE(peer.fd, -1);
+    const auto endpoint = nexilis::unix_socket::address(path);
+    ASSERT_EQ(connect(peer.fd, reinterpret_cast<const sockaddr*>(&endpoint), sizeof(endpoint)), 0);
+    const auto frame = nexilis::client::ClientProtocol::frame({'s', 'e', 'c', 'r', 'e', 't'});
+    ASSERT_EQ(send(peer.fd, frame.data(), frame.size(), MSG_NOSIGNAL),
+              static_cast<ssize_t>(frame.size()));
+
+    timeval timeout{};
+    timeout.tv_sec = 2;
+    ASSERT_EQ(setsockopt(peer.fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0);
+    char response[1024];
+    ASSERT_GT(recv(peer.fd, response, sizeof(response), 0), 0);
+
+    auto users = nexilis::server::ClientStorage::getClientsByIpAddress("127.0.0.1");
+    ASSERT_EQ(users.size(), 1);
+    const auto user = users.front();
+    const auto userId = user->getId();
+
+    const auto roomId = attachRoom(user, "stream_disconnect_room");
+    ASSERT_NE(roomId, 0u);
+    auto room = nexilis::server::RoomStorage::getRoomById(roomId);
+    ASSERT_NE(room, nullptr);
+    ASSERT_TRUE(room->contains(userId));
+
+    ::close(peer.fd);
+    peer.fd = -1;
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (nexilis::server::ClientStorage::contains(userId) &&
+           std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    EXPECT_FALSE(nexilis::server::ClientStorage::contains(userId));
+    EXPECT_FALSE(room->contains(userId));
 }
 
 TEST_F(UnixSocketSecurityTest, DatagramCallbackIsClosedAfterStopAndServerReplacement)

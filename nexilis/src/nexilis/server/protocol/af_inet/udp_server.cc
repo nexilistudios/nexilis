@@ -183,6 +183,7 @@ void UDPServer::stop()
     m_socketState->disableSends();
     if (m_receiveThread.joinable())
         m_receiveThread.join();
+    cleanupDatagramTransports(User::Transport::inetUdp, *this);
     m_socketState->close();
 
     Log::debug("UDPServer stopped");
@@ -231,6 +232,7 @@ void UDPServer::receiveFromClients()
 {
     while (!m_stopped->load() && m_socketState->fd != -1)
     {
+        expireIdleDatagramTransports(User::Transport::inetUdp, *this);
         try
         {
             sockaddr_in clientAddress{};
@@ -307,6 +309,7 @@ void UDPServer::receiveFromClients()
             }
 
             auto* user = handledMessage->getUser();
+            touchDatagramTransport(*user, User::Transport::inetUdp);
             if (!user->isInetUDPSet())
             {
                 m_clientEndpoints[user->getId()] = clientAddress;

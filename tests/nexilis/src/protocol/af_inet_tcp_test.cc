@@ -20,6 +20,7 @@
 #include <nexilis/logger/log.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/client_storage.hh>
+#include <nexilis/server/room_storage.hh>
 
 #include <nexilis/client/protocol/af_inet/tcp_client.hh>
 #include <nexilis/server/protocol/af_inet/tcp_server.hh>
@@ -74,6 +75,7 @@ protected:
             server->stop();
         }
         nexilis::server::ClientStorage::clear();
+        nexilis::server::RoomStorage::clear();
         nexilis::Log::stopLogging();
     }
 
@@ -233,6 +235,22 @@ public:
 private:
     int fd;
 };
+
+uint64_t attachRoom(const std::shared_ptr<nexilis::server::User>& user, const std::string& name)
+{
+    const auto roomId = nexilis::Util::getRandomUint64();
+    if (!nexilis::server::RoomStorage::add(
+                nexilis::server::Room(nexilis::RoomData(user->getId(), name, roomId))))
+        return 0;
+
+    auto room = nexilis::server::RoomStorage::getRoomById(roomId);
+    if (!room)
+        return 0;
+
+    room->joinRoom(user->getId());
+    user->setRoomId(roomId);
+    return roomId;
+}
 } // namespace
 
 TEST_F(AFInetTCPTest, RetainedCallbackRejectsAfterStopDestructionAndReplacement)
@@ -270,6 +288,50 @@ TEST_F(AFInetTCPTest, DisconnectDisablesRetainedCallback)
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     ASSERT_EQ(server->activeConnectionsCount(), 0);
     EXPECT_THROW(retained->inetTCPSend({42}), std::runtime_error);
+}
+
+TEST_F(AFInetTCPTest, DisconnectRemovesUserAndLeavesRoom)
+{
+    TCPTestPeer peer;
+    const auto user = peer.authenticate(port);
+    ASSERT_NE(user, nullptr);
+    const auto userId = user->getId();
+
+    const auto roomId = attachRoom(user, "tcp_disconnect_room");
+    ASSERT_NE(roomId, 0u);
+    auto room = nexilis::server::RoomStorage::getRoomById(roomId);
+    ASSERT_NE(room, nullptr);
+    ASSERT_TRUE(room->contains(userId));
+    ASSERT_TRUE(nexilis::server::ClientStorage::contains(userId));
+
+    peer.disconnect();
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (nexilis::server::ClientStorage::contains(userId) &&
+           std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    EXPECT_FALSE(nexilis::server::ClientStorage::contains(userId));
+    EXPECT_FALSE(room->contains(userId));
+}
+
+TEST_F(AFInetTCPTest, StopRemovesUserAndLeavesRoom)
+{
+    TCPTestPeer peer;
+    const auto user = peer.authenticate(port);
+    ASSERT_NE(user, nullptr);
+    const auto userId = user->getId();
+
+    const auto roomId = attachRoom(user, "tcp_stop_room");
+    ASSERT_NE(roomId, 0u);
+    auto room = nexilis::server::RoomStorage::getRoomById(roomId);
+    ASSERT_NE(room, nullptr);
+    ASSERT_TRUE(room->contains(userId));
+
+    server->stop();
+
+    EXPECT_FALSE(nexilis::server::ClientStorage::contains(userId));
+    EXPECT_FALSE(room->contains(userId));
 }
 
 TEST_F(AFInetTCPTest, MoveAssignmentStopsDestinationAndRejectsRunningSource)

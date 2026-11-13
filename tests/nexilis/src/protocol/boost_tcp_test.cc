@@ -18,11 +18,21 @@
 
 #include <nexilis/client/packet.hh>
 #include <nexilis/logger/log.hh>
+#include <nexilis/ports.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/client_storage.hh>
+#include <nexilis/server/room_storage.hh>
 
 #include <nexilis/client/protocol/nxboost/tcp_client.hh>
 #include <nexilis/server/protocol/nxboost/tcp_server.hh>
+
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <chrono>
+#include <cstring>
+#include <thread>
 
 class BoostTCPTest : public ::testing::Test
 {
@@ -62,6 +72,7 @@ protected:
             server->stop();
         }
         nexilis::server::ClientStorage::clear();
+        nexilis::server::RoomStorage::clear();
         nexilis::Log::stopLogging();
     }
 
@@ -86,6 +97,25 @@ protected:
     std::shared_ptr<nexilis::client::nxboost::TCPClient> client;
 };
 
+namespace
+{
+uint64_t attachRoom(const std::shared_ptr<nexilis::server::User>& user, const std::string& name)
+{
+    const auto roomId = nexilis::Util::getRandomUint64();
+    if (!nexilis::server::RoomStorage::add(
+                nexilis::server::Room(nexilis::RoomData(user->getId(), name, roomId))))
+        return 0;
+
+    auto room = nexilis::server::RoomStorage::getRoomById(roomId);
+    if (!room)
+        return 0;
+
+    room->joinRoom(user->getId());
+    user->setRoomId(roomId);
+    return roomId;
+}
+} // namespace
+
 TEST_F(BoostTCPTest, BoostTCPSuccessfulConnection)
 {
     client->start();
@@ -95,6 +125,78 @@ TEST_F(BoostTCPTest, BoostTCPSuccessfulConnection)
     EXPECT_TRUE(client->isConnected());
     EXPECT_TRUE(server->hasActiveConnections());
     EXPECT_EQ(server->activeConnectionsCount(), 1);
+}
+
+TEST_F(BoostTCPTest, AbandonedHandshakeIsRemovedOnStop)
+{
+    // Drive the handshake manually so the client never opens the session port.
+    // A successful handshake that never opens a session leaves pending presence
+    // that the server must clean up on stop.
+    client->stop();
+    server->stop();
+    server.reset();
+    nexilis::server::ClientStorage::clear();
+    nexilis::server::RoomStorage::clear();
+
+    settings.setTls(false);
+    server = std::make_shared<nexilis::server::nxboost::TCPServer>(
+            protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings));
+    server->start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    const int fd = socket(AF_INET, SOCK_STREAM, 0);
+    ASSERT_NE(fd, -1);
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(nexilis::Ports::getBoostTCPPort());
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    ASSERT_EQ(connect(fd, reinterpret_cast<const sockaddr*>(&address), sizeof(address)), 0);
+
+    timeval timeout{};
+    timeout.tv_sec = 2;
+    ASSERT_EQ(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0);
+
+    const std::string password = "salasana";
+    nexilis::nx_data frame(4 + password.size());
+    const uint32_t size = htonl(static_cast<uint32_t>(password.size()));
+    std::memcpy(frame.data(), &size, sizeof(size));
+    std::memcpy(frame.data() + 4, password.data(), password.size());
+    ASSERT_EQ(send(fd, frame.data(), frame.size(), MSG_NOSIGNAL),
+              static_cast<ssize_t>(frame.size()));
+
+    // Drain the client-id and session-port replies. EOF means the handshake
+    // worker finished with the session still unopened.
+    uint8_t buffer[1024];
+    while (recv(fd, buffer, sizeof(buffer), 0) > 0)
+    {
+    }
+    close(fd);
+
+    std::shared_ptr<nexilis::server::User> user;
+    const auto userDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (!user && std::chrono::steady_clock::now() < userDeadline)
+    {
+        const auto users = nexilis::server::ClientStorage::getAllClients();
+        if (!users.empty())
+            user = users.front();
+        else
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    ASSERT_NE(user, nullptr);
+    EXPECT_TRUE(user->hasTransportPresence());
+    const auto userId = user->getId();
+
+    const auto roomId = attachRoom(user, "abandoned_handshake_room");
+    ASSERT_NE(roomId, 0u);
+    auto room = nexilis::server::RoomStorage::getRoomById(roomId);
+    ASSERT_NE(room, nullptr);
+    ASSERT_TRUE(room->contains(userId));
+
+    server->stop();
+
+    EXPECT_FALSE(nexilis::server::ClientStorage::contains(userId));
+    EXPECT_FALSE(room->contains(userId));
 }
 
 TEST_F(BoostTCPTest, SendMessageAsyncReturnsReadyFuture)

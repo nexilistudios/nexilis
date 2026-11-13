@@ -60,6 +60,11 @@ User* BaseMessage::Data::getUser() const
     return m_user.get();
 }
 
+std::shared_ptr<User> BaseMessage::Data::getUserHandle() const
+{
+    return m_user;
+}
+
 BaseMessage::BaseMessage(Data&& data)
     : m_data(std::move(data))
 {
@@ -92,6 +97,11 @@ const std::string& BaseMessage::getAddress() const
 User* BaseMessage::getUser() const
 {
     return m_data.getUser();
+}
+
+std::shared_ptr<User> BaseMessage::getUserHandle() const
+{
+    return m_data.getUserHandle();
 }
 
 } // namespace nexilis::server

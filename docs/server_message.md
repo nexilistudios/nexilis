@@ -320,6 +320,28 @@ remaining recipients are still attempted. `Command::sendRoomCommand` returns
 `false` if any recipient is missing or cannot be sent the message; a false
 result does not mean that no recipients received it.
 
+## User and transport lifecycle
+
+A user is published only after its handshake succeeds. It remains registered
+while at least one stream connection, datagram transport, or pending Boost TCP
+handshake is active. Ending one transport clears only that transport's send
+callback when another transport keeps the user alive. When the last transport
+ends, the server broadcasts the room leave command, removes the user from the
+room and `ClientStorage`, and leaves retained callbacks intact so they continue
+to reject sends through the closed connection.
+
+`ServerConfig::setDatagramIdleTimeout` controls how long a datagram transport
+may stay idle before its presence expires. The default is 120 seconds; a
+non-positive value disables idle expiry. Each valid datagram refreshes the
+activity timestamp. A stream connection or pending handshake keeps the same
+user registered after its datagram transport expires.
+
+Boost TCP tracks the user published by a successful handshake until the session
+connection identifies it. A handshake that closes without advertising a session
+cleans up immediately; one that advertises a session but never opens it expires
+after 30 seconds or when the protocol stops. Datagram transports similarly drop
+their remaining local users when the protocol stops.
+
 ## Command dispatch errors
 
 Both C++ `Command::read` overloads contain parsing and callback exceptions and
@@ -375,8 +397,9 @@ Moving a server with any joinable worker throws `std::logic_error`. Move
 assignment stops the destination first. Repeated starts are ignored, and stopped
 instances cannot restart. Call lifecycle methods from one controlling thread.
 A dispatch callback can request stop, but an external `stop()` must join the
-workers before destruction or moving. User registry and room membership cleanup
-remain separate from connection closure, as does user callback synchronization.
+workers before destruction or moving. Transport closure now removes the user
+and its room membership when nothing else keeps the user alive, and user send
+callbacks are synchronized on the user object.
 
 ## IPv4 UDP server callback lifetime
 
@@ -410,7 +433,8 @@ changing it. Move assignment stops the destination first. Repeated `start()`
 calls are ignored, and stopped instances cannot restart. Call lifecycle methods
 from one controlling thread. A receive-thread callback can request stop; an
 external call to `stop()` must then join the worker before destruction or moving.
-These changes do not synchronize user callback installation or remove idle users.
+User send callbacks are synchronized on the user object, and idle datagram users
+are removed after the configured timeout.
 
 ## Random identifiers
 

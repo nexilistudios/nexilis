@@ -22,6 +22,7 @@
 #include <nexilis/server/room_limits.hh>
 
 #include <cassert>
+#include <chrono>
 #include <string>
 
 namespace nexilis::server
@@ -81,6 +82,17 @@ public:
         return m_maxCommandRate;
     }
 
+    /// How long a datagram transport may stay idle before the user is
+    /// considered disconnected. A non-positive value disables idle expiry.
+    void setDatagramIdleTimeout(std::chrono::milliseconds timeout)
+    {
+        m_datagramIdleTimeout = timeout;
+    }
+    std::chrono::milliseconds getDatagramIdleTimeout() const
+    {
+        return m_datagramIdleTimeout;
+    }
+
     /// Gameplay limits enforced on player actions.
     GameplayLimits& getGameplayLimits()
     {
@@ -119,6 +131,7 @@ private:
     std::string m_rootPassword;
     float m_tickrate = 60.f;
     float m_maxCommandRate = NEXILIS_DEFAULT_MAX_COMMAND_RATE;
+    std::chrono::milliseconds m_datagramIdleTimeout = std::chrono::seconds(120);
     bool m_tls = true;
     GameplayLimits m_gameplayLimits;
     RoomLimits m_roomLimits;

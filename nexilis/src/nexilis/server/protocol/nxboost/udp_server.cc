@@ -159,6 +159,7 @@ void UDPServer::stop()
         return;
     if (m_receiveThread.joinable())
         m_receiveThread.join();
+    cleanupDatagramTransports(User::Transport::boostUdp, *this);
     m_socketState->close();
 }
 
@@ -168,6 +169,7 @@ void UDPServer::receiveFromClients()
     boost::asio::ip::udp::endpoint remoteEndpoint;
     while (!m_stopped->load())
     {
+        expireIdleDatagramTransports(User::Transport::boostUdp, *this);
         try
         {
             receiveBuffer.resize(NEXILIS_BUFFER);
@@ -244,11 +246,13 @@ void UDPServer::receiveFromClients()
                 continue;
             }
 
-            if (!handledMessage->getUser()->isBoostUDPSet())
+            auto* user = handledMessage->getUser();
+            touchDatagramTransport(*user, User::Transport::boostUdp);
+            if (!user->isBoostUDPSet())
             {
-                m_clientEndpoints[handledMessage->getUser()->getId()] = senderEndpoint;
-                handledMessage->getUser()->setBoostUDPSend([socket = m_socketState, senderEndpoint](const nx_data& bytes)
-                                                           { socket->send(senderEndpoint, bytes); });
+                m_clientEndpoints[user->getId()] = senderEndpoint;
+                user->setBoostUDPSend([socket = m_socketState, senderEndpoint](const nx_data& bytes)
+                                      { socket->send(senderEndpoint, bytes); });
             }
 
             auto msg_type = handledMessage->getType();

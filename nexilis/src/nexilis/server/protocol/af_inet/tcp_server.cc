@@ -372,7 +372,7 @@ void TCPServer::receiveFromClient(const std::shared_ptr<Client>& client)
 {
     const auto connection = client->m_connection;
     const int clientSocket = connection->socket();
-    uint64_t connectedUserId = 0;
+    std::shared_ptr<User> connectedUser;
     try
     {
         nx_data receivedData;
@@ -394,8 +394,12 @@ void TCPServer::receiveFromClient(const std::shared_ptr<Client>& client)
             }
 
             auto* user = handledMessage->getUser();
-            if (connectedUserId == 0)
-                connectedUserId = user->getId();
+            if (!connectedUser)
+            {
+                connectedUser = handledMessage->getUserHandle();
+                if (connectedUser)
+                    registerStreamTransport(*connectedUser, User::Transport::inetTcp);
+            }
             if (!user->isInetTCPSet())
             {
                 user->setInetTCPSend([connection = client->m_connection](const nx_data& bytes)
@@ -440,29 +444,8 @@ void TCPServer::receiveFromClient(const std::shared_ptr<Client>& client)
         // Parsing or application callbacks must not escape a worker.
     }
 
-    // --- Cleanup: remove disconnected user from their room and client storage ---
-    if (connectedUserId != 0)
-    {
-        auto user = ClientStorage::getClientById(connectedUserId);
-        if (user)
-        {
-            uint64_t roomId = user->getRoomId();
-            if (roomId != 0)
-            {
-                auto room = RoomStorage::getRoomById(roomId);
-                if (room)
-                {
-                    nx_data leaveData = {
-                            static_cast<uint8_t>(CommandType::room),
-                            static_cast<uint8_t>(RoomCommandType::Root::management),
-                            static_cast<uint8_t>(RoomCommandType::Management::leave)};
-                    DefaultArgs args(*user, *this, leaveData, 0);
-                    ServerImpl::room_management_leave(args);
-                }
-            }
-            ClientStorage::remove(connectedUserId);
-        }
-    }
+    if (connectedUser)
+        streamTransportEnded(*connectedUser, User::Transport::inetTcp, *this);
 
     connection->close();
     connectionClosed();

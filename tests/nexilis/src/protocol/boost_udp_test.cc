@@ -67,6 +67,7 @@ protected:
         }
         nexilis::Log::stopLogging();
         nexilis::server::ClientStorage::clear();
+        nexilis::server::RoomStorage::clear();
     }
 
     nexilis::ProtocolManager protocol_manager;
@@ -77,6 +78,25 @@ protected:
     std::shared_ptr<nexilis::server::nxboost::UDPServer> server;
     std::shared_ptr<nexilis::client::nxboost::UDPClient> client;
 };
+
+namespace
+{
+uint64_t attachRoom(const std::shared_ptr<nexilis::server::User>& user, const std::string& name)
+{
+    const auto roomId = nexilis::Util::getRandomUint64();
+    if (!nexilis::server::RoomStorage::add(
+                nexilis::server::Room(nexilis::RoomData(user->getId(), name, roomId))))
+        return 0;
+
+    auto room = nexilis::server::RoomStorage::getRoomById(roomId);
+    if (!room)
+        return 0;
+
+    room->joinRoom(user->getId());
+    user->setRoomId(roomId);
+    return roomId;
+}
+} // namespace
 
 TEST_F(BoostUDPTest, SendMessageAsyncReturnsReadyFuture)
 {
@@ -224,6 +244,55 @@ TEST_F(BoostUDPTest, MalformedCommandDoesNotStopSubsequentDatagrams)
            std::chrono::steady_clock::now() < deadline)
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     EXPECT_EQ(nexilis::server::RoomStorage::getRoomCount(), before + 1);
+}
+
+TEST_F(BoostUDPTest, IdleDatagramTransportRemovesUserAndLeavesRoom)
+{
+    // Recreate the server and client with a short idle timeout so the test does
+    // not wait for the production default.
+    client->stop();
+    server->stop();
+    server.reset();
+    nexilis::server::ClientStorage::clear();
+    nexilis::server::RoomStorage::clear();
+
+    settings.setDatagramIdleTimeout(std::chrono::milliseconds(500));
+    server = std::make_shared<nexilis::server::nxboost::UDPServer>(
+            protocol_manager.createProtocol<nexilis::server::nxboost::UDPServer>(settings));
+    server->start();
+
+    nexilis::client::ClientConfig server_data;
+    server_data.setPassword("salasana");
+    server_data.setBoostUDPAddress("localhost");
+    server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+
+    api = std::make_unique<nexilis::client::ClientAPI>(server_data);
+    client = std::make_shared<nexilis::client::nxboost::UDPClient>(
+            protocol_manager.createProtocol<nexilis::client::nxboost::UDPClient>(*api));
+    client->start();
+
+    const auto connectDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!client->isConnected() && std::chrono::steady_clock::now() < connectDeadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(client->isConnected());
+
+    const auto userId = api->getClientId();
+    auto user = nexilis::server::ClientStorage::getClientById(userId);
+    ASSERT_NE(user, nullptr);
+
+    const auto roomId = attachRoom(user, "idle_boost_udp_room");
+    ASSERT_NE(roomId, 0u);
+    auto room = nexilis::server::RoomStorage::getRoomById(roomId);
+    ASSERT_NE(room, nullptr);
+    ASSERT_TRUE(room->contains(userId));
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(4);
+    while (nexilis::server::ClientStorage::contains(userId) &&
+           std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    EXPECT_FALSE(nexilis::server::ClientStorage::contains(userId));
+    EXPECT_FALSE(room->contains(userId));
 }
 
 TEST_F(BoostUDPTest, RetainedCallbackRejectsAfterStopDestructionAndReplacement)

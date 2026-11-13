@@ -183,6 +183,7 @@ void DgramServer::stop()
     m_socketState->disableSends();
     if (m_receiveThread.joinable())
         m_receiveThread.join();
+    cleanupDatagramTransports(User::Transport::unixDgram, *this);
     m_socketState->close();
 
     Log::debug("DgramServer stopped");
@@ -215,6 +216,7 @@ void DgramServer::receiveFromClients()
 {
     while (!m_stopped->load() && m_socketState->fd != -1)
     {
+        expireIdleDatagramTransports(User::Transport::unixDgram, *this);
         sockaddr_un clientAddress{};
         nx_data buffer(NEXILIS_BUFFER);
         iovec vector{buffer.data(), buffer.size()};
@@ -257,6 +259,7 @@ void DgramServer::receiveFromClients()
         }
 
         auto* user = handledMessage->getUser();
+        touchDatagramTransport(*user, User::Transport::unixDgram);
         if (!user->isUnixDgramSet())
         {
             auto senderAddress = clientAddress;

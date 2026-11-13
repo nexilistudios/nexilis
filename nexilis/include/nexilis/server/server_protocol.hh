@@ -21,6 +21,9 @@
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/message/message_handler.hh>
 #include <nexilis/server/server_config.hh>
+#include <nexilis/server/user.hh>
+
+#include <chrono>
 
 namespace nexilis::server
 {
@@ -95,12 +98,53 @@ protected:
         --m_activeConnections;
     }
 
+    /// Register a stream connection after a message identifies its user.
+    void registerStreamTransport(User& user, User::Transport transport);
+
+    /// Record datagram activity and activate that transport for the user.
+    void touchDatagramTransport(User& user, User::Transport transport);
+
+    /// Finish one stream connection, removing the user when nothing remains.
+    void streamTransportEnded(User& user, User::Transport transport, NXProtocol& protocol);
+
+    /// Finish an active datagram transport, removing the user when nothing remains.
+    void datagramTransportEnded(User& user, User::Transport transport, NXProtocol& protocol);
+
+    /// Track a successful authentication that has not opened its session yet.
+    void beginPendingHandshake(User& user);
+
+    /// Consume pending presence when the session connection identifies the user.
+    void completePendingHandshake(User& user);
+
+    /// Finish a handshake that did not open a session.
+    void abandonPendingHandshake(User& user, NXProtocol& protocol);
+
+    /// Expire handshakes that never opened a session.
+    void expirePendingHandshakes(NXProtocol& protocol);
+
+    /// Cancel remaining handshakes when the protocol stops.
+    void cleanupPendingHandshakes(NXProtocol& protocol);
+
+    /// Expire datagram transports that have been idle for too long.
+    void expireIdleDatagramTransports(User::Transport transport, NXProtocol& protocol);
+
+    /// Drop every active datagram transport of the given kind on stop.
+    void cleanupDatagramTransports(User::Transport transport, NXProtocol& protocol);
+
+    /// Broadcast leave and remove a disconnected user from the registry.
+    void leaveAndRemoveUser(User& user, NXProtocol& protocol);
+
 private:
+    static constexpr std::chrono::seconds pendingHandshakeTimeout{30};
+
     MessageHandler m_messageHandler;
     Command m_command;
 
     /// Active connections for the server protocol.
     std::atomic<uint64_t> m_activeConnections{0};
+
+    /// Throttle datagram sweeps per protocol instance.
+    std::chrono::steady_clock::time_point m_lastDatagramSweep{};
 };
 
 } // namespace nexilis::server

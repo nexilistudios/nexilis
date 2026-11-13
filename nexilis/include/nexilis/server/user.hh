@@ -17,9 +17,11 @@
 #ifndef NEXILIS_SERVER_USER_HH
 #define NEXILIS_SERVER_USER_HH
 
+#include <array>
 #include <atomic>
 #include <bitset>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -27,6 +29,7 @@
 #include <nexilis/nexilis_constants.hh>
 #include <nexilis/object/object_2d.hh>
 #include <nexilis/util.hh>
+#include <optional>
 
 namespace nexilis::server
 {
@@ -117,6 +120,71 @@ public:
         return m_roomId;
     }
 
+    /// Transports that can keep one logical user connected.
+    enum class Transport : std::uint8_t
+    {
+        boostTcp,
+        boostUdp,
+        unixStream,
+        unixDgram,
+        inetTcp,
+        inetUdp,
+    };
+
+    static constexpr std::size_t transportCount = 6;
+
+    /// Presence after a transport ends. The snapshot is taken while the
+    /// transport state is locked so concurrent endings cannot both decide that
+    /// they closed the last transport.
+    struct TransportStatus
+    {
+        bool anyActive = false;
+        bool transportActive = false;
+    };
+
+    /// Register one stream connection for a transport.
+    void registerStreamTransport(Transport transport);
+
+    /// End one stream connection and return the remaining presence.
+    TransportStatus endStreamTransport(Transport transport);
+
+    /// Record datagram activity, activating the transport if needed.
+    void touchDatagramTransport(Transport transport,
+                                std::chrono::steady_clock::time_point now);
+
+    /// End an active datagram transport and return the remaining presence.
+    TransportStatus endDatagramTransport(Transport transport);
+
+    /// Activate pending-handshake presence. Multiple handshakes on one user
+    /// are counted so a failed attempt cannot cancel another one.
+    void beginPendingHandshake(std::chrono::steady_clock::time_point now);
+
+    /// End one pending handshake and return the remaining presence.
+    TransportStatus endPendingHandshake();
+
+    /// Atomically claim idle pending handshakes for cleanup.
+    std::optional<TransportStatus> expirePendingHandshakes(
+            std::chrono::steady_clock::time_point now,
+            std::chrono::milliseconds timeout);
+
+    /// Atomically cancel every pending handshake for cleanup.
+    std::optional<TransportStatus> cancelPendingHandshakes();
+
+    /// Atomically claim an idle datagram transport for cleanup.
+    std::optional<TransportStatus> expireDatagramTransport(
+            Transport transport,
+            std::chrono::steady_clock::time_point now,
+            std::chrono::milliseconds timeout);
+
+    /// Whether any transport or pending handshake keeps this user alive.
+    bool hasTransportPresence() const;
+
+    /// Whether the given transport is currently active.
+    bool hasTransport(Transport transport) const;
+
+    /// Clear the send callback associated with a closed transport.
+    void clearSendCallback(Transport transport);
+
     /// Atomically check and record the last accepted shot across transports.
     bool acceptShot(std::chrono::steady_clock::time_point now,
                     std::chrono::duration<float> interval)
@@ -163,6 +231,7 @@ public:
     /// \ingroup UserBoostTCP
     bool isBoostTCPSet() const
     {
+        std::lock_guard<std::mutex> lock(m_sendMutex);
         return m_boostTCPSendToClient != nullptr;
     }
 
@@ -170,6 +239,7 @@ public:
     /// \ingroup UserBoostTCP
     void setBoostTCPSend(const std::function<void(const nx_data&)>& sendFunction)
     {
+        std::lock_guard<std::mutex> lock(m_sendMutex);
         m_boostTCPSendToClient = sendFunction;
     }
 
@@ -183,6 +253,7 @@ public:
     /// \ingroup UserBoostUDP
     bool isBoostUDPSet() const
     {
+        std::lock_guard<std::mutex> lock(m_sendMutex);
         return m_boostUDPSendToClient != nullptr;
     }
 
@@ -190,6 +261,7 @@ public:
     /// \ingroup UserBoostUDP
     void setBoostUDPSend(const std::function<void(const nx_data&)>& sendFunction)
     {
+        std::lock_guard<std::mutex> lock(m_sendMutex);
         m_boostUDPSendToClient = sendFunction;
     }
 
@@ -203,12 +275,14 @@ public:
     /// \ingroup UserUnixStream
     bool isUnixStreamSet() const
     {
+        std::lock_guard<std::mutex> lock(m_sendMutex);
         return m_unixStreamSendToClient != nullptr;
     }
 
     /// \ingroup UserUnixStream
     void setUnixStreamSend(const std::function<void(const nx_data&)>& sendFunction)
     {
+        std::lock_guard<std::mutex> lock(m_sendMutex);
         m_unixStreamSendToClient = sendFunction;
     }
 
@@ -221,6 +295,7 @@ public:
     /// \ingroup UserUnixDgram
     bool isUnixDgramSet() const
     {
+        std::lock_guard<std::mutex> lock(m_sendMutex);
         return m_unixDgramSendToClient != nullptr;
     }
 
@@ -228,6 +303,7 @@ public:
     /// \ingroup UserUnixDgram
     void setUnixDgramSend(const std::function<void(const nx_data&)>& sendFunction)
     {
+        std::lock_guard<std::mutex> lock(m_sendMutex);
         m_unixDgramSendToClient = sendFunction;
     }
 
@@ -241,6 +317,7 @@ public:
     /// \ingroup UserInetTCP
     bool isInetTCPSet() const
     {
+        std::lock_guard<std::mutex> lock(m_sendMutex);
         return m_inetTCPSendToClient != nullptr;
     }
 
@@ -248,6 +325,7 @@ public:
     /// \ingroup UserInetTCP
     void setInetTCPSend(const std::function<void(const nx_data&)>& sendFunction)
     {
+        std::lock_guard<std::mutex> lock(m_sendMutex);
         m_inetTCPSendToClient = sendFunction;
     }
 
@@ -261,6 +339,7 @@ public:
     /// \ingroup UserInetUDP
     bool isInetUDPSet() const
     {
+        std::lock_guard<std::mutex> lock(m_sendMutex);
         return m_inetUDPSendToClient != nullptr;
     }
 
@@ -268,6 +347,7 @@ public:
     /// \ingroup UserInetUDP
     void setInetUDPSend(const std::function<void(const nx_data&)>& sendFunction)
     {
+        std::lock_guard<std::mutex> lock(m_sendMutex);
         m_inetUDPSendToClient = sendFunction;
     }
 
@@ -299,7 +379,18 @@ private:
     std::chrono::steady_clock::time_point m_commandLastRefill{};
     double m_commandTokens = 0.0;
 
+    // Transport presence. A user stays registered while any stream connection,
+    // datagram transport, or pending handshake remains.
+    mutable std::mutex m_transportMutex;
+    std::array<std::size_t, transportCount> m_streamTransportConnections{};
+    std::array<bool, transportCount> m_datagramTransportActive{};
+    std::array<std::chrono::steady_clock::time_point, transportCount>
+            m_datagramLastActivity{};
+    std::size_t m_pendingHandshakes = 0;
+    std::chrono::steady_clock::time_point m_pendingHandshakeSince{};
+
 private:
+    mutable std::mutex m_sendMutex;
     std::function<void(nx_data)> m_boostTCPSendToClient = nullptr;
     std::function<void(nx_data)> m_boostUDPSendToClient = nullptr;
     std::function<void(nx_data)> m_unixStreamSendToClient = nullptr;

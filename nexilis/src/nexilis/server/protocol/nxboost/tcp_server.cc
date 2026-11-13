@@ -169,6 +169,10 @@ void TCPServer::stop()
         m_clientThreads.clear();
     }
 
+    // Handshakes that completed but never opened a session port would otherwise
+    // keep their users registered after shutdown.
+    cleanupPendingHandshakes(*this);
+
     auto tryJoinThread = [this](std::thread& thread, const std::string& name)
     {
         if (thread.joinable())
@@ -313,6 +317,7 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
             if (!m_tlsContext)
             {
                 Log::error(header(), "TLS requested but no TLS context is available, refusing connection");
+                ServerProtocol::connectionClosed();
                 return;
             }
             socket_wrapper->enableTls(m_tlsContext);
@@ -322,6 +327,8 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
         // clang-format off
         auto thread = std::thread([this, socket_wrapper, cb = std::move(onCompleted)]() mutable
         {
+            std::shared_ptr<User> handshakeUser;
+            bool sessionAdvertised = false;
             try
             {
                 while (!m_stopped->load() && socket_wrapper->isOpen())
@@ -351,9 +358,19 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
                     // whose payload carries the first command byte.
                     auto handled_message = getMessageHandler().readMessage(clientAddress, data, &getSettings());
 
-                    if (!handled_message)
+                    if (!handled_message || !handled_message->getUser())
                     {
                         continue;
+                    }
+
+                    // A successful handshake publishes a user before the session
+                    // port is open. Keep that presence so a client that never
+                    // opens the session cannot leak a user.
+                    if (!handshakeUser)
+                    {
+                        handshakeUser = handled_message->getUserHandle();
+                        if (handshakeUser)
+                            beginPendingHandshake(*handshakeUser);
                     }
 
                     // Bind the socket's send function to the user so that
@@ -405,6 +422,7 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
                             if (portCommand == CommandResult::success)
                             {
                                 Log::info(header(), "Auth fully complete");
+                                sessionAdvertised = true;
                                 socket_wrapper->close();
                                 cb();
                                 break;
@@ -431,6 +449,13 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
             }
 
             socket_wrapper->close();
+
+            // The session connection consumes pending presence. Without an
+            // advertised session, clean up the handshake user now.
+            if (handshakeUser && !sessionAdvertised)
+                abandonPendingHandshake(*handshakeUser, *this);
+
+            ServerProtocol::connectionClosed();
         });
 
         {
@@ -466,15 +491,18 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
     }
     socket_wrapper->assign(std::move(socket));
 
+    ServerProtocol::connectionEstablished();
+
     // clang-format off
     auto client_thread = std::thread([this, socket_wrapper, client_address]() mutable
     {
         if (!socket_wrapper->isOpen())
         {
+            ServerProtocol::connectionClosed();
             return;
         }
 
-        uint64_t connectedUserId = 0;
+        std::shared_ptr<User> connectedUser;
 
         try
         {
@@ -500,16 +528,20 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
 
                 auto handledMessage = getMessageHandler().readMessage(client_address, data, &getSettings());
 
-                if (!handledMessage)
+                if (!handledMessage || !handledMessage->getUser())
                 {
                     Log::error(header(), "Received invalid message");
                     continue;
                 }
 
-                // Track the user ID for cleanup on disconnect.
-                if (handledMessage->getUser() && connectedUserId == 0)
+                if (!connectedUser)
                 {
-                    connectedUserId = handledMessage->getUser()->getId();
+                    connectedUser = handledMessage->getUserHandle();
+                    if (connectedUser)
+                    {
+                        registerStreamTransport(*connectedUser, User::Transport::boostTcp);
+                        completePendingHandshake(*connectedUser);
+                    }
                 }
 
                 // Always update the sending function, implement some caching later.
@@ -555,33 +587,8 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
             Log::error(header(), "Exception in client thread: ", e.what());
         }
 
-        // --- Cleanup: remove disconnected user from their room and client storage ---
-        if (connectedUserId != 0)
-        {
-            auto user = ClientStorage::getClientById(connectedUserId);
-            if (user)
-            {
-                uint64_t roomId = user->getRoomId();
-                if (roomId != 0)
-                {
-                    auto room = RoomStorage::getRoomById(roomId);
-                    if (room)
-                    {
-                        Log::info(header(), "Cleaning up disconnected user ", connectedUserId, " from room ", roomId);
-
-                        // Broadcast the standard leave command to the remaining clients
-                        // so they remove the disconnected user's object from their scene.
-                        nx_data leaveData = {
-                                static_cast<uint8_t>(CommandType::room),
-                                static_cast<uint8_t>(RoomCommandType::Root::management),
-                                static_cast<uint8_t>(RoomCommandType::Management::leave)};
-                        DefaultArgs args(*user, *this, leaveData, 0);
-                        ServerImpl::room_management_leave(args);
-                    }
-                }
-                ClientStorage::remove(connectedUserId);
-            }
-        }
+        if (connectedUser)
+            streamTransportEnded(*connectedUser, User::Transport::boostTcp, *this);
 
         if (socket_wrapper->isOpen())
         {
@@ -598,6 +605,7 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
     catch (...)
     {
         Log::critical(header(), "Failed to launch client thread");
+        ServerProtocol::connectionClosed();
         if (socket_wrapper->isOpen())
         {
             socket_wrapper->close();
@@ -666,6 +674,8 @@ bool TCPServer::acceptClients()
             {
                 Log::error(header(), "Select error: ", strerror(errno));
             }
+
+            expirePendingHandshakes(*this);
 
             if (m_stopped->load())
             {
