@@ -180,6 +180,13 @@ void Room::recordKill(uint64_t killerId, uint64_t victimId)
     m_playerDeaths[victimId] += 1;
 }
 
+void Room::resetPlayerStats()
+{
+    std::lock_guard<std::mutex> lock(m_stateMutex);
+    m_playerKills.clear();
+    m_playerDeaths.clear();
+}
+
 uint64_t Room::getPlayerKills(uint64_t clientId) const
 {
     std::lock_guard<std::mutex> lock(m_stateMutex);

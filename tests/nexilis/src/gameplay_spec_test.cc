@@ -1338,6 +1338,21 @@ TEST(RoomStateTest, RecordKillUpdatesKillerAndVictimStats)
     EXPECT_EQ(room.getPlayerDeaths(SENDER_ID), 0);
 }
 
+TEST(RoomStateTest, ResetPlayerStatsStartsANewMatch)
+{
+    server::Room room(RoomData(1, "state_room", ROOM_ID));
+    room.recordKill(SENDER_ID, TARGET_ID);
+    room.damagePlayer(TARGET_ID, 25.0f);
+    room.setPlayerTeam(SENDER_ID, "Terrorist");
+
+    room.resetPlayerStats();
+
+    EXPECT_EQ(room.getPlayerKills(SENDER_ID), 0);
+    EXPECT_EQ(room.getPlayerDeaths(TARGET_ID), 0);
+    EXPECT_FLOAT_EQ(room.getPlayerHealth(TARGET_ID), 75.0f);
+    EXPECT_EQ(room.getPlayerTeam(SENDER_ID), "Terrorist");
+}
+
 TEST(RoomStateTest, TeamsAreEmptyByDefaultAndStoredOnSet)
 {
     server::Room room(RoomData(1, "state_room", ROOM_ID));

@@ -144,6 +144,9 @@ public:
     /// \param victimId The id of the player that died.
     void recordKill(uint64_t killerId, uint64_t victimId);
 
+    /// Clear kill and death counts when a new match starts in this room.
+    void resetPlayerStats();
+
     /// Get the number of kills a player has made.
     uint64_t getPlayerKills(uint64_t clientId) const;
 
