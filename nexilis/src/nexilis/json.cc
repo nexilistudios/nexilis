@@ -23,6 +23,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
 
 namespace nexilis
 {
@@ -48,8 +49,13 @@ void Json::emplace(boost::json::object& first, const boost::json::object& second
 
 boost::json::object Json::convertToJSON(const nx_data& bytes)
 {
+    if (bytes.size() > NEXILIS_MAX_JSON_MESSAGE)
+        throw std::length_error("Server JSON message exceeds the size limit");
+
     std::string jsonString(bytes.begin(), bytes.end());
-    return boost::json::parse(jsonString).as_object();
+    boost::json::parse_options options;
+    options.max_depth = 32;
+    return boost::json::parse(jsonString, {}, options).as_object();
 }
 
 /// Read JSON data from file.

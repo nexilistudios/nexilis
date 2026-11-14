@@ -29,7 +29,9 @@ closes the connection. Once frame data is readable, the complete length prefix
 and body must arrive within five seconds; partial reads do not reset this
 deadline. TLS handshakes have a separate five-second deadline. Idle polling
 alone does not close established connections. These limits apply to incoming
-server requests, not to the Boost TCP client's JSON response parser.
+server requests. Client JSON responses are limited to 16 MiB per message
+(excluding the newline delimiter); the Boost TCP receive buffer enforces this
+limit before parsing, and the parser caps nesting at 32 levels.
 
 UDP messages do not use a length prefix — each datagram is a single message.
 The Boost UDP and af_inet UDP transports add an authentication envelope. A

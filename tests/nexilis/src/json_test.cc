@@ -20,6 +20,8 @@
 
 #include <boost/json/parse.hpp>
 
+#include <stdexcept>
+
 using namespace nexilis;
 
 TEST(JsonTest, CreateJSONFromMap)
@@ -50,6 +52,21 @@ TEST(JsonTest, ConvertToJSONFromBytes)
 
     EXPECT_EQ(obj.at("key").as_string(), "value");
     EXPECT_EQ(obj.at("num").as_int64(), 10);
+}
+
+TEST(JsonTest, ConvertToJSONRejectsOversizedMessage)
+{
+    nx_data bytes(NEXILIS_MAX_JSON_MESSAGE + 1, ' ');
+    EXPECT_THROW(Json::convertToJSON(bytes), std::length_error);
+}
+
+TEST(JsonTest, ConvertToJSONRejectsExcessiveNesting)
+{
+    std::string jsonStr(33, '[');
+    jsonStr += "0";
+    jsonStr.append(33, ']');
+    nx_data bytes(jsonStr.begin(), jsonStr.end());
+    EXPECT_ANY_THROW(Json::convertToJSON(bytes));
 }
 
 TEST(JsonTest, ToString)

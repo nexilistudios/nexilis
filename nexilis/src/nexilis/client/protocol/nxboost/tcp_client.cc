@@ -677,7 +677,7 @@ void TCPClient::startAsyncRead()
     }
 
     Log::debug(header(), "Starting async read on ", (m_useSwitchedPort ? "switched" : "main"), " port");
-    doAsyncRead(current_socket, std::make_shared<boost::asio::streambuf>());
+    doAsyncRead(current_socket, std::make_shared<boost::asio::streambuf>(NEXILIS_MAX_JSON_MESSAGE + 1));
 }
 
 void TCPClient::doAsyncRead(std::shared_ptr<TlsSocket> current_socket,

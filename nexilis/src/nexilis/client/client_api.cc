@@ -147,6 +147,9 @@ std::string ClientAPI::readResultStr(ReadResult res)
 
 ReadResult ClientAPI::readMessage(const nx_data& message)
 {
+    if (message.size() > NEXILIS_MAX_JSON_MESSAGE + 1)
+        return ReadResult::error_in_json_conversion;
+
     boost::json::object json;
     try
     {
