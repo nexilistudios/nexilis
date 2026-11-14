@@ -124,9 +124,8 @@ boost::json::array ServerJson::roomsToJSON(const std::vector<std::shared_ptr<Roo
 
         // Get data from clients in a room.
         boost::json::array clientArray;
-        clientArray.reserve(room->getClients().size());
-
-        auto& roomClients = room->getClients();
+        auto roomClients = room->getClients();
+        clientArray.reserve(roomClients.size());
 
         for (auto& client : roomClients)
         {
@@ -167,10 +166,11 @@ boost::json::array ServerJson::roomsToJSON(const std::vector<std::shared_ptr<Roo
         // 2D context cannot have 3D objects.
         if (ctx != RoomData::Context::_2D)
         {
-            if (!room->getObjects3D().empty())
+            const auto objects3D = room->getObjects3DSnapshot();
+            if (!objects3D.empty())
             {
                 boost::json::array obj3DArray;
-                for (const auto& obj : room->getObjects3D())
+                for (const auto& obj : objects3D)
                 {
                     auto pos = obj.getPosition();
                     auto dim = obj.getDimensions();
@@ -190,10 +190,11 @@ boost::json::array ServerJson::roomsToJSON(const std::vector<std::shared_ptr<Roo
         }
 
         // 3D context can have 2D objects, they just don't have depth.
-        if (!room->getObjects2D().empty())
+        const auto objects2D = room->getObjects2DSnapshot();
+        if (!objects2D.empty())
         {
             boost::json::array obj2DArray;
-            for (const auto& obj : room->getObjects2D())
+            for (const auto& obj : objects2D)
             {
                 auto pos = obj.getPosition();
                 auto dim = obj.getDimensions();

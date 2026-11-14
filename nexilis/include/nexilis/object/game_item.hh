@@ -35,30 +35,30 @@ public:
              const std::string& filepath = "");
 
     GameItem(const GameItem& other)
-        : m_id(other.m_id),
-          m_type(other.m_type),
-          m_position(other.m_position),
-          m_dimensions(other.m_dimensions),
-          m_status(other.m_status),
-          m_filepath(other.m_filepath),
-          m_mutex(std::make_unique<std::mutex>())
+        : m_mutex(std::make_unique<std::mutex>())
     {
+        std::lock_guard lock(*other.m_mutex);
+        m_id = other.m_id;
+        m_type = other.m_type;
+        m_position = other.m_position;
+        m_dimensions = other.m_dimensions;
+        m_status = other.m_status;
+        m_filepath = other.m_filepath;
     }
 
     GameItem& operator=(const GameItem& other)
     {
         if (this != &other)
         {
+            if (!m_mutex)
+                m_mutex = std::make_unique<std::mutex>();
+            std::scoped_lock lock(*m_mutex, *other.m_mutex);
             m_id = other.m_id;
             m_type = other.m_type;
             m_position = other.m_position;
             m_dimensions = other.m_dimensions;
             m_status = other.m_status;
             m_filepath = other.m_filepath;
-            if (!m_mutex)
-            {
-                m_mutex = std::make_unique<std::mutex>();
-            }
         }
         return *this;
     }

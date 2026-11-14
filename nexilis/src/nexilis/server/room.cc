@@ -86,7 +86,7 @@ Room& Room::operator=(Room&& other)
 
 bool Room::contains(uint64_t userId)
 {
-    // Use std::any_of algorithm to check if the user is in the room.
+    std::lock_guard lock(m_membershipMutex);
     return std::any_of(m_clientIds.begin(), m_clientIds.end(),
                        [&userId](uint64_t id)
                        { return userId == id; });
@@ -94,23 +94,34 @@ bool Room::contains(uint64_t userId)
 
 void Room::joinRoom(uint64_t userId)
 {
-    if (contains(userId))
+    tryJoinRoom(userId);
+}
+
+bool Room::tryJoinRoom(uint64_t userId)
+{
     {
-        Log::warning("User already in this room!");
-    }
-    else
-    {
+        std::lock_guard lock(m_membershipMutex);
+        if (std::find(m_clientIds.begin(), m_clientIds.end(), userId) != m_clientIds.end() ||
+            m_clientIds.size() >= getMaxSize())
+            return false;
         m_clientIds.emplace_back(userId);
-        Log::info("New user in room: ", getId(), " user: ", userId);
     }
+    Log::info("New user in room: ", getId(), " user: ", userId);
+    return true;
+}
+
+std::vector<uint64_t> Room::getClients() const
+{
+    std::lock_guard lock(m_membershipMutex);
+    return m_clientIds;
 }
 
 void Room::leaveRoom(uint64_t userId)
 {
-    m_clientIds.erase(std::remove_if(m_clientIds.begin(), m_clientIds.end(),
-                                     [&userId](uint64_t id)
-                                     { return userId == id; }),
-                      m_clientIds.end());
+    {
+        std::lock_guard lock(m_membershipMutex);
+        std::erase(m_clientIds, userId);
+    }
     std::lock_guard<std::mutex> lock(m_stateMutex);
     m_playerHealth.erase(userId);
     m_playerKills.erase(userId);
@@ -348,7 +359,7 @@ void Room::onPlayerDied(uint64_t killerId, uint64_t victimId)
 bool Room::broadcastToAll(const nx_data& data)
 {
     bool all_success = true;
-    for (auto clientId : m_clientIds)
+    for (auto clientId : getClients())
     {
         auto client = ClientStorage::getClientById(clientId);
         if (!client)
@@ -448,6 +459,68 @@ void Room::deleteGameItem(uint64_t id)
 {
     std::lock_guard lock(m_resourceMutex);
     BaseRoom::deleteGameItem(id);
+}
+
+std::vector<Object2D> Room::getObjects2DSnapshot() const
+{
+    std::lock_guard lock(m_resourceMutex);
+    return BaseRoom::getObjects2D();
+}
+
+std::vector<Object3D> Room::getObjects3DSnapshot() const
+{
+    std::lock_guard lock(m_resourceMutex);
+    return BaseRoom::getObjects3D();
+}
+
+std::vector<GameItem> Room::getGameItemsSnapshot() const
+{
+    std::lock_guard lock(m_resourceMutex);
+    return BaseRoom::getGameItems();
+}
+
+bool Room::withObject2D(uint64_t id, const std::function<void(Object2D&)>& action)
+{
+    std::lock_guard lock(m_resourceMutex);
+    auto* object = BaseRoom::getObject2DById(id);
+    if (!object)
+        return false;
+    action(*object);
+    return true;
+}
+
+bool Room::withObject3D(uint64_t id, const std::function<void(Object3D&)>& action)
+{
+    std::lock_guard lock(m_resourceMutex);
+    auto* object = BaseRoom::getObject3DById(id);
+    if (!object)
+        return false;
+    action(*object);
+    return true;
+}
+
+bool Room::hasObject2D(uint64_t id)
+{
+    std::lock_guard lock(m_resourceMutex);
+    return BaseRoom::getObject2DById(id) != nullptr;
+}
+
+bool Room::hasObject3D(uint64_t id)
+{
+    std::lock_guard lock(m_resourceMutex);
+    return BaseRoom::getObject3DById(id) != nullptr;
+}
+
+bool Room::hasGameItem(uint64_t id)
+{
+    std::lock_guard lock(m_resourceMutex);
+    return BaseRoom::getGameItemById(id) != nullptr;
+}
+
+void Room::updateGameItemStatus(uint64_t id, const std::string& status)
+{
+    std::lock_guard lock(m_resourceMutex);
+    BaseRoom::updateGameItemStatus(id, status);
 }
 
 } // namespace nexilis::server

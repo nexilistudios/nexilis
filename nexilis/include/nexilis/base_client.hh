@@ -17,8 +17,10 @@
 #ifndef NEXILIS_BASE_CLIENT_HH
 #define NEXILIS_BASE_CLIENT_HH
 
+#include <atomic>
 #include <cassert>
 #include <cstdint>
+#include <mutex>
 #include <string>
 
 #include <nexilis/object/object_2d.hh>
@@ -42,11 +44,13 @@ public:
 
     /// Copy constructor.
     BaseClient(const BaseClient& other)
-        : m_id(other.m_id),
-          m_username(other.m_username),
+        : m_id(other.m_id.load()),
+          m_usernameMutex(),
           m_object2D(other.m_object2D),
           m_object3D(other.m_object3D)
     {
+        std::lock_guard lock(other.m_usernameMutex);
+        m_username = other.m_username;
     }
 
     /// Copy assignment operator.
@@ -54,8 +58,11 @@ public:
     {
         if (this != &other)
         {
-            m_id = other.m_id;
-            m_username = other.m_username;
+            m_id.store(other.m_id.load());
+            {
+                std::scoped_lock lock(m_usernameMutex, other.m_usernameMutex);
+                m_username = other.m_username;
+            }
             m_object2D = other.m_object2D;
             m_object3D = other.m_object3D;
         }
@@ -64,11 +71,12 @@ public:
 
     uint64_t getId() const
     {
-        return m_id;
+        return m_id.load();
     }
 
-    const std::string& getUsername() const
+    std::string getUsername() const
     {
+        std::lock_guard lock(m_usernameMutex);
         return m_username;
     }
 
@@ -85,16 +93,18 @@ public:
 protected:
     void setId(uint64_t id)
     {
-        m_id = id;
+        m_id.store(id);
     }
 
     void setBaseUsername(const std::string& username)
     {
+        std::lock_guard lock(m_usernameMutex);
         m_username = username;
     }
 
 private:
-    uint64_t m_id;
+    std::atomic<uint64_t> m_id;
+    mutable std::mutex m_usernameMutex;
     std::string m_username;
     Object2D m_object2D;
     Object3D m_object3D;

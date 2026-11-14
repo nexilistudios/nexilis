@@ -79,7 +79,8 @@ CommandResult ServerImpl::room_player3d_shoot(const DefaultArgs& args)
         return CommandResult::invalid_input;
     damage = limits.clampDamage(damage);
 
-    bool targetFound = std::any_of(room->getClients().begin(), room->getClients().end(),
+    const auto roomClients = room->getClients();
+    bool targetFound = std::any_of(roomClients.begin(), roomClients.end(),
                                    [targetId](auto clientId)
                                    { return clientId == targetId; });
     if (!targetFound)

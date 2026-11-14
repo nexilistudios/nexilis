@@ -25,6 +25,7 @@
 #include <nexilis/server/server_config.hh>
 #include <nexilis/server/server_json.hh>
 
+#include <nexilis/command_type.hh>
 #include <nexilis/logger/log.hh>
 #include <nexilis/message_auth.hh>
 
@@ -41,11 +42,38 @@ namespace
 constexpr unsigned kMaxPassphraseAuthFailures = 5;
 constexpr auto kPassphraseAuthWindow = std::chrono::minutes(10);
 constexpr size_t kMaxTrackedPassphraseAuthAddresses = 4096;
+constexpr unsigned kMaxRegistrationsPerAddress = 20;
+constexpr auto kRegistrationWindow = std::chrono::minutes(1);
+constexpr size_t kMaxTrackedRegistrationAddresses = 4096;
 } // namespace
 
 MessageHandler::MessageHandler()
     : NxClass("server::MessageHandler")
 {
+}
+
+bool MessageHandler::acceptRegistration(const std::string& address)
+{
+    const auto now = std::chrono::steady_clock::now();
+    std::lock_guard lock(m_registrationState->mutex);
+    auto& attempts = m_registrationState->byAddress;
+    auto it = attempts.find(address);
+    if (it != attempts.end() && now - it->second.windowStart >= kRegistrationWindow)
+    {
+        attempts.erase(it);
+        it = attempts.end();
+    }
+    if (it != attempts.end())
+        return ++it->second.count <= kMaxRegistrationsPerAddress;
+    if (attempts.size() >= kMaxTrackedRegistrationAddresses)
+    {
+        std::erase_if(attempts, [now](const auto& entry)
+                      { return now - entry.second.windowStart >= kRegistrationWindow; });
+        if (attempts.size() >= kMaxTrackedRegistrationAddresses)
+            return false;
+    }
+    attempts.emplace(address, RegistrationState::Attempt{now, 1});
+    return true;
 }
 
 // Payload handled by this class:
@@ -90,21 +118,20 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
         return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::not_implemented);
     }
 
-    bool newUser = false;
-
-    // Does the user actually exist?
+    // Unknown identifiers are not users until their handshake succeeds.
     auto user = ClientStorage::getClientById(clientId);
-    if (!user)
+    const bool newUser = !user;
+    auto createUser = [&]() -> bool
     {
-        // Create a new user.
+        if (!acceptRegistration(address))
+            return false;
         uint64_t newId = Util::getRandomUint64();
         user = std::make_shared<User>(newId, address);
         Log::info(header(), "Created new user: ", newId);
         auto username = Util::getRandomString(10);
         user->setUsername(username);
-        newUser = true;
-    }
-    assert(user);
+        return true;
+    };
 
     auto authenticatedMessage = [&]() -> std::unique_ptr<BaseMessage>
     {
@@ -148,10 +175,17 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                 return authenticatedMessage();
             }
 
+            // A new skip-mode session is created only for the canonical
+            // getting/client_id handshake, not arbitrary unknown payloads.
+            if (clientId != 0 || payload.size() != 19 ||
+                payload[16] != static_cast<uint8_t>(CommandType::getting) ||
+                payload[17] != 0 || payload[18] != 0)
+                return nullptr;
+
             // Brand new client. Register it so its client id stays stable and
             // hand its id back through the same AuthMessage handshake used by
             // password_protected mode (no credentials are verified here).
-            if (!ClientStorage::add(user))
+            if (!createUser() || !ClientStorage::add(user))
                 return nullptr;
 
             // This message is equal to Packet::getId (without client id):
@@ -238,6 +272,8 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                 // response does not reveal the length of the correct password.
                 if (Util::constantTimeEquals(authentication->getPassphrase(), payload))
                 {
+                    if (!createUser())
+                        return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::authentication_error);
                     Log::info(header(), "Correct password by user ", user->getId());
 
                     {

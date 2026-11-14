@@ -156,7 +156,7 @@ DgramServer& DgramServer::operator=(DgramServer&& other)
 
 void DgramServer::start()
 {
-    if (m_stopped->load())
+    if (!m_stopped || m_stopped->load() || m_receiveThread.joinable())
     {
         Log::debug("DgramServer already stopped, cannot start");
         return;
@@ -174,13 +174,12 @@ void DgramServer::start()
 
 void DgramServer::stop()
 {
-    if (!m_stopped || m_stopped->exchange(true))
-    {
-        Log::debug("DgramServer stop already in progress or completed");
+    if (!m_stopped || !m_socketState)
         return;
-    }
-
+    m_stopped->store(true);
     m_socketState->disableSends();
+    if (m_receiveThread.joinable() && m_receiveThread.get_id() == std::this_thread::get_id())
+        return;
     if (m_receiveThread.joinable())
         m_receiveThread.join();
     cleanupDatagramTransports(User::Transport::unixDgram, *this);

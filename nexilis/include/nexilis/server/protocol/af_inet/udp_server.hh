@@ -92,6 +92,7 @@ private:
     std::unique_ptr<std::atomic<bool>> m_stopped;
     std::array<uint8_t, 32> m_cookieKey{};
     std::unordered_map<uint64_t, sockaddr_in> m_clientEndpoints;
+    std::chrono::steady_clock::time_point m_lastEndpointSweep{};
 };
 
 } // namespace nexilis::server::af_inet

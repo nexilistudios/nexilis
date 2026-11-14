@@ -29,19 +29,23 @@ BaseClient::BaseClient(uint64_t id)
 }
 
 BaseClient::BaseClient(BaseClient&& other) noexcept
-    : m_id(std::move(other.m_id)),
-      m_username(std::move(other.m_username)),
+    : m_id(other.m_id.load()),
       m_object2D(std::move(other.m_object2D)),
       m_object3D(std::move(other.m_object3D))
 {
+    std::lock_guard lock(other.m_usernameMutex);
+    m_username = std::move(other.m_username);
 }
 
 BaseClient& BaseClient::operator=(BaseClient&& other) noexcept
 {
     if (this != &other)
     {
-        m_id = std::move(other.m_id);
-        m_username = std::move(other.m_username);
+        m_id.store(other.m_id.load());
+        {
+            std::scoped_lock lock(m_usernameMutex, other.m_usernameMutex);
+            m_username = std::move(other.m_username);
+        }
         m_object2D = std::move(other.m_object2D);
         m_object3D = std::move(other.m_object3D);
     }

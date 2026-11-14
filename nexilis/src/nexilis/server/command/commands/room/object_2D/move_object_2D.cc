@@ -39,35 +39,27 @@ CommandResult ServerImpl::room_object2d_move(const DefaultArgs& args)
     if (!validation::isFinite(position))
         return CommandResult::invalid_input;
 
-    // Get object from server storage.
-    auto object = room->getObject2DById(objectId);
-    if (!object)
-    {
-        Log::error("Object not found with id: ", objectId);
-        return CommandResult::failure;
-    }
-
-    auto oldPosition = object->getPosition();
-    auto newPosition = oldPosition + position;
-    if (!validation::isFinite(newPosition))
-        return CommandResult::invalid_input;
-
     const auto& limits = GameplayLimits::get();
-    Vector2f clampedPosition(limits.clampHorizontal(newPosition.x),
-                             limits.clampHorizontal(newPosition.y));
-    if (clampedPosition.x != newPosition.x || clampedPosition.y != newPosition.y)
-    {
-        Log::warning("Object move to (", newPosition.x, ", ", newPosition.y,
-                     ") clamped to (", clampedPosition.x, ", ", clampedPosition.y, ")");
-    }
+    Vector2f clampedPosition;
+    bool validPosition = false;
+    const bool found = room->withObject2D(objectId, [&](Object2D& object)
+                                          {
+        const auto newPosition = object.getPosition() + position;
+        if (!validation::isFinite(newPosition))
+            return;
+        clampedPosition = Vector2f(limits.clampHorizontal(newPosition.x),
+                                   limits.clampHorizontal(newPosition.y));
+        object.setPosition(clampedPosition);
+        validPosition = true; });
+    if (!found)
+        return CommandResult::failure;
+    if (!validPosition)
+        return CommandResult::invalid_input;
 
     std::map<std::string, boost::json::value> params{
             {"id", boost::json::value(objectId)},
             {"x", boost::json::value(clampedPosition.x)},
             {"y", boost::json::value(clampedPosition.y)}};
-
-    // Move object in server storage.
-    object->setPosition(clampedPosition);
 
     auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, args.getData(), params, args.getMessageId());
     if (Command::sendRoomCommand(roomCommand, user, args.getProtocol()))

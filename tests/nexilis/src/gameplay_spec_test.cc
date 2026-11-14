@@ -514,8 +514,8 @@ TEST_F(GameplaySpecTest, RoomSendSkipsStaleIdAndContinuesDelivery)
 {
     setUpRoom();
     auto room = server::RoomStorage::getRoomById(ROOM_ID);
-    // Put a stale ID first so the test also verifies delivery continues.
-    room->getClients().insert(room->getClients().begin(), 999);
+    // A stale ID must not prevent delivery to active members.
+    room->joinRoom(999);
     const nx_data data{1, 2, 3};
     unsigned senderSends = 0;
     unsigned targetSends = 0;

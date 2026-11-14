@@ -174,13 +174,12 @@ void UDPServer::start()
 
 void UDPServer::stop()
 {
-    if (!m_stopped || m_stopped->exchange(true))
-    {
-        Log::debug("UDPServer stop already in progress or completed");
+    if (!m_stopped || !m_socketState)
         return;
-    }
-
+    m_stopped->store(true);
     m_socketState->disableSends();
+    if (m_receiveThread.joinable() && m_receiveThread.get_id() == std::this_thread::get_id())
+        return;
     if (m_receiveThread.joinable())
         m_receiveThread.join();
     cleanupDatagramTransports(User::Transport::inetUdp, *this);
@@ -233,6 +232,15 @@ void UDPServer::receiveFromClients()
     while (!m_stopped->load() && m_socketState->fd != -1)
     {
         expireIdleDatagramTransports(User::Transport::inetUdp, *this);
+        const auto now = std::chrono::steady_clock::now();
+        if (now - m_lastEndpointSweep >= std::chrono::seconds(1))
+        {
+            m_lastEndpointSweep = now;
+            std::erase_if(m_clientEndpoints, [](const auto& entry)
+                          {
+                auto user = ClientStorage::getClientById(entry.first);
+                return !user || !user->hasTransport(User::Transport::inetUdp); });
+        }
         try
         {
             sockaddr_in clientAddress{};

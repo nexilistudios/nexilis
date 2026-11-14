@@ -415,6 +415,13 @@ TEST_F(MessageHandlerPasswordProtectedTest, CorrectShortPasswordAuthenticates)
     EXPECT_EQ(result->getType(), server::BaseMessage::Type::auth_message);
 }
 
+TEST_F(MessageHandlerPasswordProtectedTest, RejectedPasswordsDoNotPublishUsers)
+{
+    for (int attempt = 0; attempt < 10; ++attempt)
+        EXPECT_EQ(sendPassword("wrong")->getType(), server::BaseMessage::Type::error_message);
+    EXPECT_TRUE(server::ClientStorage::getAllClients().empty());
+}
+
 TEST_F(MessageHandlerPasswordProtectedTest, WrongShortPasswordReturnsAuthError)
 {
     auto result = sendPassword("abc");
@@ -528,6 +535,20 @@ TEST_F(MessageHandlerSkipTest, NewClientReceivesAuthMessageWithId)
     EXPECT_NE(stored[0]->getId(), 0);
 }
 
+TEST_F(MessageHandlerSkipTest, RegistrationIsLimitedPerAddress)
+{
+    for (unsigned attempt = 0; attempt < 20; ++attempt)
+        ASSERT_NE(sendHandshake(), nullptr);
+    EXPECT_EQ(sendHandshake(), nullptr);
+    EXPECT_EQ(server::ClientStorage::getAllClients().size(), 20);
+}
+
+TEST_F(MessageHandlerSkipTest, InvalidHandshakeDoesNotAllocateUser)
+{
+    EXPECT_EQ(handler.readMessage("test_address", nx_data{1, 2, 3}, &config), nullptr);
+    EXPECT_TRUE(server::ClientStorage::getAllClients().empty());
+}
+
 TEST_F(MessageHandlerSkipTest, DropsCommandsOverThePerClientRateLimit)
 {
     auto first = sendHandshake();
@@ -634,7 +655,13 @@ TEST_F(ClientStorageSpecTest, MessageRetainsUserUntilDispatchEnds)
     server::ServerConfig config;
     config.setMode(AuthenticationMode::skip);
     server::MessageHandler handler;
-    auto message = handler.readMessage("address", nx_data(19, 0), &config);
+    nx_data handshake(8, 0);
+    const auto messageId = Util::convertToByteVector(static_cast<uint64_t>(100));
+    handshake.insert(handshake.end(), messageId.begin(), messageId.end());
+    handshake.emplace_back(static_cast<uint8_t>(CommandType::getting));
+    handshake.emplace_back(0);
+    handshake.emplace_back(0);
+    auto message = handler.readMessage("address", handshake, &config);
     ASSERT_NE(message, nullptr);
     ASSERT_NE(message->getUser(), nullptr);
     const auto id = message->getUser()->getId();

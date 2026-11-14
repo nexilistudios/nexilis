@@ -51,7 +51,7 @@ CommandResult ServerImpl::room_gameitem_update(const DefaultArgs& args)
                                                  (ch >= 'A' && ch <= 'Z') ||
                                                  (ch >= '0' && ch <= '9') || ch == '_' || ch == '-'; })))
         return CommandResult::invalid_input;
-    if (!room->getGameItemById(itemId))
+    if (!room->hasGameItem(itemId))
         return CommandResult::invalid_input;
     if (handledPickup &&
         (status != "picked_up" || !room->onGameItemPickup(user.getId(), itemId)))

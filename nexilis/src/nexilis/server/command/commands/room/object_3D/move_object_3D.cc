@@ -39,39 +39,29 @@ CommandResult ServerImpl::room_object3d_move(const DefaultArgs& args)
     if (!validation::isFinite(position))
         return CommandResult::invalid_input;
 
-    // Get object from server storage.
-    auto object = room->getObject3DById(objectId);
-    if (!object)
-    {
-        Log::error("Object not found with id: ", objectId);
-        return CommandResult::failure;
-    }
-
-    auto oldPosition = object->getPosition();
-    auto newPosition = oldPosition + position;
-    if (!validation::isFinite(newPosition))
-        return CommandResult::invalid_input;
-
     const auto& limits = GameplayLimits::get();
-    Vector3f clampedPosition(limits.clampHorizontal(newPosition.x),
-                             limits.clampHeight(newPosition.y),
-                             limits.clampHorizontal(newPosition.z));
-    if (clampedPosition.x != newPosition.x || clampedPosition.y != newPosition.y ||
-        clampedPosition.z != newPosition.z)
-    {
-        Log::warning("Object move to (", newPosition.x, ", ", newPosition.y, ", ",
-                     newPosition.z, ") clamped to (", clampedPosition.x, ", ",
-                     clampedPosition.y, ", ", clampedPosition.z, ")");
-    }
+    Vector3f clampedPosition;
+    bool validPosition = false;
+    const bool found = room->withObject3D(objectId, [&](Object3D& object)
+                                          {
+        const auto newPosition = object.getPosition() + position;
+        if (!validation::isFinite(newPosition))
+            return;
+        clampedPosition = Vector3f(limits.clampHorizontal(newPosition.x),
+                                   limits.clampHeight(newPosition.y),
+                                   limits.clampHorizontal(newPosition.z));
+        object.setPosition(clampedPosition);
+        validPosition = true; });
+    if (!found)
+        return CommandResult::failure;
+    if (!validPosition)
+        return CommandResult::invalid_input;
 
     std::map<std::string, boost::json::value> params{
             {"id", boost::json::value(objectId)},
             {"x", boost::json::value(clampedPosition.x)},
             {"y", boost::json::value(clampedPosition.y)},
             {"z", boost::json::value(clampedPosition.z)}};
-
-    // Move object in server storage.
-    object->setPosition(clampedPosition);
 
     auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, args.getData(), params, args.getMessageId());
     if (Command::sendRoomCommand(roomCommand, user, args.getProtocol()))

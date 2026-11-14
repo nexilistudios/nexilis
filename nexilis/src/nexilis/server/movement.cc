@@ -53,24 +53,26 @@ void Movement::object2D(std::unique_ptr<Movement2D> movement, User& user, NXProt
     if (!movement)
         return;
     auto room = RoomStorage::getRoomById(user.getRoomId());
-    auto* object = room ? room->getObject2DById(movement->getObjectId()) : nullptr;
-    if (!object)
+    if (!room)
         return;
-
-    const auto start = object->getPosition();
     const auto amount = movement->getAmount();
     const auto func = movement->getMovementFunc();
     const auto& limits = GameplayLimits::get();
     // Complete the displacement during dispatch; no task retains the user,
     // protocol, room, or object after the command returns.
-    const Vector2f position(limits.clampHorizontal(start.x + func(1.0, amount.x)),
+    Vector2f position;
+    const bool found = room->withObject2D(movement->getObjectId(), [&](Object2D& object)
+                                          {
+        const auto start = object.getPosition();
+        position = Vector2f(limits.clampHorizontal(start.x + func(1.0, amount.x)),
                             limits.clampHorizontal(start.y + func(1.0, amount.y)));
-    if (!validation::isFinite(position))
+        if (validation::isFinite(position))
+            object.setPosition(position); });
+    if (!found || !validation::isFinite(position))
         return;
-    object->setPosition(position);
     std::map<std::string, boost::json::value> params{
             {"createMovingType", boost::json::value("update")},
-            {"id", boost::json::value(object->getId())},
+            {"id", boost::json::value(movement->getObjectId())},
             {"x", boost::json::value(position.x)},
             {"y", boost::json::value(position.y)}};
     auto command = Command::createRoomCommand(user.getRoomId(), user, movement->getMessageData(), params, movement->getMessageId());
@@ -82,23 +84,25 @@ void Movement::object3D(std::unique_ptr<Movement3D> movement, User& user, NXProt
     if (!movement)
         return;
     auto room = RoomStorage::getRoomById(user.getRoomId());
-    auto* object = room ? room->getObject3DById(movement->getObjectId()) : nullptr;
-    if (!object)
+    if (!room)
         return;
-
-    const auto start = object->getPosition();
     const auto amount = movement->getAmount();
     const auto func = movement->getMovementFunc();
     const auto& limits = GameplayLimits::get();
-    const Vector3f position(limits.clampHorizontal(start.x + func(1.0, amount.x)),
+    Vector3f position;
+    const bool found = room->withObject3D(movement->getObjectId(), [&](Object3D& object)
+                                          {
+        const auto start = object.getPosition();
+        position = Vector3f(limits.clampHorizontal(start.x + func(1.0, amount.x)),
                             limits.clampHeight(start.y + func(1.0, amount.y)),
                             limits.clampHorizontal(start.z + func(1.0, amount.z)));
-    if (!validation::isFinite(position))
+        if (validation::isFinite(position))
+            object.setPosition(position); });
+    if (!found || !validation::isFinite(position))
         return;
-    object->setPosition(position);
     std::map<std::string, boost::json::value> params{
             {"createMovingType", boost::json::value("update")},
-            {"id", boost::json::value(object->getId())},
+            {"id", boost::json::value(movement->getObjectId())},
             {"x", boost::json::value(position.x)},
             {"y", boost::json::value(position.y)},
             {"z", boost::json::value(position.z)}};

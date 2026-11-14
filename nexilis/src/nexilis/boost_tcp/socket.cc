@@ -37,6 +37,7 @@ namespace
 {
 using Clock = std::chrono::steady_clock;
 constexpr auto kReadDeadline = std::chrono::seconds(5);
+constexpr auto kWriteDeadline = std::chrono::seconds(5);
 
 // All operations use the socket's private executor and finish before returning.
 // Cancellation handlers are drained before references to local buffers expire.
@@ -245,20 +246,21 @@ bool Socket::send(const nx_data& data)
 
     try
     {
-        size_t written;
-        if (m_tls)
-        {
-            written = boost::asio::write(*m_stream,
-                                         boost::asio::buffer(data),
-                                         boost::asio::transfer_all());
-        }
-        else
-        {
-            written = boost::asio::write(m_stream->next_layer(),
-                                         boost::asio::buffer(data),
-                                         boost::asio::transfer_all());
-        }
-        return written == data.size();
+        const bool sent = runUntil(*m_io, m_stream->next_layer(), Clock::now() + kWriteDeadline,
+                                   [&](auto handler)
+                                   {
+                                       if (m_tls)
+                                           boost::asio::async_write(*m_stream,
+                                                                    boost::asio::buffer(data),
+                                                                    std::move(handler));
+                                       else
+                                           boost::asio::async_write(m_stream->next_layer(),
+                                                                    boost::asio::buffer(data),
+                                                                    std::move(handler));
+                                   });
+        if (!sent)
+            closeInternal();
+        return sent;
     }
     catch (...)
     {

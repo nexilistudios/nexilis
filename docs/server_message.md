@@ -269,6 +269,13 @@ the recorded failures for the address. Like the root limiter, this state is
 scoped to the server protocol instance and resets when that instance is
 replaced.
 
+New registrations in both `skip` and `password_protected` modes are limited to
+20 successful handshakes per source address per minute. A new `skip` user must
+send the canonical 19-byte `getting/client_id` handshake. Unknown or malformed
+requests do not allocate a user. The shared client registry admits at most
+`NEXILIS_DEFAULT_MAX_CLIENTS` live users (currently 1024); further handshakes
+are rejected until users disconnect or expire.
+
 `ClientAPI::setMessageEncryption(true)` affects room broadcasts when the client has a nonempty password. It does not encrypt othercast or unicast messages. The message key is derived from that same password and the room ID; the server holds the password, so this feature does **not** hide message contents from the server.
 
 The current broadcast implementation also falls back to the plaintext payload if key derivation or encryption fails. Treat this option as experimental and do not rely on it for confidentiality until that behavior is changed and tested. TLS-PSK protects only the Boost TCP transport when both peers leave it enabled and use the same passphrase.
@@ -290,8 +297,11 @@ outside the registry mutex, and may reenter storage. The callback's room remains
 alive until the callback returns, even if the callback removes it.
 
 The registry mutex protects lookup, insertion, enumeration, removal, and callback
-registration. Shared handles protect lifetime; they do not lock mutable room
-contents. Applications must synchronize simultaneous changes to room state.
+registration. `Room::getClients()` returns a member-ID snapshot, and
+`tryJoinRoom()` checks capacity and inserts under one lock. Server command paths
+take locked snapshots of room objects and items. Applications that access the
+inherited `BaseRoom` object vectors directly must synchronize that access with
+their own concurrent mutations.
 
 ## Server client storage ownership
 
@@ -311,9 +321,10 @@ registered ID under the mutex and reject collisions. Use `auto` rather than
 pointer from a temporary.
 
 The registry mutex and shared handles protect container access and lifetime.
-They do not synchronize mutable user fields or revoke a command already in
-progress when its user is removed. Applications must synchronize concurrent
-changes to user state separately.
+User send callbacks and username access are locked; user ID and room ID are
+atomic, and object fields have locks. These locks do not turn several field
+reads into one coherent game-state snapshot or revoke a command already in
+progress when its user is removed.
 
 Room sends tolerate stale membership IDs: a missing client is skipped and
 remaining recipients are still attempted. `Command::sendRoomCommand` returns
@@ -341,6 +352,13 @@ connection identifies it. A handshake that closes without advertising a session
 cleans up immediately; one that advertises a session but never opens it expires
 after 30 seconds or when the protocol stops. Datagram transports similarly drop
 their remaining local users when the protocol stops.
+
+The raw IPv4 TCP server accepts at most 128 simultaneous connections. It
+reclaims completed connection workers, and each frame must arrive within ten
+seconds from the start of its read. The Unix stream server applies the same complete
+frame deadline to its one local connection. Boost TCP sends and receives have
+five-second operation deadlines; shutdown joins their workers before destroying
+the server.
 
 ## Command dispatch errors
 

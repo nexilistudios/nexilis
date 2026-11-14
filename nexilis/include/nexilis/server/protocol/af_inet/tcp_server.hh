@@ -72,6 +72,7 @@ public:
         std::string m_address;
         uint16_t m_port = 0;
         std::shared_ptr<Connection> m_connection;
+        std::atomic<bool> m_finished{false};
     };
 
 public:
@@ -132,6 +133,7 @@ private:
 
     /// Handle a connected client.
     void handleClient(const std::shared_ptr<Client>& client);
+    void reapFinishedClients();
     void receiveFromClient(const std::shared_ptr<Client>& client);
 
     /// Receive a framed message from a client.
@@ -146,6 +148,7 @@ private:
     std::thread m_acceptThread;
     std::vector<std::thread> m_clientThreads;
     std::vector<std::shared_ptr<Client>> m_clients;
+    static constexpr std::size_t maximumConnections = 128;
     std::unique_ptr<std::atomic<bool>> m_stopped = std::make_unique<std::atomic<bool>>(false);
     std::unique_ptr<std::mutex> m_mutex = std::make_unique<std::mutex>();
 };

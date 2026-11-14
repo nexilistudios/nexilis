@@ -38,16 +38,8 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
         return CommandResult::invalid_input;
     }
 
-    if (room->contains(user_id))
-    {
-        Log::error("Cannot join room where the client already is!");
-        return CommandResult::error;
-    }
-
-    if (room->getClients().size() >= room->getMaxSize())
+    if (!room->tryJoinRoom(user_id))
         return CommandResult::invalid_input;
-
-    room->joinRoom(user_id);
 
     args.getUser().setRoomId(room->getId());
     assert(room->contains(user_id));
@@ -105,7 +97,7 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
     Command::sendMessageToClient(roster, user, protocol);
 
     // Send existing game items to the joining client
-    for (auto& item : room->getGameItems())
+    for (auto& item : room->getGameItemsSnapshot())
     {
         auto pos = item.getPosition();
         auto dim = item.getDimensions();

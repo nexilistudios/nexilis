@@ -48,8 +48,19 @@ TCPServer::TCPServer(const ServerConfig& settings) noexcept
     // m_switchedAcceptor will be configured later in switchToSessionPort().
 }
 
-TCPServer::TCPServer(TCPServer&& other) noexcept
-    : NXProtocol(std::move(other)),
+TCPServer& TCPServer::movable(TCPServer& server)
+{
+    if (server.m_listenThread.joinable() || server.m_ioContextThread.joinable() ||
+        server.m_switchedAcceptThread.joinable() ||
+        std::any_of(server.m_clientThreads.begin(), server.m_clientThreads.end(),
+                    [](const auto& thread)
+                    { return thread.joinable(); }))
+        throw std::logic_error("Stop a Boost TCP server before moving it");
+    return server;
+}
+
+TCPServer::TCPServer(TCPServer&& other)
+    : NXProtocol(std::move(movable(other))),
       ServerProtocol(std::move(other)),
       NxClass(std::move(other)),
       m_firstClientConnected(std::move(other.m_firstClientConnected) ? std::move(other.m_firstClientConnected) : std::make_unique<std::atomic<bool>>(false)),
@@ -67,10 +78,13 @@ TCPServer::TCPServer(TCPServer&& other) noexcept
 {
 }
 
-TCPServer& TCPServer::operator=(TCPServer&& other) noexcept
+TCPServer& TCPServer::operator=(TCPServer&& other)
 {
     if (this != &other)
     {
+        movable(other);
+        movable(*this);
+        stop();
         static_cast<NXProtocol&>(*this) = static_cast<NXProtocol&&>(other);
         static_cast<ServerProtocol&>(*this) = static_cast<ServerProtocol&&>(other);
         static_cast<NxClass&>(*this) = static_cast<NxClass&&>(other);
@@ -106,6 +120,9 @@ TCPServer::~TCPServer()
 
 void TCPServer::start()
 {
+    if (!m_stopped || m_stopped->load() || m_listenThread.joinable() ||
+        m_ioContextThread.joinable() || !m_acceptor.is_open())
+        return;
     // Build the shared TLS context once. When TLS is enabled but the context
     // cannot be created (e.g. no passphrase configured), connections are
     // refused rather than silently served in plaintext.
@@ -137,11 +154,9 @@ void TCPServer::start()
 
 void TCPServer::stop()
 {
-    if (!m_stopped || m_stopped->exchange(true))
-    {
-        Log::debug(header(), "stop already in progress or completed.");
+    if (!m_stopped)
         return;
-    }
+    m_stopped->store(true);
 
     // Stop io context.
     if (m_ioContext)
@@ -149,29 +164,6 @@ void TCPServer::stop()
         Log::debug(header(), "TCPServer stopping io_context");
         m_ioContext->stop();
     }
-
-    {
-        std::lock_guard<std::mutex> lock(*m_mutex);
-        // Wake and join client workers instead of detaching them so they cannot
-        // outlive the server object. Sockets are closed by the workers
-        // when receive fails after the io_context stops.
-    }
-
-    for (auto& thread : m_clientThreads)
-    {
-        if (thread.joinable())
-        {
-            thread.join();
-        }
-    }
-    {
-        std::lock_guard<std::mutex> lock(*m_mutex);
-        m_clientThreads.clear();
-    }
-
-    // Handshakes that completed but never opened a session port would otherwise
-    // keep their users registered after shutdown.
-    cleanupPendingHandshakes(*this);
 
     auto tryJoinThread = [this](std::thread& thread, const std::string& name)
     {
@@ -186,8 +178,27 @@ void TCPServer::stop()
     // on their own. Join them before touching the acceptors: closing an
     // acceptor from this thread while the accept thread is blocked on it is a
     // data race that can crash on shutdown.
-    tryJoinThread(m_switchedAcceptThread, "switchAcceptThread");
     tryJoinThread(m_listenThread, "listenThread");
+    // Synchronize with any handshake callback that could create the switched
+    // accept worker. It checks m_stopped while holding the same lock.
+    {
+        std::lock_guard<std::mutex> lock(*m_mutex);
+    }
+    tryJoinThread(m_switchedAcceptThread, "switchAcceptThread");
+
+    {
+        std::lock_guard<std::mutex> lock(*m_mutex);
+        if (std::any_of(m_clientThreads.begin(), m_clientThreads.end(),
+                        [](const auto& thread)
+                        { return thread.joinable() && thread.get_id() == std::this_thread::get_id(); }))
+            return;
+    }
+    for (auto& thread : m_clientThreads)
+        if (thread.joinable())
+            thread.join();
+    m_clientThreads.clear();
+
+    cleanupPendingHandshakes(*this);
     tryJoinThread(m_ioContextThread, "ioContextThread");
 
     // Close sockets. Only the accept thread was using the acceptors, and it
@@ -209,6 +220,8 @@ void TCPServer::stop()
 
 void TCPServer::startSwitchedAccepting()
 {
+    if (m_stopped->load() || m_switchedAcceptThread.joinable())
+        return;
     // clang-format off
     m_switchedAcceptThread = std::thread([this]()
     {
@@ -711,6 +724,11 @@ bool TCPServer::sendToClient(const nx_data& data, boost::asio::ip::tcp::socket& 
 
 uint16_t TCPServer::switchToSessionPort()
 {
+    std::lock_guard<std::mutex> lock(*m_mutex);
+    if (m_stopped->load())
+        return 0;
+    if (m_switchedPort->load() != 0)
+        return m_switchedPort->load();
     boost::system::error_code ec;
 
     // Close the previous switched acceptor if any.

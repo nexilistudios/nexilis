@@ -32,6 +32,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -201,8 +202,24 @@ TCPServer& TCPServer::operator=(TCPServer&& other)
 
 void TCPServer::start()
 {
-    if (!m_stopped || m_stopped->load() || m_acceptThread.joinable() || m_serverSocket == -1)
+    if (!m_stopped || m_acceptThread.joinable())
         return;
+
+    if (m_stopped->exchange(false))
+    {
+        createSocket();
+        if (m_serverSocket != -1)
+        {
+            bindSocket();
+            if (m_serverSocket != -1)
+                listenSocket();
+        }
+    }
+    if (m_serverSocket == -1)
+    {
+        m_stopped->store(true);
+        return;
+    }
 
     m_acceptThread = std::thread([this]()
                                  { acceptClients(); });
@@ -305,6 +322,7 @@ void TCPServer::acceptClients()
 {
     while (!m_stopped->load())
     {
+        reapFinishedClients();
         pollfd pfd{};
         pfd.fd = m_serverSocket;
         pfd.events = POLLIN;
@@ -353,6 +371,11 @@ void TCPServer::acceptClients()
 void TCPServer::handleClient(const std::shared_ptr<Client>& client)
 {
     std::lock_guard<std::mutex> lock(*m_mutex);
+    if (m_clients.size() >= maximumConnections)
+    {
+        client->m_connection->close();
+        return;
+    }
     m_clients.push_back(client);
     connectionEstablished();
 
@@ -365,6 +388,23 @@ void TCPServer::handleClient(const std::shared_ptr<Client>& client)
         connectionClosed();
         m_clients.pop_back();
         throw;
+    }
+}
+
+void TCPServer::reapFinishedClients()
+{
+    std::lock_guard<std::mutex> lock(*m_mutex);
+    for (std::size_t i = 0; i < m_clients.size();)
+    {
+        if (!m_clients[i]->m_finished.load())
+        {
+            ++i;
+            continue;
+        }
+        if (m_clientThreads[i].joinable())
+            m_clientThreads[i].join();
+        m_clientThreads.erase(m_clientThreads.begin() + i);
+        m_clients.erase(m_clients.begin() + i);
     }
 }
 
@@ -449,23 +489,46 @@ void TCPServer::receiveFromClient(const std::shared_ptr<Client>& client)
 
     connection->close();
     connectionClosed();
+    client->m_finished.store(true);
 }
 
 bool TCPServer::receiveMessage(int clientSocket, nx_data& receivedData)
 {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    const auto readExact = [&](void* buffer, std::size_t count)
+    {
+        auto* bytes = static_cast<uint8_t*>(buffer);
+        std::size_t offset = 0;
+        while (offset < count && !m_stopped->load())
+        {
+            const auto now = std::chrono::steady_clock::now();
+            if (now >= deadline)
+                return false;
+            const auto wait = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+            pollfd pfd{clientSocket, POLLIN, 0};
+            const int ready = poll(&pfd, 1, static_cast<int>(wait.count()));
+            if (ready == 0)
+                return false;
+            if (ready < 0)
+            {
+                if (errno == EINTR)
+                    continue;
+                return false;
+            }
+            const ssize_t size = recv(clientSocket, bytes + offset, count - offset, MSG_DONTWAIT);
+            if (size > 0)
+                offset += static_cast<std::size_t>(size);
+            else if (size == 0)
+                return false;
+            else if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
+                return false;
+        }
+        return offset == count;
+    };
+
     uint32_t networkSize = 0;
-    ssize_t received = recv(clientSocket, &networkSize, sizeof(networkSize), 0);
-
-    if (received <= 0)
-    {
+    if (!readExact(&networkSize, sizeof(networkSize)))
         return false;
-    }
-
-    if (received != static_cast<ssize_t>(sizeof(networkSize)))
-    {
-        Log::error("TCPServer: Error receiving frame size");
-        return false;
-    }
 
     uint32_t frameSize = ntohl(networkSize);
 
@@ -476,24 +539,7 @@ bool TCPServer::receiveMessage(int clientSocket, nx_data& receivedData)
     }
 
     receivedData.resize(frameSize);
-    size_t bytesReceived = 0;
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    while (bytesReceived < frameSize)
-    {
-        ssize_t read = recv(clientSocket, receivedData.data() + bytesReceived, frameSize - bytesReceived, 0);
-
-        if (read <= 0)
-        {
-            return false;
-        }
-
-        bytesReceived += static_cast<size_t>(read);
-    }
-#pragma GCC diagnostic pop
-
-    return true;
+    return readExact(receivedData.data(), frameSize);
 }
 
 } // namespace nexilis::server::af_inet

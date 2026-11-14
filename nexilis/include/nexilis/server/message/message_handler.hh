@@ -71,6 +71,21 @@ private:
 
     std::shared_ptr<PassphraseAuthState> m_passphraseAuthState =
             std::make_shared<PassphraseAuthState>();
+
+    struct RegistrationState
+    {
+        struct Attempt
+        {
+            std::chrono::steady_clock::time_point windowStart;
+            unsigned count = 0;
+        };
+        std::mutex mutex;
+        std::unordered_map<std::string, Attempt> byAddress;
+    };
+    std::shared_ptr<RegistrationState> m_registrationState =
+            std::make_shared<RegistrationState>();
+
+    bool acceptRegistration(const std::string& address);
 };
 
 } // namespace nexilis::server

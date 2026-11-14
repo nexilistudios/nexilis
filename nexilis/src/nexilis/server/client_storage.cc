@@ -30,6 +30,8 @@ bool ClientStorage::add(std::shared_ptr<User> client)
     if (!client)
         return false;
     std::lock_guard lock(m_mutex);
+    if (m_clients.size() >= maximumClients)
+        return false;
     if (std::any_of(m_clients.begin(), m_clients.end(), [&](const auto& existing)
                     { return existing->getId() == client->getId(); }))
         return false;

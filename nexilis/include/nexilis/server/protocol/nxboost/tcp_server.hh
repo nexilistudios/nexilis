@@ -45,10 +45,10 @@ public:
     ~TCPServer();
 
     /// Move constructor.
-    TCPServer(TCPServer&& other) noexcept;
+    TCPServer(TCPServer&& other);
 
     /// Move assignment operator.
-    TCPServer& operator=(TCPServer&& other) noexcept;
+    TCPServer& operator=(TCPServer&& other);
 
     /// Deleted move constructor.
     TCPServer(const TCPServer&) = delete;
@@ -80,6 +80,7 @@ private:
     std::string getClientAddress(boost::asio::ip::tcp::socket& socket);
     void startSwitchedAccepting();
     uint16_t switchToSessionPort();
+    static TCPServer& movable(TCPServer& server);
 
 private:
     const uint16_t m_defaultServerPort = Ports::getBoostTCPPort();

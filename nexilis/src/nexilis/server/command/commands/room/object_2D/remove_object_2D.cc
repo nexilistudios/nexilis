@@ -33,7 +33,7 @@ CommandResult ServerImpl::room_object2d_destroy(const DefaultArgs& args)
     if (payload.size() != 8)
         return CommandResult::invalid_input;
     auto objectId = Util::uint64FromFront(payload);
-    if (!room->getObject2DById(objectId))
+    if (!room->hasObject2D(objectId))
         return CommandResult::invalid_input;
 
     // Remove from storage.

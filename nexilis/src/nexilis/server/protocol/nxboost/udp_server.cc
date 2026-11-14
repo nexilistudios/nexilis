@@ -170,6 +170,15 @@ void UDPServer::receiveFromClients()
     while (!m_stopped->load())
     {
         expireIdleDatagramTransports(User::Transport::boostUdp, *this);
+        const auto now = std::chrono::steady_clock::now();
+        if (now - m_lastEndpointSweep >= std::chrono::seconds(1))
+        {
+            m_lastEndpointSweep = now;
+            std::erase_if(m_clientEndpoints, [](const auto& entry)
+                          {
+                auto user = ClientStorage::getClientById(entry.first);
+                return !user || !user->hasTransport(User::Transport::boostUdp); });
+        }
         try
         {
             receiveBuffer.resize(NEXILIS_BUFFER);

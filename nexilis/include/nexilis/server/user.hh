@@ -30,6 +30,7 @@
 #include <nexilis/object/object_2d.hh>
 #include <nexilis/util.hh>
 #include <optional>
+#include <stdexcept>
 
 namespace nexilis::server
 {
@@ -106,18 +107,19 @@ public:
 
     void setId(uint64_t id)
     {
-        assert(hasRootAccess());
+        if (!hasRootAccess())
+            throw std::logic_error("Root access required to change user ID");
         BaseClient::setId(id);
     }
 
     void setRoomId(uint64_t roomId)
     {
-        m_roomId = roomId;
+        m_roomId.store(roomId);
     }
 
     uint64_t getRoomId() const
     {
-        return m_roomId;
+        return m_roomId.load();
     }
 
     /// Transports that can keep one logical user connected.
@@ -368,8 +370,7 @@ private:
     std::string m_udpToken;
     std::atomic<bool> m_udpTokenSent{false};
     std::shared_ptr<ReplayWindow> m_replayWindow = std::make_shared<ReplayWindow>();
-    std::string m_username;
-    uint64_t m_roomId = 0;
+    std::atomic<uint64_t> m_roomId{0};
     mutable std::mutex m_shotMutex;
     std::chrono::steady_clock::time_point m_lastShotTime{};
     mutable std::mutex m_broadcastMutex;

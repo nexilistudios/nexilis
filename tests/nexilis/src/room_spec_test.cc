@@ -37,6 +37,20 @@ constexpr uint64_t CLIENT_A = 100;
 constexpr uint64_t CLIENT_B = 200;
 constexpr uint64_t CLIENT_C = 300;
 
+TEST(ServerRoomMembership, ConcurrentJoinsRespectCapacity)
+{
+    server::Room room(RoomData(CLIENT_A, "bounded", ROOM_ID, RoomData::Context::_3D, 1));
+    std::atomic<unsigned> accepted{0};
+    std::thread first([&]()
+                      { accepted += room.tryJoinRoom(CLIENT_A); });
+    std::thread second([&]()
+                       { accepted += room.tryJoinRoom(CLIENT_B); });
+    first.join();
+    second.join();
+    EXPECT_EQ(accepted.load(), 1u);
+    EXPECT_EQ(room.getClients().size(), 1u);
+}
+
 /// Build a "getting"/"info_rooms" JSON object with a single room.
 /// The room contains one client per entry in `clients`.
 boost::json::object infoRoomsMessage(const std::vector<uint64_t>& clients)

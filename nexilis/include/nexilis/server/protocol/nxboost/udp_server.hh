@@ -26,6 +26,7 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -87,6 +88,7 @@ private:
     uint16_t m_serverPort = 0;
     std::array<uint8_t, 32> m_cookieKey{};
     std::unordered_map<uint64_t, boost::asio::ip::udp::endpoint> m_clientEndpoints;
+    std::chrono::steady_clock::time_point m_lastEndpointSweep{};
 };
 
 } // namespace nexilis::server::nxboost

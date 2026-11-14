@@ -16,6 +16,7 @@
 
 #ifdef __linux__
 
+#include <chrono>
 #include <nexilis/nexilis_constants.hh>
 #include <nexilis/room_command_type.hh>
 #include <nexilis/server/client_storage.hh>
@@ -26,6 +27,7 @@
 #include <nexilis/server/protocol/af_unix/stream_server.hh>
 #include <nexilis/server/room_storage.hh>
 #include <nexilis/unix_socket.hh>
+#include <poll.h>
 #include <utility>
 
 #include <sys/socket.h>
@@ -211,15 +213,33 @@ void StreamServer::bindSocket()
 
 nx_data StreamServer::receiveMessage(int socket)
 {
-    auto readExact = [socket](uint8_t* data, size_t length)
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    auto readExact = [socket, deadline](uint8_t* data, size_t length)
     {
         size_t offset = 0;
         while (offset < length)
         {
-            ssize_t count = recv(socket, data + offset, length - offset, 0);
-            if (count <= 0)
+            const auto now = std::chrono::steady_clock::now();
+            if (now >= deadline)
                 return false;
-            offset += static_cast<size_t>(count);
+            const auto wait = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+            pollfd pfd{socket, POLLIN, 0};
+            const int ready = poll(&pfd, 1, static_cast<int>(wait.count()));
+            if (ready == 0)
+                return false;
+            if (ready < 0)
+            {
+                if (errno == EINTR)
+                    continue;
+                return false;
+            }
+            const ssize_t count = recv(socket, data + offset, length - offset, MSG_DONTWAIT);
+            if (count > 0)
+                offset += static_cast<size_t>(count);
+            else if (count == 0)
+                return false;
+            else if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
+                return false;
         }
         return true;
     };

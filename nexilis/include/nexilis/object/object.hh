@@ -17,6 +17,8 @@
 #ifndef NEXILIS_OBJECT_HH
 #define NEXILIS_OBJECT_HH
 
+#include <memory>
+#include <mutex>
 #include <nexilis/logger/log.hh>
 #include <nexilis/nx_class.hh>
 #include <nexilis/nx_util.hh>
@@ -39,12 +41,13 @@ public:
 
     /// Copy constructor.
     Object(const Object& other)
-        : m_id(other.m_id),
-          m_position(other.m_position),
-          m_dimensions(other.m_dimensions),
-          m_filepath(other.m_filepath),
-          m_mutex(std::make_unique<std::mutex>())
+        : m_mutex(std::make_unique<std::mutex>())
     {
+        std::lock_guard lock(*other.m_mutex);
+        m_id = other.m_id;
+        m_position = other.m_position;
+        m_dimensions = other.m_dimensions;
+        m_filepath = other.m_filepath;
     }
 
     /// Copy assignment operator.
@@ -52,14 +55,13 @@ public:
     {
         if (this != &other)
         {
+            if (!m_mutex)
+                m_mutex = std::make_unique<std::mutex>();
+            std::scoped_lock lock(*m_mutex, *other.m_mutex);
             m_id = other.m_id;
             m_position = other.m_position;
             m_dimensions = other.m_dimensions;
             m_filepath = other.m_filepath;
-            if (!m_mutex)
-            {
-                m_mutex = std::make_unique<std::mutex>();
-            }
         }
         return *this;
     }
@@ -166,6 +168,7 @@ public:
 protected:
     nx_data baseData()
     {
+        std::lock_guard lock(*m_mutex);
         nx_data startingData;
         nx_emplace(startingData, m_id, m_position, m_dimensions, m_filepath);
         return startingData;

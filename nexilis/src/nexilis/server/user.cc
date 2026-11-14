@@ -42,8 +42,7 @@ User::User(User&& other) noexcept
       m_udpToken(std::move(other.m_udpToken)),
       m_udpTokenSent(other.m_udpTokenSent.load()),
       m_replayWindow(std::move(other.m_replayWindow)),
-      m_username(std::move(other.m_username)),
-      m_roomId(std::move(other.m_roomId)),
+      m_roomId(other.m_roomId.load()),
       m_hasRootAccess(other.m_hasRootAccess.load()),
       m_hasCommonAccess(other.m_hasCommonAccess.load())
 {
@@ -89,8 +88,7 @@ User& User::operator=(User&& other) noexcept
         m_udpToken = std::move(other.m_udpToken);
         m_udpTokenSent.store(other.m_udpTokenSent.load());
         m_replayWindow = std::move(other.m_replayWindow);
-        m_username = std::move(other.m_username);
-        m_roomId = std::move(other.m_roomId);
+        m_roomId.store(other.m_roomId.load());
         {
             std::scoped_lock lock(m_shotMutex, other.m_shotMutex);
             m_lastShotTime = other.m_lastShotTime;

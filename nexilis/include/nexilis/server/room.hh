@@ -95,10 +95,21 @@ public:
     void deleteObject2D(uint64_t id);
     void deleteObject3D(uint64_t id);
     void deleteGameItem(uint64_t id);
+    std::vector<Object2D> getObjects2DSnapshot() const;
+    std::vector<Object3D> getObjects3DSnapshot() const;
+    std::vector<GameItem> getGameItemsSnapshot() const;
+    bool withObject2D(uint64_t id, const std::function<void(Object2D&)>& action);
+    bool withObject3D(uint64_t id, const std::function<void(Object3D&)>& action);
+    bool hasObject2D(uint64_t id);
+    bool hasObject3D(uint64_t id);
+    bool hasGameItem(uint64_t id);
+    void updateGameItemStatus(uint64_t id, const std::string& status);
 
     /// User joins the room context.
     /// \param userId The id of the user that joins the room.
     void joinRoom(uint64_t userId);
+    /// Atomically enforce the room capacity and insert a new member.
+    bool tryJoinRoom(uint64_t userId);
 
     /// User leaves the room.
     /// \param userId The id the user that leaves the room.
@@ -108,15 +119,8 @@ public:
     /// \param userId The id of the user we are checking.
     bool contains(uint64_t userId);
 
-    std::vector<uint64_t>& getClients()
-    {
-        return m_clientIds;
-    }
-
-    const std::vector<uint64_t>& getClients() const
-    {
-        return m_clientIds;
-    }
+    /// Return a stable snapshot of member IDs.
+    std::vector<uint64_t> getClients() const;
 
     /// Store a broadcast message in the room. Only the most recent
     /// NEXILIS_MAX_BROADCAST_HISTORY messages are retained.
@@ -228,6 +232,7 @@ public:
 
 private:
     std::vector<uint64_t> m_clientIds;
+    mutable std::mutex m_membershipMutex;
     mutable std::mutex m_broadcastMutex;
     std::deque<Broadcast> m_broadcasts;
     std::unordered_map<uint64_t, float> m_playerHealth;
@@ -256,7 +261,7 @@ private:
 
     /// Atomic because movement threads read this while command threads write it.
     std::atomic<bool> m_overlappingAllowed{true};
-    std::mutex m_resourceMutex;
+    mutable std::mutex m_resourceMutex;
 };
 
 } // namespace nexilis::server

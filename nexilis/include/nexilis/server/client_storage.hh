@@ -30,6 +30,7 @@ namespace nexilis::server
 class ClientStorage
 {
 public:
+    static constexpr std::size_t maximumClients = NEXILIS_DEFAULT_MAX_CLIENTS;
     /// Publish a user; reject null handles and duplicate IDs.
     /// A unique_ptr may be moved in and converted to shared ownership.
     static bool add(std::shared_ptr<User> client);

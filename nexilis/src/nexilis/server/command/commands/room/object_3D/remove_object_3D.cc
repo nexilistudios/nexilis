@@ -33,7 +33,7 @@ CommandResult ServerImpl::room_object3d_destroy(const DefaultArgs& args)
     if (payload.size() != 8)
         return CommandResult::invalid_input;
     auto objectId = Util::uint64FromFront(payload);
-    if (!room->getObject3DById(objectId))
+    if (!room->hasObject3D(objectId))
         return CommandResult::invalid_input;
 
     // Remove from storage.
