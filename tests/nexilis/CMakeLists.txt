@@ -47,6 +47,11 @@ find_package(GTest REQUIRED)
 file(GLOB_RECURSE NEXILIS_TEST_SOURCES CONFIGURE_DEPENDS "src/*.cc")
 
 add_executable(nexilis_tests ${NEXILIS_TEST_SOURCES})
+set_target_properties(nexilis_tests PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+)
 
 target_link_libraries(nexilis_tests PRIVATE
     Nexilis::nexilis

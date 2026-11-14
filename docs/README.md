@@ -17,7 +17,7 @@ See [dependencies](dependencies.md), [network ports](ports.md), the [message pro
 
 ## Testing
 
-The native test suites need GoogleTest and a configured Nexilis build. After `make install`, run `make test-cpp` and `make test-c`. C# tests also require the .NET SDK; run `make test-csharp`. `make test-lua` requires LuaJIT and runs a local TCP/UDP server. `make test-examples` builds and runs the examples. `make test` runs all suites, including Premake, which requires Premake 5.
+The native test suites need GoogleTest and a configured Nexilis build. The C++ test target requires C++20, including when configured separately from the library. After `make install`, run `make test-cpp` and `make test-c`. C# tests also require the .NET SDK; run `make test-csharp`. `make test-lua` requires LuaJIT and runs a local TCP/UDP server. `make test-examples` builds and runs the examples. `make test` runs all suites, including Premake, which requires Premake 5.
 
 The CI workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) shows the dependencies used for each check.
 
