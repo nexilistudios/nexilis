@@ -23,6 +23,8 @@ import os
 import glob
 from threading import Thread
 
+CPPCHECK_VERSION = "2.22.0"
+
 
 def stream_output(stream, output_type):
     """
@@ -47,9 +49,26 @@ def run_cppcheck(include_dir, src_dir, exclude_dirs=None, strict=False) -> bool:
     :param include_dir: The directory containing header files.
     :param src_dir: The directory containing source files.
     :param exclude_dirs: List of directories to exclude.
-    :param additional_args: Additional arguments to pass to cppcheck.
-    :param strict: Run with unusedFunction, missingIncludeSystem, unusedStructMember.
+    :param strict: Run with unusedFunction and unusedStructMember.
     """
+    try:
+        version = subprocess.run(
+            ["cppcheck", "--version"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as error:
+        print(f"Cannot check cppcheck version: {error}", file=sys.stderr)
+        return False
+    if version != f"Cppcheck {CPPCHECK_VERSION}":
+        print(
+            f"Expected Cppcheck {CPPCHECK_VERSION}, found {version}. "
+            "Install the pinned version used in CI.",
+            file=sys.stderr,
+        )
+        return False
+
     # Base cppcheck command.
     command = [
         "cppcheck",
@@ -62,6 +81,7 @@ def run_cppcheck(include_dir, src_dir, exclude_dirs=None, strict=False) -> bool:
         "--template=gcc",
         "--force",
         "--std=c++20",
+        "--platform=unix64",
     ]
 
     if not strict:

@@ -34,10 +34,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install cppcheck
+      - name: Check out pinned cppcheck source
+        uses: actions/checkout@v4
+        with:
+          repository: cppcheck-opensource/cppcheck
+          ref: 2.22.0
+          path: cppcheck-source
+
+      - name: Build cppcheck 2.22.0
         run: |
-          sudo apt-get update || true
-          sudo apt-get install -y cppcheck expect
+          cmake -S cppcheck-source -B cppcheck-build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DBUILD_GUI=OFF
+          cmake --build cppcheck-build --parallel 2
+          sudo cmake --install cppcheck-build
+          sudo apt-get update
+          sudo apt-get install -y expect
+          cppcheck --version
 
       - name: Run cppcheck.py
         run: |

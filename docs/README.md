@@ -21,6 +21,12 @@ The native test suites need GoogleTest and a configured Nexilis build. The C++ t
 
 The CI workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) shows the dependencies used for each check.
 
+Run `make cppcheck` locally to use the same analysis command as CI. Both paths
+require Cppcheck 2.22.0; the script reports a version mismatch before scanning.
+CI builds that version from the upstream 2.22.0 tag. Install the same version
+locally if your distribution provides another release. The script also needs
+`unbuffer` from Expect. Both runs analyze as a 64-bit Unix target.
+
 `make format`, `make pre-commit`, and `make pre-commit-all` accept clang-format
 23.1.x, including system installations. CI installs 23.1.1; install it with
 `python -m pip install clang-format==23.1.1` if needed.
