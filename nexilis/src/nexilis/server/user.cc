@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <stdexcept>
 
 namespace nexilis::server
@@ -59,6 +60,12 @@ User::User(User&& other) noexcept
         m_commandLimiterInitialized = other.m_commandLimiterInitialized;
         m_commandLastRefill = other.m_commandLastRefill;
         m_commandTokens = other.m_commandTokens;
+    }
+    {
+        std::lock_guard<std::mutex> lock(other.m_movementMutex);
+        m_movementBudgetInitialized = other.m_movementBudgetInitialized;
+        m_movementLastRefill = other.m_movementLastRefill;
+        m_movementSeconds = other.m_movementSeconds;
     }
     {
         std::lock_guard<std::mutex> lock(other.m_sendMutex);
@@ -102,6 +109,12 @@ User& User::operator=(User&& other) noexcept
             m_commandLimiterInitialized = other.m_commandLimiterInitialized;
             m_commandLastRefill = other.m_commandLastRefill;
             m_commandTokens = other.m_commandTokens;
+        }
+        {
+            std::scoped_lock lock(m_movementMutex, other.m_movementMutex);
+            m_movementBudgetInitialized = other.m_movementBudgetInitialized;
+            m_movementLastRefill = other.m_movementLastRefill;
+            m_movementSeconds = other.m_movementSeconds;
         }
         {
             std::scoped_lock lock(m_sendMutex, other.m_sendMutex);
@@ -187,6 +200,34 @@ bool User::acceptCommand(std::chrono::steady_clock::time_point now,
         return false;
 
     m_commandTokens -= 1.0;
+    return true;
+}
+
+bool User::acceptMovementDuration(std::chrono::steady_clock::time_point now,
+                                  float durationSeconds)
+{
+    constexpr double capacity = 0.25;
+    if (!std::isfinite(durationSeconds) || durationSeconds <= 0.0f ||
+        durationSeconds > capacity)
+        return false;
+
+    std::lock_guard<std::mutex> lock(m_movementMutex);
+    if (!m_movementBudgetInitialized)
+    {
+        m_movementSeconds = capacity;
+        m_movementLastRefill = now;
+        m_movementBudgetInitialized = true;
+    }
+    else if (now > m_movementLastRefill)
+    {
+        const double elapsed = std::chrono::duration<double>(now - m_movementLastRefill).count();
+        m_movementSeconds = std::min(capacity, m_movementSeconds + elapsed);
+        m_movementLastRefill = now;
+    }
+
+    if (static_cast<double>(durationSeconds) > m_movementSeconds)
+        return false;
+    m_movementSeconds -= durationSeconds;
     return true;
 }
 

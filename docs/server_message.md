@@ -94,6 +94,12 @@ relay that yaw, and the legacy form uses zero. The legacy movement handler
 rejects durations outside (0, 0.25] seconds and applies each accepted move
 during command dispatch. The 2D movement request uses the same duration range
 and applies its vector as one displacement rather than streaming tick updates.
+For these legacy handlers, the server also reserves each requested duration
+from a per-user budget shared across 2D, 3D, and transports. The budget refills
+at one second per second and holds at most 0.25 seconds, so sending many packets
+cannot multiply elapsed movement time. A request that exceeds the available
+budget is rejected. The 2D displacement must fit the configured maximum
+movement speed for its duration; the 3D velocity is scaled to that speed.
 
 An application room can disable client position requests and install a movement
 input handler. In that room, the three movement floats are input direction and

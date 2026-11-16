@@ -17,8 +17,10 @@
 #include <nexilis/server/client_storage.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
+#include <nexilis/server/gameplay_limits.hh>
 #include <nexilis/server/room_storage.hh>
 
+#include <chrono>
 #include <cmath>
 
 namespace nexilis::server
@@ -47,6 +49,13 @@ CommandResult ServerImpl::room_player2d_movement(const DefaultArgs& args)
     auto room = RoomStorage::getRoomById(user.getRoomId());
     if (!room)
         return CommandResult::failure;
+
+    const double displacement = std::hypot(static_cast<double>(vecX),
+                                           static_cast<double>(vecY));
+    if (displacement > static_cast<double>(GameplayLimits::get().getMaxMovementSpeed()) * delta)
+        return CommandResult::invalid_input;
+    if (!user.acceptMovementDuration(std::chrono::steady_clock::now(), delta))
+        return CommandResult::invalid_input;
 
     // The 2D vector is the total displacement for the requested duration.
     // Apply it during dispatch so no worker outlives the user or room.

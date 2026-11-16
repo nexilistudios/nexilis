@@ -220,6 +220,11 @@ public:
                        float ratePerSecond,
                        float burstCapacity);
 
+    /// Reserve client-reported movement time across 2D, 3D, and transports.
+    /// At most 0.25 seconds may be banked; the budget refills in real time.
+    bool acceptMovementDuration(std::chrono::steady_clock::time_point now,
+                                float durationSeconds);
+
     void setUsername(const std::string& username)
     {
         BaseClient::setBaseUsername(username);
@@ -379,6 +384,10 @@ private:
     bool m_commandLimiterInitialized = false;
     std::chrono::steady_clock::time_point m_commandLastRefill{};
     double m_commandTokens = 0.0;
+    mutable std::mutex m_movementMutex;
+    bool m_movementBudgetInitialized = false;
+    std::chrono::steady_clock::time_point m_movementLastRefill{};
+    double m_movementSeconds = 0.0;
 
     // Transport presence. A user stays registered while any stream connection,
     // datagram transport, or pending handshake remains.

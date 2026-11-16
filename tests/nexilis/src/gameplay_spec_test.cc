@@ -1650,6 +1650,18 @@ TEST_F(GameplaySpecTest, Player3DMovementRejectsExcessiveDelta)
     EXPECT_TRUE(targetMessages.empty());
 }
 
+TEST_F(GameplaySpecTest, Player3DMovementCannotSpendMoreThanElapsedTime)
+{
+    setUpRoom();
+    auto targetMessages = receivedMessages(*m_target);
+    const auto move = player3DMovementBytes({100.0f, 0.0f, 0.0f}, 0.25f);
+
+    ASSERT_EQ(read(move, *m_sender), server::CommandResult::success);
+    EXPECT_EQ(read(move, *m_sender), server::CommandResult::invalid_input);
+    EXPECT_FLOAT_EQ(m_sender->getObject3D().getPosition().x, 25.0f);
+    EXPECT_EQ(targetMessages.size(), 1);
+}
+
 TEST_F(GameplaySpecTest, Player3DMovementWithYawUpdatesServerAndBroadcasts)
 {
     setUpRoom();
@@ -1855,6 +1867,62 @@ TEST_F(GameplaySpecTest, Player2DMovementRejectsExcessiveDelta)
               server::CommandResult::invalid_input);
     EXPECT_FLOAT_EQ(m_sender->getObject2D().getPosition().x, 0.0f);
     EXPECT_TRUE(targetMessages.empty());
+}
+
+TEST_F(GameplaySpecTest, Player2DMovementRejectsExcessiveSpeed)
+{
+    setUpRoom();
+    auto targetMessages = receivedMessages(*m_target);
+
+    EXPECT_EQ(read(player2DMovementBytes({20.0f, 0.0f}, 0.1f), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_FLOAT_EQ(m_sender->getObject2D().getPosition().x, 0.0f);
+    EXPECT_TRUE(targetMessages.empty());
+}
+
+TEST_F(GameplaySpecTest, Player2DMovementSharesElapsedTimeBudget)
+{
+    setUpRoom();
+    auto targetMessages = receivedMessages(*m_target);
+
+    ASSERT_EQ(read(player2DMovementBytes({2.0f, 0.0f}, 0.25f), *m_sender),
+              server::CommandResult::success);
+    EXPECT_EQ(read(player3DMovementBytes({100.0f, 0.0f, 0.0f}, 0.25f), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_FLOAT_EQ(m_sender->getObject2D().getPosition().x, 2.0f);
+    EXPECT_FLOAT_EQ(m_sender->getObject3D().getPosition().x, 0.0f);
+    EXPECT_EQ(targetMessages.size(), 1);
+}
+
+TEST(UserMovementBudgetTest, RefillsOnlyWithElapsedTime)
+{
+    server::User user(123, "127.0.0.1");
+    const auto start = std::chrono::steady_clock::time_point{};
+
+    EXPECT_TRUE(user.acceptMovementDuration(start, 0.2f));
+    EXPECT_FALSE(user.acceptMovementDuration(start, 0.1f));
+    EXPECT_TRUE(user.acceptMovementDuration(start + std::chrono::milliseconds(100), 0.1f));
+    EXPECT_FALSE(user.acceptMovementDuration(start + std::chrono::milliseconds(100), 0.1f));
+    EXPECT_TRUE(user.acceptMovementDuration(start + std::chrono::milliseconds(400), 0.25f));
+    EXPECT_FALSE(user.acceptMovementDuration(start + std::chrono::milliseconds(400), 0.01f));
+}
+
+TEST(UserMovementBudgetTest, ConcurrentRequestsShareOneBudget)
+{
+    server::User user(123, "127.0.0.1");
+    const auto now = std::chrono::steady_clock::now();
+    std::atomic<int> accepted{0};
+    std::vector<std::thread> workers;
+    for (int i = 0; i < 8; ++i)
+    {
+        workers.emplace_back([&]
+                             {
+                                 if (user.acceptMovementDuration(now, 0.25f))
+                                     ++accepted; });
+    }
+    for (auto& worker : workers)
+        worker.join();
+    EXPECT_EQ(accepted.load(), 1);
 }
 
 TEST_F(GameplaySpecTest, CreateObject2DAddsStaticObjectAndBroadcasts)

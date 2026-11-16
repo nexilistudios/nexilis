@@ -21,6 +21,7 @@
 #include <nexilis/server/movement.hh>
 #include <nexilis/server/room_storage.hh>
 
+#include <chrono>
 #include <cmath>
 
 namespace nexilis::server
@@ -90,6 +91,9 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
             Log::warning("room_player3d_movement: room not found for user ", user.getRoomId());
             return CommandResult::failure;
         }
+
+        if (!user.acceptMovementDuration(std::chrono::steady_clock::now(), delta))
+            return CommandResult::invalid_input;
 
         // The client sends a movement vector (velocity) together with the
         // frame duration. Displacement for this packet is velocity * delta.
