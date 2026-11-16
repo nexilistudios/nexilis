@@ -209,11 +209,9 @@ void TCPServer::start()
     {
         createSocket();
         if (m_serverSocket != -1)
-        {
             bindSocket();
-            if (m_serverSocket != -1)
-                listenSocket();
-        }
+        if (m_serverSocket != -1)
+            listenSocket();
     }
     if (m_serverSocket == -1)
     {
