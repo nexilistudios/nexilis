@@ -62,7 +62,7 @@ protected:
         m_previousPort = nexilis::Ports::getBoostUDPPort();
         nexilis::Ports::setBoostUDPPort(kWindowsBoostUDPTestPort);
 
-        settings.setMode(nexilis::server::AuthenticationMode::password_protected);
+        settings.setMode(nexilis::server::AuthenticationMode::skip);
         settings.setPassphrase("salasana");
         settings.setRootPassword("root");
 
@@ -76,7 +76,7 @@ protected:
         server_data.setPassword("salasana");
         server_data.setBoostUDPAddress("localhost");
         server_data.setBoostUDPServerPort(kWindowsBoostUDPTestPort);
-        server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+        server_data.setMode(nexilis::server::AuthenticationMode::skip);
 
         api = std::make_unique<nexilis::client::ClientAPI>(server_data);
         client = std::make_shared<nexilis::client::nxboost::UDPClient>(

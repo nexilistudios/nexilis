@@ -148,7 +148,7 @@ namespace Nexilis.Util
         /// <summary>TCP transport used for reliable room/player management packets.</summary>
         public BoostTCPClient? TcpClient { get; private set; }
 
-        /// <summary>UDP transport used for latency sensitive packets (positions, movement).</summary>
+        /// <summary>UDP transport in skip mode; absent in password-protected mode.</summary>
         public BoostUDPClient? UdpClient { get; private set; }
 
         /// <summary>The amount of remote clients currently tracked by <see cref="Update"/>.</summary>
@@ -186,7 +186,8 @@ namespace Nexilis.Util
 
             ClientApi = new ClientAPI(clientConfig);
             TcpClient = new BoostTCPClient(ProtocolManager, ClientApi);
-            UdpClient = new BoostUDPClient(ProtocolManager, ClientApi);
+            if (AuthenticationMode != 2)
+                UdpClient = new BoostUDPClient(ProtocolManager, ClientApi);
 
             Logger.Info("Starting BoostTCP client...");
             bool tcpStarted = await Task.Run(() => TcpClient!.StartClient(ClientApi!));
@@ -196,13 +197,14 @@ namespace Nexilis.Util
             }
             Logger.Info("BoostTCP client started.");
 
-            Logger.Info("Starting BoostUDP client...");
-            await Task.Run(() => UdpClient!.Start());
-            if (!UdpClient!.IsConnected())
+            if (UdpClient != null)
             {
-                throw new InvalidOperationException("BoostUDP client failed to start.");
+                Logger.Info("Starting BoostUDP client...");
+                await Task.Run(() => UdpClient.Start());
+                if (!UdpClient.IsConnected())
+                    throw new InvalidOperationException("BoostUDP client failed to start.");
+                Logger.Info("BoostUDP client started.");
             }
-            Logger.Info("BoostUDP client started.");
 
             await WaitForRoomsCreatedAsync();
 
@@ -834,6 +836,11 @@ namespace Nexilis.Util
 
         void SendUdpBytes(byte[] bytes)
         {
+            if (UdpClient == null)
+            {
+                SendTcpBytes(bytes);
+                return;
+            }
             var udp = UdpClient!;
             var length = (uint)bytes.Length;
             NativeInterop.ExecuteSafe(() => udp.SendMessage(bytes, length), "SendPacketUdp");
@@ -860,7 +867,7 @@ namespace Nexilis.Util
         void ThrowIfNotConnected()
         {
             ThrowIfDisposed();
-            if (ClientApi == null || TcpClient == null || UdpClient == null)
+            if (ClientApi == null || TcpClient == null)
             {
                 throw new InvalidOperationException("NexilisClient is not connected. Call ConnectAsync first.");
             }

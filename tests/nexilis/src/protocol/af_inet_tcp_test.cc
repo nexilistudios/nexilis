@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <nexilis/client/packet.hh>
+#include <nexilis/command_type.hh>
 #include <nexilis/logger/log.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/client_storage.hh>
@@ -43,7 +44,7 @@ protected:
     {
         nexilis::Log::startConsoleDebugging();
 
-        settings.setMode(nexilis::server::AuthenticationMode::password_protected);
+        settings.setMode(nexilis::server::AuthenticationMode::skip);
         settings.setPassphrase("salasana");
         settings.setRootPassword("root");
 
@@ -57,7 +58,7 @@ protected:
         server_data.setPassword("salasana");
         server_data.setInetTCP("127.0.0.1");
         server_data.setInetTCPServerPort(port);
-        server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+        server_data.setMode(nexilis::server::AuthenticationMode::skip);
 
         api = std::make_unique<nexilis::client::ClientAPI>(server_data);
         client = std::make_shared<nexilis::client::af_inet::TCPClient>(
@@ -205,11 +206,12 @@ public:
         if (fd == -1 || setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1 ||
             connect(fd, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == -1)
             return {};
-        const uint32_t size = htonl(8);
+        const uint32_t size = htonl(19);
         nexilis::nx_data frame(sizeof(size));
         std::memcpy(frame.data(), &size, sizeof(size));
-        const std::string password = "salasana";
-        frame.insert(frame.end(), password.begin(), password.end());
+        nexilis::nx_data handshake(19, 0);
+        handshake[16] = static_cast<uint8_t>(nexilis::CommandType::getting);
+        frame.insert(frame.end(), handshake.begin(), handshake.end());
         if (send(fd, frame.data(), frame.size(), MSG_NOSIGNAL) != static_cast<ssize_t>(frame.size()))
             return {};
         if (receive().empty())

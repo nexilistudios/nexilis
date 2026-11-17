@@ -94,6 +94,8 @@ TCPClient& TCPClient::operator=(TCPClient&& other)
 
 void TCPClient::start()
 {
+    if (getClientAPI()->getMode() == server::AuthenticationMode::password_protected)
+        throw std::runtime_error("Password-protected mode requires an encrypted transport");
     if (m_clientSocket == -1)
     {
         m_clientSocket = socket(AF_INET, SOCK_STREAM, 0);

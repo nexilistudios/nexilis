@@ -15,8 +15,10 @@
    along with this file.  If not, see <https://gnu.org>. */
 
 #include <nexilis/client/protocol/nxboost/udp_client.hh>
+#include <nexilis/logger/log.hh>
 #include <nexilisc/client/protocol/boost_udp_client_c.h>
 
+#include <exception>
 #include <functional>
 
 struct nexilis_BoostUDPClient
@@ -61,7 +63,14 @@ void nexilis_boost_udp_client_start(nexilis_BoostUDPClient* client)
 {
     if (client && client->client)
     {
-        client->client->start();
+        try
+        {
+            client->client->start();
+        }
+        catch (const std::exception& error)
+        {
+            nexilis::Log::error(error.what());
+        }
     }
 }
 

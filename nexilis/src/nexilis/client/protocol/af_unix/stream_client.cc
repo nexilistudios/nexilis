@@ -160,6 +160,8 @@ std::future<void> StreamClient::sendMessageAsync(const nx_data& message)
 
 void StreamClient::start()
 {
+    if (getClientAPI()->getMode() == server::AuthenticationMode::password_protected)
+        throw std::runtime_error("Password-protected mode requires an encrypted transport");
     m_running->store(true);
 
     if (m_clientSocket == -1)

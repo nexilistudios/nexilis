@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <nexilis/client/packet.hh>
+#include <nexilis/command_type.hh>
 #include <nexilis/logger/log.hh>
 #include <nexilis/ports.hh>
 #include <nexilis/protocol_manager.hh>
@@ -132,6 +133,28 @@ TEST_F(BoostTCPTest, BoostTCPSuccessfulConnection)
     EXPECT_EQ(server->activeConnectionsCount(), 1);
 }
 
+TEST_F(BoostTCPTest, PasswordModeRejectsPlaintextClient)
+{
+    nexilis::client::ClientConfig config;
+    config.setMode(nexilis::server::AuthenticationMode::password_protected);
+    config.setPassword("salasana");
+    config.setBoostTCPAddress("127.0.0.1");
+    config.setTls(false);
+    nexilis::client::ClientAPI plaintextApi(config);
+    EXPECT_THROW(nexilis::client::nxboost::TCPClient plaintextClient(plaintextApi),
+                 std::runtime_error);
+}
+
+TEST_F(BoostTCPTest, LaterTlsSettingCannotDowngradePasswordConnection)
+{
+    api->setTls(false);
+    client->start();
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!client->isConnected() && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    EXPECT_TRUE(client->isConnected());
+}
+
 TEST_F(BoostTCPTest, RejectsWrongServerPinBeforeAuthentication)
 {
     nexilis::client::ClientConfig wrongConfig;
@@ -161,6 +184,7 @@ TEST_F(BoostTCPTest, AbandonedHandshakeIsRemovedOnStop)
     nexilis::server::RoomStorage::clear();
 
     settings.setTls(false);
+    settings.setMode(nexilis::server::AuthenticationMode::skip);
     server = std::make_shared<nexilis::server::nxboost::TCPServer>(
             protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings));
     server->start();
@@ -178,11 +202,10 @@ TEST_F(BoostTCPTest, AbandonedHandshakeIsRemovedOnStop)
     timeout.tv_sec = 2;
     ASSERT_EQ(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0);
 
-    const std::string password = "salasana";
-    nexilis::nx_data frame(4 + password.size());
-    const uint32_t size = htonl(static_cast<uint32_t>(password.size()));
+    nexilis::nx_data frame(4 + 19, 0);
+    const uint32_t size = htonl(19);
     std::memcpy(frame.data(), &size, sizeof(size));
-    std::memcpy(frame.data() + 4, password.data(), password.size());
+    frame[4 + 16] = static_cast<uint8_t>(nexilis::CommandType::getting);
     ASSERT_EQ(send(fd, frame.data(), frame.size(), MSG_NOSIGNAL),
               static_cast<ssize_t>(frame.size()));
 

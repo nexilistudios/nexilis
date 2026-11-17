@@ -41,25 +41,23 @@ authentication payload. The cookie is bound to the source IP and port and
 expires after roughly one to two minutes. The server sends no application
 response until the cookie has been returned. A valid `skip`-mode authentication
 response contains a random 16-byte `udp_token` alongside `client_id`. In
-`password_protected` mode, servers reject UDP authentication requests; the
-client must obtain the token over an authenticated stream before using UDP.
+`password_protected` mode, UDP servers refuse to start. Password-protected
+clients must use pinned TLS Boost TCP for all requests and responses.
 
 Later requests use `NXUS`, the 8-byte client ID, message ID, a 16-byte MAC tag,
 and command bytes. The server checks the MAC and source
-IP/port before dispatching a command. A client authenticated over another
-transport obtains its token in the `client_id` response and can use it for UDP.
+IP/port before dispatching a command. A skip-mode client obtains its token in
+the `client_id` response and can use it for UDP.
 The 1024-byte receive buffer leaves up to 1004 bytes for the normal request
 payload. Legacy UDP datagrams without this envelope are dropped. UDP remains
-plaintext. Use Boost TCP with a pinned server public key to establish a
-password-protected session before attaching UDP.
+plaintext, so it is unavailable in password-protected mode.
 
 After setup, UDP server responses carry `NXUR`, an 8-byte response sequence,
 a 16-byte HMAC-SHA-256 tag, and the JSON payload. The MAC uses the per-session
 token with a response-specific domain label. Clients verify the tag and a
 1024-response replay window before parsing JSON. The initial `skip`-mode
 `client_id` reply is the only unsigned UDP application response because the
-client does not know its token yet; password-protected clients obtain that
-token through the authenticated stream first.
+client does not know its token yet.
 
 ## Identification (uint64_t)
 
@@ -248,7 +246,9 @@ after each TLS handshake, before sending authentication or accepting a response.
 The check applies to both the initial and switched TCP connections. A missing
 identity or pin fails closed. The connection password remains the separate
 application-level client admission secret; it is no longer used as the TLS
-server identity. Other transports do not implement TLS.
+server identity. Password-protected mode requires pinned TLS Boost TCP on both
+the server and client. Other transports refuse to start in this mode because
+they do not implement TLS.
 
 Configure a persistent server identity and give clients only its pin:
 
@@ -264,7 +264,7 @@ rotating its public key requires updating clients' trusted pins. The
 `examples/messaging` program generates a temporary identity because its server
 and clients run in one process.
 
-To use plaintext Boost TCP, both sides must explicitly opt out:
+To use plaintext Boost TCP in skip mode, both sides must explicitly opt out:
 
 - `nexilis::server::ServerConfig::setTls(false)` on the server.
 - `nexilis::client::ClientConfig::setTls(false)` (or `nexilis_client_config_set_tls` / the C# `ClientConfig.SetTls` / Lua `tls = false`) on every client.
@@ -274,6 +274,8 @@ Configuration details:
 - The server refuses TLS connections if its certificate or private key is missing, invalid, or mismatched. The client rejects a missing or malformed 64-digit hex pin before connecting.
 - The client rejects a TLS peer with a different public key, no certificate, or a certificate outside its validity period. The server public key is independent of the connection password.
 - If only one side enables TLS, the handshake fails rather than silently downgrading to plaintext.
+- Password-protected Boost TCP refuses to start without TLS; the client also requires a valid server public-key pin. Password-protected clients and servers refuse plaintext IPv4, Unix socket, and UDP transports.
+- The Boost TCP client captures its TLS setting when the protocol object is constructed; changing the client API setting afterward does not downgrade an existing protocol object.
 - The handshake happens lazily on the server before the first message is read or written. The client completes the TLS handshake and verifies the pin immediately after each TCP connect.
 
 ## Room creation
@@ -326,7 +328,7 @@ are rejected until users disconnect or expire.
 
 `ClientAPI::setMessageEncryption(true)` affects room broadcasts when the client has a nonempty password. It does not encrypt othercast or unicast messages. The message key is derived from that same password and the room ID; the server holds the password, so this feature does **not** hide message contents from the server.
 
-The current broadcast implementation also falls back to the plaintext payload if key derivation or encryption fails. Treat this option as experimental and do not rely on it for confidentiality until that behavior is changed and tested. Certificate-based TLS protects only the Boost TCP transport when both peers leave it enabled and the client has the correct server pin.
+The current broadcast implementation also falls back to the plaintext payload if key derivation or encryption fails. Treat this option as experimental and do not rely on it for confidentiality until that behavior is changed and tested. Password-protected sessions require pinned TLS Boost TCP.
 
 ## Server room storage ownership
 

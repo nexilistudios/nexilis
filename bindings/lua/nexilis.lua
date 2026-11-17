@@ -226,7 +226,9 @@ function Client.new(options)
         state.api = check_ptr(native.nexilis_client_api_create(state.config), "client API creation")
         state.manager = check_ptr(native.nexilis_protocol_manager_create(), "protocol manager creation")
         state.tcp = check_ptr(native.nexilis_boost_tcp_client_create(state.manager, state.api), "TCP client creation")
-        state.udp = check_ptr(native.nexilis_boost_udp_client_create(state.manager, state.api), "UDP client creation")
+        if (options.authentication_mode or 2) ~= 2 then
+            state.udp = check_ptr(native.nexilis_boost_udp_client_create(state.manager, state.api), "UDP client creation")
+        end
     end)
     if not ok then self:close(); error(err, 2) end
     return self
@@ -241,9 +243,11 @@ function Client:connect()
     if not native.nexilis_start_client(self.state.api, self.state.tcp) then
         return false, "TCP connection or initialization failed"
     end
-    native.nexilis_boost_udp_client_start(self.state.udp)
-    if not native.nexilis_boost_udp_client_is_connected(self.state.udp) then
-        return false, "UDP connection failed"
+    if (self.options.authentication_mode or 2) ~= 2 then
+        native.nexilis_boost_udp_client_start(self.state.udp)
+        if not native.nexilis_boost_udp_client_is_connected(self.state.udp) then
+            return false, "UDP connection failed"
+        end
     end
     local timeout = self.options.room_timeout_ms or 5000
     local interval = self.options.poll_interval_ms or 50
@@ -256,7 +260,8 @@ end
 
 function Client:is_connected()
     return not self.closed and native.nexilis_boost_tcp_client_is_connected(self.state.tcp)
-        and native.nexilis_boost_udp_client_is_connected(self.state.udp)
+        and ((self.options.authentication_mode or 2) == 2
+            or native.nexilis_boost_udp_client_is_connected(self.state.udp))
 end
 
 function Client:is_initialized()
@@ -361,7 +366,11 @@ function Client:send_packet(bytes, transport)
     if transport == "tcp" then
         native.nexilis_boost_tcp_client_send_message(self.state.tcp, bytes, #bytes)
     elseif transport == "udp" then
-        native.nexilis_boost_udp_client_send_message(self.state.udp, bytes, #bytes)
+        if (self.options.authentication_mode or 2) == 2 then
+            native.nexilis_boost_tcp_client_send_message(self.state.tcp, bytes, #bytes)
+        else
+            native.nexilis_boost_udp_client_send_message(self.state.udp, bytes, #bytes)
+        end
     else
         error("transport must be 'tcp' or 'udp'", 2)
     end

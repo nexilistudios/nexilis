@@ -30,7 +30,7 @@ nexilis::client::ClientConfig getServerData(const std::string& address)
     nexilis::client::ClientConfig serverData;
     serverData.setPassword("salasana");
     serverData.setUnixStreamServerPath(address);
-    serverData.setMode(nexilis::server::AuthenticationMode::password_protected);
+    serverData.setMode(nexilis::server::AuthenticationMode::skip);
     return serverData;
 }
 

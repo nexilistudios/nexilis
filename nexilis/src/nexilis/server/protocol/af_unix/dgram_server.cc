@@ -156,6 +156,11 @@ DgramServer& DgramServer::operator=(DgramServer&& other)
 
 void DgramServer::start()
 {
+    if (getSettings().getMode() == AuthenticationMode::password_protected)
+    {
+        Log::critical("Password-protected mode requires an encrypted transport");
+        return;
+    }
     if (!m_stopped || m_stopped->load() || m_receiveThread.joinable())
     {
         Log::debug("DgramServer already stopped, cannot start");

@@ -114,6 +114,7 @@ private:
     std::unique_ptr<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> m_workGuard;
 
     std::shared_ptr<boost::asio::ssl::context> m_tlsContext;
+    bool m_tlsEnabled;
     std::shared_ptr<TlsSocket> m_mainSocket;
     std::shared_ptr<TlsSocket> m_switchedSocket;
     boost::atomic_shared_ptr<TlsSocket> m_activeSocket;

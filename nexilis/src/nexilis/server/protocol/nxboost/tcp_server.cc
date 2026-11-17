@@ -120,6 +120,12 @@ TCPServer::~TCPServer()
 
 void TCPServer::start()
 {
+    if (getSettings().getMode() == AuthenticationMode::password_protected &&
+        !getSettings().isTlsEnabled())
+    {
+        Log::critical(header(), "Password-protected Boost TCP requires TLS");
+        return;
+    }
     if (!m_stopped || m_stopped->load() || m_listenThread.joinable() ||
         m_ioContextThread.joinable() || !m_acceptor.is_open())
         return;
@@ -321,6 +327,9 @@ std::string TCPServer::getClientAddress(boost::asio::ip::tcp::socket& socket)
 
 void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::function<void()> onCompleted)
 {
+    if (getSettings().getMode() == AuthenticationMode::password_protected &&
+        !getSettings().isTlsEnabled())
+        return;
     ServerProtocol::connectionEstablished();
     try
     {
@@ -491,6 +500,9 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
 
 void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
 {
+    if (getSettings().getMode() == AuthenticationMode::password_protected &&
+        !getSettings().isTlsEnabled())
+        return;
     auto client_address = getClientAddress(socket);
     auto socket_wrapper = std::make_shared<nexilis::boost_tcp::Socket>(*m_ioContext);
     if (getSettings().isTlsEnabled())

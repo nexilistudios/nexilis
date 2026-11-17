@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <nexilis/client/packet.hh>
+#include <nexilis/command_type.hh>
 #include <nexilis/logger/log.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/client_storage.hh>
@@ -25,6 +26,7 @@
 #include <nexilis/client/protocol/af_unix/dgram_client.hh>
 #include <nexilis/server/protocol/af_unix/dgram_server.hh>
 
+#include <array>
 #include <atomic>
 #include <cerrno>
 #include <cstdlib>
@@ -44,7 +46,7 @@ protected:
 
         std::filesystem::create_directories("/tmp/nexilis");
 
-        settings.setMode(nexilis::server::AuthenticationMode::password_protected);
+        settings.setMode(nexilis::server::AuthenticationMode::skip);
         settings.setPassphrase("salasana");
         settings.setRootPassword("root");
 
@@ -58,7 +60,7 @@ protected:
         nexilis::client::ClientConfig server_data;
         server_data.setPassword("salasana");
         server_data.setUnixDgramServerPath("/tmp/nexilis/dgram");
-        server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+        server_data.setMode(nexilis::server::AuthenticationMode::skip);
 
         api = std::make_unique<nexilis::client::ClientAPI>(server_data);
         client = std::make_shared<nexilis::client::af_unix::DgramClient>(
@@ -187,7 +189,7 @@ protected:
         const auto* created = mkdtemp(pattern);
         ASSERT_NE(created, nullptr);
         directory = created;
-        settings.setMode(nexilis::server::AuthenticationMode::password_protected);
+        settings.setMode(nexilis::server::AuthenticationMode::skip);
         settings.setPassphrase("secret");
         nexilis::server::ClientStorage::clear();
     }
@@ -219,10 +221,11 @@ std::shared_ptr<nexilis::server::User> authenticateDatagram(int peer, const std:
                                                             const std::string& peerPath)
 {
     const auto endpoint = nexilis::unix_socket::address(path);
-    const std::string password = "secret";
-    EXPECT_EQ(sendto(peer, password.data(), password.size(), 0,
+    std::array<uint8_t, 19> handshake{};
+    handshake[16] = static_cast<uint8_t>(nexilis::CommandType::getting);
+    EXPECT_EQ(sendto(peer, handshake.data(), handshake.size(), 0,
                      reinterpret_cast<const sockaddr*>(&endpoint), sizeof(endpoint)),
-              static_cast<ssize_t>(password.size()));
+              static_cast<ssize_t>(handshake.size()));
     timeval timeout{};
     timeout.tv_sec = 2;
     EXPECT_EQ(setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0);
@@ -300,7 +303,10 @@ TEST_F(UnixSocketSecurityTest, StreamDisconnectRemovesUserAndLeavesRoom)
     ASSERT_NE(peer.fd, -1);
     const auto endpoint = nexilis::unix_socket::address(path);
     ASSERT_EQ(connect(peer.fd, reinterpret_cast<const sockaddr*>(&endpoint), sizeof(endpoint)), 0);
-    const auto frame = nexilis::client::ClientProtocol::frame({'s', 'e', 'c', 'r', 'e', 't'});
+    std::array<uint8_t, 19> handshake{};
+    handshake[16] = static_cast<uint8_t>(nexilis::CommandType::getting);
+    const auto frame = nexilis::client::ClientProtocol::frame(
+            nexilis::nx_data(handshake.begin(), handshake.end()));
     ASSERT_EQ(send(peer.fd, frame.data(), frame.size(), MSG_NOSIGNAL),
               static_cast<ssize_t>(frame.size()));
 
@@ -559,7 +565,10 @@ TEST_F(UnixSocketSecurityTest, StreamStopWakesReadAndInvalidatesStoredCallback)
         ASSERT_NE(peer.fd, -1);
         const auto endpoint = nexilis::unix_socket::address(path);
         ASSERT_EQ(connect(peer.fd, reinterpret_cast<const sockaddr*>(&endpoint), sizeof(endpoint)), 0);
-        const auto frame = nexilis::client::ClientProtocol::frame({'s', 'e', 'c', 'r', 'e', 't'});
+        std::array<uint8_t, 19> handshake{};
+        handshake[16] = static_cast<uint8_t>(nexilis::CommandType::getting);
+        const auto frame = nexilis::client::ClientProtocol::frame(
+                nexilis::nx_data(handshake.begin(), handshake.end()));
         ASSERT_EQ(send(peer.fd, frame.data(), frame.size(), MSG_NOSIGNAL), static_cast<ssize_t>(frame.size()));
         timeval timeout{};
         timeout.tv_sec = 2;

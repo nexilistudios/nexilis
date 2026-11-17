@@ -68,8 +68,9 @@ The `on_remote_client_added`, `on_remote_client_removed`, `on_remote_client_posi
 `client_id`, `info_general`, `info_clients`, `info_rooms`, `join`, `leave`,
 `create`, `position`, `dimension`, `movement`, `set_team`, `fire`, `audio_event`, and
 `broadcast`. Use `client:send_packet(bytes, "tcp" | "udp")` to send custom
-packets. Convenience methods route reliable packets over TCP and position,
-movement, and audio packets over UDP.
+packets. Convenience methods route reliable packets over TCP and select UDP for
+position, movement, and audio packets. In password-protected mode all packets
+use pinned TLS Boost TCP.
 
 `client:fire(x, y, z, slot)` sends an aim direction and weapon slot for the
 room's server-side shot handler. The old `shoot` packet with a client-selected
@@ -91,8 +92,10 @@ responsibility.
 Boost TCP uses certificate-based TLS by default. Set
 `server_public_key_sha256` to the intended server's public-key pin, obtained
 through a trusted channel, and set `password` to the server's application
-passphrase. Set `tls = false` only when connecting to a server that explicitly
-disables TLS. UDP traffic does not use TLS.
+passphrase. Set `tls = false` only in skip mode when connecting to a server
+that explicitly disables TLS. Password-protected mode requires pinned TLS Boost TCP; the
+high-level Lua client sends packets selected for UDP over TCP in that mode.
+UDP traffic is available only in skip mode and does not use TLS.
 
 Run the smoke and live server tests with `make test-lua`. This target is part of
 `make test`; `make unit-test` remains C++, C, and C# only.

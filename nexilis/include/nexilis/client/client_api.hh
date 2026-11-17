@@ -639,8 +639,8 @@ public:
     }
 
     /// Toggle TLS transport encryption on/off.
-    /// \note Off by default; the transport upgrade applies when the client
-    ///       connects, so set it before start().
+    /// \note Boost TCP captures this setting when the client protocol is
+    ///       constructed. Password-protected mode requires TLS.
     void setTls(bool enabled)
     {
         m_serverData.setTls(enabled);

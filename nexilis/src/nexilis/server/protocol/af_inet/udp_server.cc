@@ -149,6 +149,11 @@ UDPServer& UDPServer::operator=(UDPServer&& other)
 
 void UDPServer::start()
 {
+    if (getSettings().getMode() == AuthenticationMode::password_protected)
+    {
+        Log::critical("Password-protected mode requires an encrypted transport");
+        return;
+    }
     if (!m_stopped || m_stopped->load() || m_receiveThread.joinable())
     {
         Log::debug("UDPServer already stopped, cannot start");

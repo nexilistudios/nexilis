@@ -93,6 +93,8 @@ UDPClient& UDPClient::operator=(UDPClient&& other)
 
 void UDPClient::start()
 {
+    if (getClientAPI()->getMode() == server::AuthenticationMode::password_protected)
+        throw std::runtime_error("Password-protected mode requires an encrypted transport");
     if (m_stopped->load())
     {
         Log::debug("BoostUDPClient already stopped, cannot start");

@@ -317,6 +317,12 @@ TEST_F(AFInetUDPTest, PasswordProtectedModeRejectsUdpBootstrap)
             protocol_manager.createProtocol<nexilis::server::af_inet::UDPServer>(settings, port));
     server->start();
 
+    nexilis::client::ClientConfig protectedConfig;
+    protectedConfig.setMode(nexilis::server::AuthenticationMode::password_protected);
+    nexilis::client::ClientAPI protectedApi(protectedConfig);
+    nexilis::client::af_inet::UDPClient protectedClient(protectedApi);
+    EXPECT_THROW(protectedClient.start(), std::runtime_error);
+
     UDPTestPeer peer;
     EXPECT_EQ(peer.authenticate(port), nullptr);
     EXPECT_TRUE(nexilis::server::ClientStorage::getAllClients().empty());

@@ -202,6 +202,11 @@ TCPServer& TCPServer::operator=(TCPServer&& other)
 
 void TCPServer::start()
 {
+    if (getSettings().getMode() == AuthenticationMode::password_protected)
+    {
+        Log::critical("Password-protected mode requires an encrypted transport");
+        return;
+    }
     if (!m_stopped || m_acceptThread.joinable())
         return;
 

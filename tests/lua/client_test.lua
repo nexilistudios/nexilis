@@ -23,7 +23,7 @@ local client = nexilis.new({
 })
 assert(nexilis.native.nexilis_client_config_get_tls(client.state.config) == 1)
 
-local plaintext_client = nexilis.new({tls = false})
+local plaintext_client = nexilis.new({tls = false, authentication_mode = 1})
 assert(nexilis.native.nexilis_client_config_get_tls(plaintext_client.state.config) == 0)
 plaintext_client:close()
 
@@ -40,7 +40,7 @@ if arg[1] == "integration" then
     assert(client:is_connected())
     assert(client:is_initialized())
     assert(client:transport_ready("tcp"))
-    assert(client:transport_ready("udp"))
+    assert(not client:transport_ready("udp"))
     assert(client:client_id() ~= 0)
     assert(client:create_room("Lua test room", nexilis.RoomContext.THREE_D))
     assert(client.ready)

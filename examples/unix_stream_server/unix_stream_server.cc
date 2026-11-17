@@ -33,7 +33,7 @@ int main()
 
     // Server.
     nexilis::server::ServerConfig settings;
-    settings.setMode(nexilis::server::AuthenticationMode::password_protected);
+    settings.setMode(nexilis::server::AuthenticationMode::skip);
     settings.setPassphrase("salasana");
     settings.setRootPassword("root");
 

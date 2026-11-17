@@ -160,6 +160,11 @@ StreamServer& StreamServer::operator=(StreamServer&& other)
 
 void StreamServer::start()
 {
+    if (getSettings().getMode() == AuthenticationMode::password_protected)
+    {
+        Log::critical("Password-protected mode requires an encrypted transport");
+        return;
+    }
     if (!m_stopped || m_stopped->load() || m_receiveThread.joinable() || m_serverSocket == -1)
         return;
     m_receiveThread = std::thread([this]

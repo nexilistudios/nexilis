@@ -48,6 +48,7 @@ TCPClient::TCPClient(ClientAPI& api)
       m_workGuard(std::make_unique<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>>(
               boost::asio::make_work_guard(*m_ioContext))),
       m_tlsContext(createTlsContext(api)),
+      m_tlsEnabled(api.isTlsEnabled()),
       m_mainSocket(std::make_shared<TlsSocket>(*m_ioContext, *m_tlsContext)),
       m_switchedSocket(std::make_shared<TlsSocket>(*m_ioContext, *m_tlsContext)),
       m_activeSocket(),
@@ -79,6 +80,7 @@ TCPClient::TCPClient(TCPClient&& other)
       m_strand(std::move(other.m_strand)),
       m_workGuard(std::move(other.m_workGuard)),
       m_tlsContext(std::move(other.m_tlsContext)),
+      m_tlsEnabled(other.m_tlsEnabled),
       m_mainSocket(std::move(other.m_mainSocket)),
       m_switchedSocket(std::move(other.m_switchedSocket)),
       m_activeSocket(other.m_activeSocket.load()),
@@ -120,6 +122,7 @@ TCPClient& TCPClient::operator=(TCPClient&& other)
         m_strand = std::move(other.m_strand);
         m_workGuard = std::move(other.m_workGuard);
         m_tlsContext = std::move(other.m_tlsContext);
+        m_tlsEnabled = other.m_tlsEnabled;
         m_mainSocket = std::move(other.m_mainSocket);
         m_switchedSocket = std::move(other.m_switchedSocket);
         m_activeSocket = other.m_activeSocket.load();
@@ -168,7 +171,7 @@ bool TCPClient::connectToMainPort()
             return false;
         }
 
-        if (getClientAPI()->isTlsEnabled())
+        if (m_tlsEnabled)
         {
             boost::system::error_code handshake_ec;
             m_mainSocket->handshake(boost::asio::ssl::stream_base::client, handshake_ec);
@@ -216,7 +219,7 @@ bool TCPClient::connectToSwitchedPort(uint16_t port)
             return false;
         }
 
-        if (getClientAPI()->isTlsEnabled())
+        if (m_tlsEnabled)
         {
             boost::system::error_code handshake_ec;
             m_switchedSocket->handshake(boost::asio::ssl::stream_base::client, handshake_ec);
@@ -249,6 +252,8 @@ bool TCPClient::connectToSwitchedPort(uint16_t port)
 
 std::shared_ptr<boost::asio::ssl::context> TCPClient::createTlsContext(ClientAPI& api)
 {
+    if (api.getMode() == server::AuthenticationMode::password_protected && !api.isTlsEnabled())
+        throw std::runtime_error("Password-protected Boost TCP requires TLS");
     if (api.isTlsEnabled())
     {
         if (!tls::validPublicKeySha256(api.getServerPublicKeySha256()))
@@ -461,7 +466,7 @@ bool TCPClient::send(const nx_data& data)
             return false;
         auto framed = std::make_shared<nx_data>(ClientProtocol::frame(request));
 
-        const bool tlsOn = getClientAPI()->isTlsEnabled();
+        const bool tlsOn = m_tlsEnabled;
 
         auto completionHandler = [this, current_socket, messageId, framed](const boost::system::error_code& ec,
                                                                            std::size_t size)
@@ -641,6 +646,9 @@ std::future<void> TCPClient::sendMessageAsync(const nx_data& message)
 
 void TCPClient::start()
 {
+    if (getClientAPI()->getMode() == server::AuthenticationMode::password_protected &&
+        !m_tlsEnabled)
+        throw std::runtime_error("Password-protected Boost TCP requires TLS");
     if (connectToServer())
     {
         startAsyncRead();
@@ -721,7 +729,7 @@ void TCPClient::doAsyncRead(std::shared_ptr<TlsSocket> current_socket,
         return;
     }
 
-    const bool tlsOn = getClientAPI()->isTlsEnabled();
+    const bool tlsOn = m_tlsEnabled;
     auto readHandler = [this, receiveBuffer, current_socket](const boost::system::error_code& ec, size_t bytes_transferred)
     {
         if (ec)
