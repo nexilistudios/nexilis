@@ -77,6 +77,20 @@ public:
     std::vector<nx_data> sent;
 };
 
+TEST(ClientHandshake, PendingBoostTcpSessionCanBeClaimedOnlyOnce)
+{
+    server::User user(42, "127.0.0.1");
+    user.beginPendingHandshake(std::chrono::steady_clock::now());
+
+    EXPECT_FALSE(user.claimPendingBoostTcpSession("127.0.0.2"));
+    EXPECT_FALSE(user.hasTransport(server::User::Transport::boostTcp));
+    EXPECT_TRUE(user.claimPendingBoostTcpSession("127.0.0.1"));
+    EXPECT_FALSE(user.claimPendingBoostTcpSession("127.0.0.1"));
+    EXPECT_TRUE(user.hasTransport(server::User::Transport::boostTcp));
+    user.endStreamTransport(server::User::Transport::boostTcp);
+    EXPECT_FALSE(user.claimPendingBoostTcpSession("127.0.0.1"));
+}
+
 TEST(ClientHandshake, DoesNotSendBeforeTransportIsReady)
 {
     client::ClientConfig config;

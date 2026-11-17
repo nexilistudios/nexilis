@@ -19,6 +19,7 @@
 #include <nexilis/client/packet.hh>
 #include <nexilis/command_type.hh>
 #include <nexilis/logger/log.hh>
+#include <nexilis/message_auth.hh>
 #include <nexilis/ports.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/client_storage.hh>
@@ -35,6 +36,10 @@
 #include <chrono>
 #include <cstring>
 #include <thread>
+
+#include <boost/asio/connect.hpp>
+#include <boost/asio/ssl.hpp>
+#include <boost/asio/write.hpp>
 
 class BoostTCPTest : public ::testing::Test
 {
@@ -152,6 +157,43 @@ TEST_F(BoostTCPTest, LaterTlsSettingCannotDowngradePasswordConnection)
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (!client->isConnected() && std::chrono::steady_clock::now() < deadline)
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    EXPECT_TRUE(client->isConnected());
+}
+
+TEST_F(BoostTCPTest, SecondSessionSocketCannotClaimActiveUser)
+{
+    startClientAndConnect();
+    ASSERT_TRUE(client->isConnected());
+    const auto userId = api->getClientId();
+    auto user = nexilis::server::ClientStorage::getClientById(userId);
+    ASSERT_NE(user, nullptr);
+    auto firstRequest = nexilis::client::Packet::Room::Management::create(*api, "owner_room");
+    client->sendMessageAsync(firstRequest).get();
+    const auto claimDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while ((!user->hasTransport(nexilis::server::User::Transport::boostTcp) ||
+            nexilis::server::RoomStorage::getAllRooms().empty()) &&
+           std::chrono::steady_clock::now() < claimDeadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    ASSERT_TRUE(user->hasTransport(nexilis::server::User::Transport::boostTcp));
+    const auto roomCount = nexilis::server::RoomStorage::getAllRooms().size();
+    ASSERT_EQ(roomCount, 1u);
+
+    boost::asio::io_context io;
+    boost::asio::ssl::context context(boost::asio::ssl::context::tls_client);
+    context.set_verify_mode(boost::asio::ssl::verify_none);
+    boost::asio::ssl::stream<boost::asio::ip::tcp::socket> intruder(io, context);
+    intruder.lowest_layer().connect({boost::asio::ip::make_address("127.0.0.1"), server->getPort()});
+    intruder.handshake(boost::asio::ssl::stream_base::client);
+
+    const auto request = nexilis::client::Packet::Room::Management::create(*api, "intruder_room");
+    const auto signedRequest = nexilis::message_auth::sign(request, api->getUdpToken());
+    ASSERT_FALSE(signedRequest.empty());
+    const auto framed = nexilis::client::ClientProtocol::frame(signedRequest);
+    boost::asio::write(intruder, boost::asio::buffer(framed));
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    EXPECT_EQ(nexilis::server::RoomStorage::getAllRooms().size(), roomCount);
+    EXPECT_TRUE(user->hasTransport(nexilis::server::User::Transport::boostTcp));
     EXPECT_TRUE(client->isConnected());
 }
 

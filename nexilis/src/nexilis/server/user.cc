@@ -408,6 +408,20 @@ void User::beginPendingHandshake(std::chrono::steady_clock::time_point now)
     ++m_pendingHandshakes;
 }
 
+bool User::claimPendingBoostTcpSession(const std::string& address)
+{
+    std::lock_guard<std::mutex> lock(m_transportMutex);
+    const auto index = transportIndex(Transport::boostTcp);
+    if (address != m_ip_address || m_pendingHandshakes != 1 ||
+        m_streamTransportConnections[index] != 0)
+        return false;
+
+    m_pendingHandshakes = 0;
+    m_pendingHandshakeSince = {};
+    ++m_streamTransportConnections[index];
+    return true;
+}
+
 User::TransportStatus User::endPendingHandshake()
 {
     TransportStatus status;

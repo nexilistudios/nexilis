@@ -551,6 +551,21 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
                     continue;
                 }
 
+                // Never let a new socket consume a live session's replay IDs,
+                // or let an established socket switch to a different user.
+                if (data.size() < sizeof(uint64_t))
+                    break;
+                const uint64_t requestedId = Util::uint64FromFront(data);
+                if (connectedUser && requestedId != connectedUser->getId())
+                    break;
+                if (!connectedUser)
+                {
+                    auto candidate = ClientStorage::getClientById(requestedId);
+                    if (!candidate || candidate->getIPAddress() != client_address ||
+                        candidate->hasTransport(User::Transport::boostTcp))
+                        break;
+                }
+
                 auto handledMessage = getMessageHandler().readMessage(client_address, data, &getSettings());
 
                 if (!handledMessage || !handledMessage->getUser())
@@ -561,12 +576,10 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
 
                 if (!connectedUser)
                 {
-                    connectedUser = handledMessage->getUserHandle();
-                    if (connectedUser)
-                    {
-                        registerStreamTransport(*connectedUser, User::Transport::boostTcp);
-                        completePendingHandshake(*connectedUser);
-                    }
+                    auto candidate = handledMessage->getUserHandle();
+                    if (!candidate || !candidate->claimPendingBoostTcpSession(client_address))
+                        break;
+                    connectedUser = std::move(candidate);
                 }
 
                 // Always update the sending function, implement some caching later.

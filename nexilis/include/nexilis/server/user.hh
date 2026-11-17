@@ -171,6 +171,10 @@ public:
     /// are counted so a failed attempt cannot cancel another one.
     void beginPendingHandshake(std::chrono::steady_clock::time_point now);
 
+    /// Claim the one pending Boost TCP switch from the handshake address.
+    /// A live session cannot be replaced by another socket.
+    bool claimPendingBoostTcpSession(const std::string& address);
+
     /// End one pending handshake and return the remaining presence.
     TransportStatus endPendingHandshake();
 
