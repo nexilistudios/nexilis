@@ -21,6 +21,9 @@
 #include <nexilis/message_auth.hh>
 #include <nexilis/util.hh>
 
+#include <chrono>
+#include <thread>
+
 namespace nexilis::client
 {
 
@@ -145,16 +148,35 @@ void ClientProtocol::start(NXProtocol::Type type)
         return;
     }
 
+    auto waitForBoostReady = [this](auto ready, const char* transport)
+    {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (!ready())
+        {
+            if (getProtocolStatus() == ProtocolStatus::error ||
+                std::chrono::steady_clock::now() >= deadline)
+            {
+                Log::error(header(), transport, " authentication timed out or failed");
+                updateProtocolStatus(ProtocolStatus::error);
+                return false;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return true;
+    };
+
     if (m_api->isInitialized())
     {
         Log::debug(header(), "Password already sent using another protocol, waiting for ready");
         switch (type)
         {
             case NXProtocol::Type::BOOST_TCP_CLIENT:
-                getClientAPI()->waitUntilBoostTCPReady();
+                waitForBoostReady([this]()
+                                  { return getClientAPI()->isBoostTCPReady(); }, "Boost TCP");
                 break;
             case NXProtocol::Type::BOOST_UDP_CLIENT:
-                getClientAPI()->waitUntilBoostUDPReady();
+                waitForBoostReady([this]()
+                                  { return getClientAPI()->isBoostUDPReady(); }, "Boost UDP");
                 break;
             case NXProtocol::Type::AF_INET_TCP_CLIENT:
                 getClientAPI()->waitUntilInetTCPReady();
@@ -211,13 +233,15 @@ void ClientProtocol::start(NXProtocol::Type type)
     {
         case NXProtocol::Type::BOOST_TCP_CLIENT:
             Log::debug(header(), "Waiting for Boost TCP to be ready");
-            getClientAPI()->waitUntilBoostTCPReady();
-            Log::debug(header(), "Boost TCP is ready");
+            if (waitForBoostReady([this]()
+                                  { return getClientAPI()->isBoostTCPReady(); }, "Boost TCP"))
+                Log::debug(header(), "Boost TCP is ready");
             break;
         case NXProtocol::Type::BOOST_UDP_CLIENT:
             Log::debug(header(), "Waiting for Boost UDP to be ready");
-            getClientAPI()->waitUntilBoostUDPReady();
-            Log::debug(header(), "Boost UDP is ready");
+            if (waitForBoostReady([this]()
+                                  { return getClientAPI()->isBoostUDPReady(); }, "Boost UDP"))
+                Log::debug(header(), "Boost UDP is ready");
             break;
         case NXProtocol::Type::AF_INET_TCP_CLIENT:
             getClientAPI()->waitUntilInetTCPReady();

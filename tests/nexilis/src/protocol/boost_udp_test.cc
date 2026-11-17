@@ -79,6 +79,16 @@ protected:
     std::shared_ptr<nexilis::client::nxboost::UDPClient> client;
 };
 
+TEST_F(BoostUDPTest, MissingAuthenticationReplyDoesNotBlockForever)
+{
+    server->stop();
+    const auto started = std::chrono::steady_clock::now();
+    client->start();
+    EXPECT_LT(std::chrono::steady_clock::now() - started, std::chrono::seconds(12));
+    EXPECT_FALSE(client->isConnected());
+    EXPECT_EQ(client->getProtocolStatus(), nexilis::client::ProtocolStatus::error);
+}
+
 TEST(UdpResponseAuth, RejectsTamperingAndReplay)
 {
     const std::string token(32, 'a');

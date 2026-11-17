@@ -40,6 +40,9 @@ available for the application to reset separately.
 
 The Boost TCP client resolves server hostnames for its authentication and session connections. The Boost UDP client also resolves IPv4 hostnames before sending gameplay packets. A failed TCP session-port connection changes the client protocol status to `error` so callers can report the failure.
 
+Boost TCP and UDP client startup waits at most ten seconds for an authentication
+reply; a missing reply sets the protocol status to `error`.
+
 Server applications can call `nexilis::server::installSignalHandlers()` and then
 `nexilis::server::waitForShutdown()` for graceful shutdown. On Windows this handles
 Ctrl+C, Ctrl+Break, console close, logoff, and system shutdown control events. On POSIX

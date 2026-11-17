@@ -69,6 +69,14 @@ int main(int argc, char** argv)
     nexilis::client::ClientAPI tcp_client_api(tcp_server_data);
     auto tcp_client = protocol_manager.createProtocol<nexilis::client::nxboost::TCPClient>(tcp_client_api);
     tcp_client.start();
+    if (!tcp_client.isConnected())
+    {
+        std::cerr << "Boost TCP client failed to connect" << std::endl;
+        tcp_client.stop();
+        udp_server.stop();
+        tcp_server.stop();
+        return 1;
+    }
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
@@ -80,6 +88,15 @@ int main(int argc, char** argv)
     nexilis::client::ClientAPI udp_client_api(udp_server_data);
     auto udp_client = protocol_manager.createProtocol<nexilis::client::nxboost::UDPClient>(udp_client_api);
     udp_client.start();
+    if (!udp_client.isConnected())
+    {
+        std::cerr << "Boost UDP client failed to connect" << std::endl;
+        udp_client.stop();
+        tcp_client.stop();
+        udp_server.stop();
+        tcp_server.stop();
+        return 1;
+    }
 
     std::cout << "Boost TCP client connected: " << (tcp_client.isConnected() ? "yes" : "no") << std::endl;
     std::cout << "Boost UDP client connected: " << (udp_client.isConnected() ? "yes" : "no") << std::endl;
