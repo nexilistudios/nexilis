@@ -18,6 +18,7 @@
 #include <nexilis/command_type.hh>
 #include <nexilis/logger/log.hh>
 #include <nexilis/ports.hh>
+#include <nexilis/util.hh>
 
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/buffers_iterator.hpp>
@@ -237,6 +238,31 @@ bool TCPClient::connectToSwitchedPort(uint16_t port)
                 return false;
             }
             Log::info(header(), "Server identity verified on switched port: ", port);
+        }
+
+        // Prove possession of the separate, one-time switch credential before
+        // exposing this socket to normal application sends.
+        const auto switchToken = getClientAPI()->takeBoostTcpSwitchToken();
+        if (switchToken.size() != 32 || getClientAPI()->getClientId() == 0)
+        {
+            Log::error(header(), "Missing Boost TCP switch credential");
+            m_switchedSocket->lowest_layer().close();
+            return false;
+        }
+        nx_data hello = Util::convertToByteVector(getClientAPI()->getClientId());
+        hello.insert(hello.end(), {'N', 'X', 'S', 'W'});
+        hello.insert(hello.end(), switchToken.begin(), switchToken.end());
+        const auto framedHello = ClientProtocol::frame(hello);
+        boost::system::error_code writeEc;
+        if (m_tlsEnabled)
+            boost::asio::write(*m_switchedSocket, boost::asio::buffer(framedHello), writeEc);
+        else
+            boost::asio::write(m_switchedSocket->next_layer(), boost::asio::buffer(framedHello), writeEc);
+        if (writeEc)
+        {
+            Log::error(header(), "Could not send Boost TCP switch credential: ", writeEc.message());
+            m_switchedSocket->lowest_layer().close();
+            return false;
         }
 
         m_switchedPort = port;

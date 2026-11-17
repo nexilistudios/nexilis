@@ -182,6 +182,7 @@ TEST_F(BoostTCPTest, SecondSessionSocketCannotClaimActiveUser)
     boost::asio::ssl::context context(boost::asio::ssl::context::tls_client);
     context.set_verify_mode(boost::asio::ssl::verify_none);
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket> intruder(io, context);
+    const auto baselineConnections = server->activeConnectionsCount();
     intruder.lowest_layer().connect({boost::asio::ip::make_address("127.0.0.1"), server->getPort()});
     intruder.handshake(boost::asio::ssl::stream_base::client);
 
@@ -191,10 +192,49 @@ TEST_F(BoostTCPTest, SecondSessionSocketCannotClaimActiveUser)
     const auto framed = nexilis::client::ClientProtocol::frame(signedRequest);
     boost::asio::write(intruder, boost::asio::buffer(framed));
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    const auto rejectionDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (server->activeConnectionsCount() > baselineConnections &&
+           std::chrono::steady_clock::now() < rejectionDeadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    EXPECT_EQ(server->activeConnectionsCount(), baselineConnections);
     EXPECT_EQ(nexilis::server::RoomStorage::getAllRooms().size(), roomCount);
     EXPECT_TRUE(user->hasTransport(nexilis::server::User::Transport::boostTcp));
     EXPECT_TRUE(client->isConnected());
+}
+
+TEST_F(BoostTCPTest, StolenSessionTokenCannotClaimPendingSwitch)
+{
+    startClientAndConnect();
+    auto victim = std::make_shared<nexilis::server::User>(nexilis::Util::getRandomUint64(),
+                                                          "127.0.0.1");
+    victim->setCommonAccess(true);
+    victim->beginPendingHandshake(std::chrono::steady_clock::now());
+    ASSERT_TRUE(nexilis::server::ClientStorage::add(victim));
+
+    boost::asio::io_context io;
+    boost::asio::ssl::context context(boost::asio::ssl::context::tls_client);
+    context.set_verify_mode(boost::asio::ssl::verify_none);
+    boost::asio::ssl::stream<boost::asio::ip::tcp::socket> intruder(io, context);
+    const auto baselineConnections = server->activeConnectionsCount();
+    intruder.lowest_layer().connect({boost::asio::ip::make_address("127.0.0.1"), server->getPort()});
+    intruder.handshake(boost::asio::ssl::stream_base::client);
+
+    auto request = nexilis::Util::convertToByteVector(victim->getId());
+    const auto messageId = nexilis::Util::convertToByteVector(uint64_t{1});
+    request.insert(request.end(), messageId.begin(), messageId.end());
+    request.insert(request.end(), {static_cast<uint8_t>(nexilis::CommandType::getting), 0, 0});
+    const auto signedRequest = nexilis::message_auth::sign(request, victim->getUdpToken());
+    ASSERT_FALSE(signedRequest.empty());
+    const auto framed = nexilis::client::ClientProtocol::frame(signedRequest);
+    boost::asio::write(intruder, boost::asio::buffer(framed));
+
+    const auto rejectionDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (server->activeConnectionsCount() > baselineConnections &&
+           std::chrono::steady_clock::now() < rejectionDeadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    EXPECT_EQ(server->activeConnectionsCount(), baselineConnections);
+    EXPECT_FALSE(victim->hasTransport(nexilis::server::User::Transport::boostTcp));
+    EXPECT_FALSE(victim->getBoostTcpSwitchToken().empty());
 }
 
 TEST_F(BoostTCPTest, RejectsWrongServerPinBeforeAuthentication)
@@ -284,6 +324,44 @@ TEST_F(BoostTCPTest, AbandonedHandshakeIsRemovedOnStop)
 
     EXPECT_FALSE(nexilis::server::ClientStorage::contains(userId));
     EXPECT_FALSE(room->contains(userId));
+}
+
+TEST_F(BoostTCPTest, PlaintextSkipModeSwitchesWithOneTimeCredential)
+{
+    client->stop();
+    server->stop();
+    server.reset();
+    nexilis::server::ClientStorage::clear();
+
+    settings.setMode(nexilis::server::AuthenticationMode::skip);
+    settings.setTls(false);
+    server = std::make_shared<nexilis::server::nxboost::TCPServer>(
+            protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings));
+    server->start();
+
+    nexilis::client::ClientConfig config;
+    config.setMode(nexilis::server::AuthenticationMode::skip);
+    config.setBoostTCPAddress("127.0.0.1");
+    config.setTls(false);
+    api = std::make_unique<nexilis::client::ClientAPI>(config);
+    client = std::make_shared<nexilis::client::nxboost::TCPClient>(
+            protocol_manager.createProtocol<nexilis::client::nxboost::TCPClient>(*api));
+    client->start();
+
+    const auto readyDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!client->isConnected() && std::chrono::steady_clock::now() < readyDeadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    ASSERT_TRUE(client->isConnected());
+    auto user = nexilis::server::ClientStorage::getClientById(api->getClientId());
+    ASSERT_NE(user, nullptr);
+    EXPECT_TRUE(user->hasTransport(nexilis::server::User::Transport::boostTcp));
+
+    client->sendMessageAsync(nexilis::client::Packet::Room::Management::create(*api, "skip_room")).get();
+    const auto roomDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (nexilis::server::RoomStorage::getAllRooms().empty() &&
+           std::chrono::steady_clock::now() < roomDeadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    EXPECT_EQ(nexilis::server::RoomStorage::getAllRooms().size(), 1u);
 }
 
 TEST_F(BoostTCPTest, SendMessageAsyncReturnsReadyFuture)

@@ -40,6 +40,15 @@ void waitFor(uint32_t seconds, bool condition)
     }
 }
 
+bool waitForServerRoomCount(std::size_t count)
+{
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (nexilis::server::RoomStorage::getAllRooms().size() != count &&
+           std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    return nexilis::server::RoomStorage::getAllRooms().size() == count;
+}
+
 template <typename Client, typename Server>
 void waitRoomInfo(std::shared_ptr<Client>& client, std::shared_ptr<Server>& server, std::unique_ptr<nexilis::client::ClientAPI>& api)
 {
@@ -265,9 +274,12 @@ TEST_F(BasicBoostTCPTest, ProtocolTestBoostTCPMultipleRoomContexts)
 
     // Create a 3D room
     this->client->sendMessage(nexilis::client::Packet::Room::Management::create(*api, "3D_room", nexilis::RoomData::Context::_3D));
+    // The write is asynchronous. Wait for creation before requesting the room
+    // list; otherwise the info request can overtake this command.
+    ASSERT_TRUE(waitForServerRoomCount(2));
     waitRoomInfo(this->client, this->server, this->api);
 
-    EXPECT_EQ(api->getActiveRooms().size(), 2);
+    ASSERT_EQ(api->getActiveRooms().size(), 2u);
 
     // Verify room contexts
     auto rooms = api->getActiveRooms();
@@ -328,6 +340,7 @@ TEST_F(RoomBoostTCP2DTest, ProtocolTestBoostTCPRoomCreation)
     EXPECT_EQ(api->getActiveRooms().size(), 1);
 
     this->client->sendMessage(nexilis::client::Packet::Room::Management::create(*api, "test"));
+    ASSERT_TRUE(waitForServerRoomCount(2));
     waitRoomInfo(this->client, this->server, this->api);
 
     EXPECT_EQ(api->getActiveRooms().size(), 2);
@@ -361,9 +374,10 @@ TEST_F(RoomBoostTCP2DTest, ProtocolTestBoostTCPRoomDelete)
 
     // Create a new room
     this->client->sendMessage(nexilis::client::Packet::Room::Management::create(*api, "test_room"));
+    ASSERT_TRUE(waitForServerRoomCount(2));
     waitRoomInfo(this->client, this->server, this->api);
 
-    EXPECT_EQ(api->getActiveRooms().size(), 2);
+    ASSERT_EQ(api->getActiveRooms().size(), 2u);
 
     // Delete the created room after opting in to client-requested removal.
     auto room_id = api->getActiveRooms()[1].getId();
@@ -371,6 +385,7 @@ TEST_F(RoomBoostTCP2DTest, ProtocolTestBoostTCPRoomDelete)
     ASSERT_NE(room, nullptr);
     room->setClientRoomRemovalAllowed(true);
     this->client->sendMessage(nexilis::client::Packet::Room::Management::remove(*api, room_id));
+    ASSERT_TRUE(waitForServerRoomCount(1));
     waitRoomInfo(this->client, this->server, this->api);
 
     // Should be back to one room
@@ -403,9 +418,10 @@ TEST_F(RoomBoostTCP2DTest, ProtocolTestBoostTCPLeaveRoom)
 
     // Create a new room
     this->client->sendMessage(nexilis::client::Packet::Room::Management::create(*api, "test_room"));
+    ASSERT_TRUE(waitForServerRoomCount(2));
     waitRoomInfo(this->client, this->server, this->api);
 
-    EXPECT_EQ(api->getActiveRooms().size(), 2);
+    ASSERT_EQ(api->getActiveRooms().size(), 2u);
 
     // Join the new room
     auto room_id = api->getActiveRooms()[1].getId();

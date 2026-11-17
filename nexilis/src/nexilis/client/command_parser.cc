@@ -113,7 +113,7 @@ std::unique_ptr<BaseAPICommand> CommandParser::parseSettingCommand(const boost::
         else if (json.contains("boost_tcp_port"))
             port = static_cast<uint16_t>(Util::toUint64(json.at("boost_tcp_port")));
 
-        return std::make_unique<SetPortCommand>(protocol, port);
+        return std::make_unique<SetPortCommand>(protocol, port, getString(json, "switch_token"));
     }
     return makeError(ReadResult::parsing_failed, "cannot find set command type");
 }

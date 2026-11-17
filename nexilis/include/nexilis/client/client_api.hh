@@ -43,6 +43,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace nexilis::client
 {
@@ -64,6 +65,7 @@ public:
         {
             std::lock_guard<std::mutex> lock(other.m_udpTokenMutex);
             m_udpToken = std::move(other.m_udpToken);
+            m_boostTcpSwitchToken = std::move(other.m_boostTcpSwitchToken);
         }
 
         ClientData& operator=(ClientData&& other)
@@ -76,6 +78,7 @@ public:
                 m_nextMessageId.store(other.m_nextMessageId.load());
                 m_responseWindow = std::move(other.m_responseWindow);
                 m_udpToken = std::move(other.m_udpToken);
+                m_boostTcpSwitchToken = std::move(other.m_boostTcpSwitchToken);
             }
             return *this;
         }
@@ -132,6 +135,18 @@ public:
             }
         }
 
+        void setBoostTcpSwitchToken(std::string token)
+        {
+            std::lock_guard<std::mutex> lock(m_udpTokenMutex);
+            m_boostTcpSwitchToken = std::move(token);
+        }
+
+        std::string takeBoostTcpSwitchToken()
+        {
+            std::lock_guard<std::mutex> lock(m_udpTokenMutex);
+            return std::exchange(m_boostTcpSwitchToken, {});
+        }
+
         bool acceptUdpResponseId(uint64_t id)
         {
             if (id == 0 || !m_responseWindow)
@@ -168,6 +183,7 @@ public:
         std::atomic<uint64_t> m_nextMessageId = 1;
         mutable std::mutex m_udpTokenMutex;
         std::string m_udpToken;
+        std::string m_boostTcpSwitchToken;
         std::shared_ptr<ResponseWindow> m_responseWindow = std::make_shared<ResponseWindow>();
     };
 
@@ -596,6 +612,16 @@ public:
     void setUdpToken(std::string token)
     {
         m_clientData.setUdpToken(std::move(token));
+    }
+
+    void setBoostTcpSwitchToken(std::string token)
+    {
+        m_clientData.setBoostTcpSwitchToken(std::move(token));
+    }
+
+    std::string takeBoostTcpSwitchToken()
+    {
+        return m_clientData.takeBoostTcpSwitchToken();
     }
 
     void setRoomId(uint64_t id)

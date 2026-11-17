@@ -18,7 +18,9 @@
 #define NEXILIS_CLIENT_COMMAND_SET_PORT_HH
 
 #include <nexilis/client/base_api_command.hh>
+#include <nexilis/udp_auth.hh>
 
+#include <array>
 #include <cstdint>
 #include <string>
 
@@ -28,13 +30,20 @@ namespace nexilis::client
 class SetPortCommand : public BaseAPICommand
 {
 public:
-    SetPortCommand(std::string protocol, uint16_t port)
-        : m_protocol(std::move(protocol)), m_port(port)
+    SetPortCommand(std::string protocol, uint16_t port, std::string switchToken = {})
+        : m_protocol(std::move(protocol)), m_port(port), m_switchToken(std::move(switchToken))
     {
     }
 
     ReadResult execute(ClientAPI& api, ClientAPI::ClientAPIData&) override
     {
+        if (!m_switchToken.empty())
+        {
+            std::array<uint8_t, udp_auth::token_size> parsed{};
+            if (m_protocol != "boost_tcp" || !udp_auth::fromHex(m_switchToken, parsed))
+                return ReadResult::invalid_input;
+            api.setBoostTcpSwitchToken(m_switchToken);
+        }
         api.setProtocolPort(m_protocol, m_port);
         return ReadResult::success;
     }
@@ -42,6 +51,7 @@ public:
 private:
     std::string m_protocol;
     uint16_t m_port;
+    std::string m_switchToken;
 };
 
 } // namespace nexilis::client

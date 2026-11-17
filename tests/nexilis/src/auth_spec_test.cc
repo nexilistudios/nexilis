@@ -81,14 +81,19 @@ TEST(ClientHandshake, PendingBoostTcpSessionCanBeClaimedOnlyOnce)
 {
     server::User user(42, "127.0.0.1");
     user.beginPendingHandshake(std::chrono::steady_clock::now());
+    const auto switchToken = user.getBoostTcpSwitchToken();
+    ASSERT_EQ(switchToken.size(), 32u);
+    EXPECT_NE(switchToken, user.getUdpToken());
 
-    EXPECT_FALSE(user.claimPendingBoostTcpSession("127.0.0.2"));
+    EXPECT_FALSE(user.claimPendingBoostTcpSession("127.0.0.1", user.getUdpToken()));
+    EXPECT_FALSE(user.claimPendingBoostTcpSession("127.0.0.2", switchToken));
     EXPECT_FALSE(user.hasTransport(server::User::Transport::boostTcp));
-    EXPECT_TRUE(user.claimPendingBoostTcpSession("127.0.0.1"));
-    EXPECT_FALSE(user.claimPendingBoostTcpSession("127.0.0.1"));
+    EXPECT_TRUE(user.claimPendingBoostTcpSession("127.0.0.1", switchToken));
+    EXPECT_TRUE(user.getBoostTcpSwitchToken().empty());
+    EXPECT_FALSE(user.claimPendingBoostTcpSession("127.0.0.1", switchToken));
     EXPECT_TRUE(user.hasTransport(server::User::Transport::boostTcp));
     user.endStreamTransport(server::User::Transport::boostTcp);
-    EXPECT_FALSE(user.claimPendingBoostTcpSession("127.0.0.1"));
+    EXPECT_FALSE(user.claimPendingBoostTcpSession("127.0.0.1", switchToken));
 }
 
 TEST(ClientHandshake, DoesNotSendBeforeTransportIsReady)

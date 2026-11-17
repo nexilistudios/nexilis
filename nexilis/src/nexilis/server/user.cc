@@ -35,6 +35,9 @@ User::User(uint64_t id, std::string ip_address)
     if (RAND_bytes(token.data(), token.size()) != 1)
         throw std::runtime_error("Failed to create UDP session token");
     m_udpToken = udp_auth::toHex(token.data(), token.size());
+    if (RAND_bytes(token.data(), token.size()) != 1)
+        throw std::runtime_error("Failed to create Boost TCP switch token");
+    m_boostTcpSwitchToken = udp_auth::toHex(token.data(), token.size());
 }
 
 User::User(User&& other) noexcept
@@ -84,6 +87,7 @@ User::User(User&& other) noexcept
         m_datagramLastActivity = other.m_datagramLastActivity;
         m_pendingHandshakes = other.m_pendingHandshakes;
         m_pendingHandshakeSince = other.m_pendingHandshakeSince;
+        m_boostTcpSwitchToken = std::move(other.m_boostTcpSwitchToken);
     }
 }
 
@@ -134,6 +138,7 @@ User& User::operator=(User&& other) noexcept
             m_datagramLastActivity = other.m_datagramLastActivity;
             m_pendingHandshakes = other.m_pendingHandshakes;
             m_pendingHandshakeSince = other.m_pendingHandshakeSince;
+            m_boostTcpSwitchToken = std::move(other.m_boostTcpSwitchToken);
         }
         m_hasRootAccess.store(other.m_hasRootAccess.load());
         m_hasCommonAccess.store(other.m_hasCommonAccess.load());
@@ -408,16 +413,24 @@ void User::beginPendingHandshake(std::chrono::steady_clock::time_point now)
     ++m_pendingHandshakes;
 }
 
-bool User::claimPendingBoostTcpSession(const std::string& address)
+std::string User::getBoostTcpSwitchToken() const
+{
+    std::lock_guard<std::mutex> lock(m_transportMutex);
+    return m_boostTcpSwitchToken;
+}
+
+bool User::claimPendingBoostTcpSession(const std::string& address, const std::string& token)
 {
     std::lock_guard<std::mutex> lock(m_transportMutex);
     const auto index = transportIndex(Transport::boostTcp);
     if (address != m_ip_address || m_pendingHandshakes != 1 ||
-        m_streamTransportConnections[index] != 0)
+        m_streamTransportConnections[index] != 0 || m_boostTcpSwitchToken.empty() ||
+        !Util::constantTimeEquals(m_boostTcpSwitchToken, token))
         return false;
 
     m_pendingHandshakes = 0;
     m_pendingHandshakeSince = {};
+    m_boostTcpSwitchToken.clear();
     ++m_streamTransportConnections[index];
     return true;
 }

@@ -16,12 +16,18 @@ Each TCP and Unix stream request is prefixed with a **4-byte big-endian uint32_t
 
 The receiver reads exactly 4 bytes for the length, then exactly that many bytes for the payload. The tag authenticates the client ID, message ID, and complete command using the random per-session `udp_token` key delivered in the initial `client_id` response. The key is never included in later requests. Initial password or `skip` authentication has no session key yet and is the only unsigned request. The server rejects unsigned or incorrectly signed commands before dispatch.
 
-For Boost TCP, the switched session port accepts the first signed request only
-while the initial handshake is pending and only from the handshake's source IP.
-That request claims the pending session once. An active session cannot be
-replaced by a second socket; subsequent requests on the session socket must
-retain the same client ID. A token stolen before the first switched request
-can still race that request from the same source IP.
+The Boost TCP server sends a separate random 16-byte `switch_token` (32 hex
+characters) in the initial `port` response on the handshake connection. After
+connecting to the switched port, the client sends one framed switch proof:
+`[8-byte client ID][NXSW][32 ASCII hex token]`. The server accepts this frame
+only while the handshake is pending, from the handshake's source IP, and
+consumes the credential atomically. It rejects normal commands until this
+proof succeeds. A session token alone cannot claim the switched socket; a
+second socket cannot replace an active session. Later requests on the accepted
+socket must retain the same client ID. In plaintext skip mode, a network
+observer can see the switch credential; TLS protects it in password mode.
+The switch proof changes the Boost TCP wire protocol, so the client and server
+must both use versions that implement it.
 
 After a request is authenticated and accepted by the replay window, the server applies a per-client command throughput limit before parsing or dispatching it. The limiter is a token bucket with a default rate of 120 commands per second and a burst allowance of one second's worth; excess commands are dropped without a response. Configure it with `nexilis::server::ServerConfig::setMaxCommandRate`; zero or a negative value disables the limit.
 

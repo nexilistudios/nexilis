@@ -28,10 +28,17 @@ CommandResult ServerImpl::set_protocol_boosttcp_port(const DefaultArgs& args)
     auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 4);
     uint16_t port = Util::convertoToUint16(payload);
 
-    auto data = Command::clientMessageData(CommandType::setting, "port", args.getMessageId(),
-                                           {{"protocol", boost::json::value("boost_tcp")},
-                                            {"port", boost::json::value(port)},
-                                            {"boost_tcp_port", boost::json::value(port)}});
+    std::map<std::string, boost::json::value> params{
+            {"protocol", boost::json::value("boost_tcp")},
+            {"port", boost::json::value(port)},
+            {"boost_tcp_port", boost::json::value(port)}};
+    if (args.getProtocol().getType() == NXProtocol::Type::BOOST_TCP_SERVER)
+    {
+        const auto switchToken = args.getUser().getBoostTcpSwitchToken();
+        if (!switchToken.empty())
+            params.emplace("switch_token", switchToken);
+    }
+    auto data = Command::clientMessageData(CommandType::setting, "port", args.getMessageId(), params);
     if (Command::sendMessageToClient(data, args.getUser(), args.getProtocol()))
     {
         return CommandResult::success;

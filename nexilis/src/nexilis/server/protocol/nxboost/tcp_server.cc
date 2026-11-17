@@ -374,6 +374,12 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
 
                     auto clientAddress = socket_wrapper->getRemoteAddress();
 
+                    // Known user IDs are never valid on the authentication
+                    // port. Reject them before the shared MAC/replay parser.
+                    if (data.size() >= sizeof(uint64_t) &&
+                        ClientStorage::getClientById(Util::uint64FromFront(data)))
+                        break;
+
                     // The first message from an unidentified client is the
                     // password (or a client_id handshake in skip mode). The
                     // MessageHandler parses it and returns an AuthMessage
@@ -384,6 +390,12 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
                     {
                         continue;
                     }
+
+                    // The main port admits only fresh handshakes. A signed
+                    // command for an existing user must not replace its send
+                    // callback or gain access to the switch credential.
+                    if (handled_message->getType() != BaseMessage::Type::auth_message)
+                        break;
 
                     // A successful handshake publishes a user before the session
                     // port is open. Keep that presence so a client that never
@@ -458,10 +470,6 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
                         {
                             Log::info(header(), "Result: ", asString(passCommand));
                         }
-                    }
-                    else
-                    {
-                        Log::critical(header(), "Wrong message type");
                     }
                 }
             }
@@ -551,8 +559,8 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
                     continue;
                 }
 
-                // Never let a new socket consume a live session's replay IDs,
-                // or let an established socket switch to a different user.
+                // The first frame is a one-time switch proof, not an application
+                // command. Reject anything else before it reaches the replay window.
                 if (data.size() < sizeof(uint64_t))
                     break;
                 const uint64_t requestedId = Util::uint64FromFront(data);
@@ -561,9 +569,17 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
                 if (!connectedUser)
                 {
                     auto candidate = ClientStorage::getClientById(requestedId);
-                    if (!candidate || candidate->getIPAddress() != client_address ||
-                        candidate->hasTransport(User::Transport::boostTcp))
+                    if (!candidate || data.size() != 44 ||
+                        !std::equal(data.begin() + 8, data.begin() + 12, "NXSW") ||
+                        !candidate->claimPendingBoostTcpSession(
+                                client_address, std::string(data.begin() + 12, data.end())))
                         break;
+                    connectedUser = std::move(candidate);
+                    connectedUser->setBoostTCPSend([socket_wrapper](const nx_data& bytes)
+                    {
+                        socket_wrapper->send(bytes);
+                    });
+                    continue;
                 }
 
                 auto handledMessage = getMessageHandler().readMessage(client_address, data, &getSettings());
@@ -572,14 +588,6 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
                 {
                     Log::error(header(), "Received invalid message");
                     continue;
-                }
-
-                if (!connectedUser)
-                {
-                    auto candidate = handledMessage->getUserHandle();
-                    if (!candidate || !candidate->claimPendingBoostTcpSession(client_address))
-                        break;
-                    connectedUser = std::move(candidate);
                 }
 
                 // Always update the sending function, implement some caching later.
