@@ -214,6 +214,8 @@ void UDPClient::receiveLoop()
 
             if (udp_auth::hasPrefix(buffer, udp_auth::challenge))
             {
+                if (!getClientAPI()->getUdpToken().empty())
+                    continue;
                 if (buffer.size() == 4 + udp_auth::cookie_size)
                 {
                     nx_data pending;
@@ -232,7 +234,18 @@ void UDPClient::receiveLoop()
                 continue;
             }
 
-            auto result = ClientProtocol::getClientAPI()->readMessage(buffer);
+            auto* api = ClientProtocol::getClientAPI();
+            const auto token = api->getUdpToken();
+            if (!token.empty())
+            {
+                uint64_t sequence = 0;
+                nx_data payload;
+                if (!udp_auth::readResponse(buffer, token, sequence, payload) ||
+                    !api->acceptUdpResponseId(sequence))
+                    continue;
+                buffer = std::move(payload);
+            }
+            auto result = api->readMessage(buffer);
             if (result == ReadResult::success)
             {
                 Log::debug("UDPClient: Message read successfully");

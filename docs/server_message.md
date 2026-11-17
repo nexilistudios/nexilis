@@ -53,6 +53,14 @@ payload. Legacy UDP datagrams without this envelope are dropped. UDP remains
 plaintext. Use Boost TCP with a pinned server public key to establish a
 password-protected session before attaching UDP.
 
+After setup, UDP server responses carry `NXUR`, an 8-byte response sequence,
+a 16-byte HMAC-SHA-256 tag, and the JSON payload. The MAC uses the per-session
+token with a response-specific domain label. Clients verify the tag and a
+1024-response replay window before parsing JSON. The initial `skip`-mode
+`client_id` reply is the only unsigned UDP application response because the
+client does not know its token yet; password-protected clients obtain that
+token through the authenticated stream first.
+
 ## Identification (uint64_t)
 
 The first 8 bytes of the payload identify the client. A value of 0 indicates an unauthenticated client.

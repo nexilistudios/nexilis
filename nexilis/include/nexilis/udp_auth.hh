@@ -39,6 +39,7 @@ inline constexpr std::array<uint8_t, 4> hello{'N', 'X', 'U', 'H'};
 inline constexpr std::array<uint8_t, 4> challenge{'N', 'X', 'U', 'C'};
 inline constexpr std::array<uint8_t, 4> authentication{'N', 'X', 'U', 'A'};
 inline constexpr std::array<uint8_t, 4> session{'N', 'X', 'U', 'S'};
+inline constexpr std::array<uint8_t, 4> response{'N', 'X', 'U', 'R'};
 inline constexpr size_t token_size = 16;
 inline constexpr size_t cookie_size = 16;
 
@@ -119,6 +120,61 @@ inline bool readSession(const nx_data& packet, std::string_view token, nx_data& 
     if (!message_auth::verify(signedPayload, token, verified))
         return false;
     payload = std::move(verified);
+    return true;
+}
+
+inline std::optional<std::array<uint8_t, message_auth::tag_size>> responseTag(
+        const nx_data& data, std::string_view token)
+{
+    std::array<uint8_t, token_size> key{};
+    if (!message_auth::decodeKey(token, key))
+        return std::nullopt;
+    constexpr std::string_view domain = "Nexilis UDP response v1";
+    nx_data input(domain.begin(), domain.end());
+    input.insert(input.end(), data.begin(), data.end());
+    unsigned int length = 0;
+    unsigned char digest[EVP_MAX_MD_SIZE]{};
+    if (!HMAC(EVP_sha256(), key.data(), static_cast<int>(key.size()), input.data(),
+              input.size(), digest, &length) ||
+        length < message_auth::tag_size)
+        return std::nullopt;
+    std::array<uint8_t, message_auth::tag_size> tag{};
+    std::copy_n(digest, tag.size(), tag.begin());
+    return tag;
+}
+
+inline nx_data makeResponse(const nx_data& payload, std::string_view token, uint64_t sequence)
+{
+    if (sequence == 0)
+        return {};
+    nx_data data(response.begin(), response.end());
+    for (int shift = 56; shift >= 0; shift -= 8)
+        data.push_back(static_cast<uint8_t>(sequence >> shift));
+    data.insert(data.end(), payload.begin(), payload.end());
+    auto tag = responseTag(data, token);
+    if (!tag)
+        return {};
+    data.insert(data.begin() + 12, tag->begin(), tag->end());
+    return data;
+}
+
+inline bool readResponse(const nx_data& packet, std::string_view token,
+                         uint64_t& sequence, nx_data& payload)
+{
+    if (!hasPrefix(packet, response) || packet.size() <= 12 + message_auth::tag_size)
+        return false;
+    nx_data signedData(packet.begin(), packet.begin() + 12);
+    signedData.insert(signedData.end(), packet.begin() + 12 + message_auth::tag_size,
+                      packet.end());
+    auto tag = responseTag(signedData, token);
+    if (!tag || CRYPTO_memcmp(tag->data(), packet.data() + 12, tag->size()) != 0)
+        return false;
+    sequence = 0;
+    for (size_t i = 4; i < 12; ++i)
+        sequence = (sequence << 8) | packet[i];
+    if (sequence == 0)
+        return false;
+    payload.assign(packet.begin() + 12 + message_auth::tag_size, packet.end());
     return true;
 }
 

@@ -211,6 +211,8 @@ void UDPClient::receiveLoop()
         auto byteVector = Util::convertToByteVector(m_receiveBuffer.data(), receivedBytes);
         if (udp_auth::hasPrefix(byteVector, udp_auth::challenge))
         {
+            if (!getClientAPI()->getUdpToken().empty())
+                continue;
             if (byteVector.size() == 4 + udp_auth::cookie_size)
             {
                 nx_data pending;
@@ -227,7 +229,18 @@ void UDPClient::receiveLoop()
             }
             continue;
         }
-        auto result = ClientProtocol::getClientAPI()->readMessage(byteVector);
+        auto* api = ClientProtocol::getClientAPI();
+        const auto token = api->getUdpToken();
+        if (!token.empty())
+        {
+            uint64_t sequence = 0;
+            nx_data payload;
+            if (!udp_auth::readResponse(byteVector, token, sequence, payload) ||
+                !api->acceptUdpResponseId(sequence))
+                continue;
+            byteVector = std::move(payload);
+        }
+        auto result = api->readMessage(byteVector);
         if (result == ReadResult::success)
         {
             Log::debug("BoostUDPClient: Message read successfully");

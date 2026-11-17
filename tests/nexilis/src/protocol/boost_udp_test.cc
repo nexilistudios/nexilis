@@ -79,6 +79,26 @@ protected:
     std::shared_ptr<nexilis::client::nxboost::UDPClient> client;
 };
 
+TEST(UdpResponseAuth, RejectsTamperingAndReplay)
+{
+    const std::string token(32, 'a');
+    const nexilis::nx_data json{'{', '}', '\n'};
+    auto packet = nexilis::udp_auth::makeResponse(json, token, 7);
+    uint64_t sequence = 0;
+    nexilis::nx_data payload;
+    ASSERT_TRUE(nexilis::udp_auth::readResponse(packet, token, sequence, payload));
+    EXPECT_EQ(sequence, 7);
+    EXPECT_EQ(payload, json);
+
+    nexilis::client::ClientConfig config;
+    nexilis::client::ClientAPI api(config);
+    EXPECT_TRUE(api.acceptUdpResponseId(sequence));
+    EXPECT_FALSE(api.acceptUdpResponseId(sequence));
+
+    packet.back() ^= 1;
+    EXPECT_FALSE(nexilis::udp_auth::readResponse(packet, token, sequence, payload));
+}
+
 namespace
 {
 uint64_t attachRoom(const std::shared_ptr<nexilis::server::User>& user, const std::string& name)

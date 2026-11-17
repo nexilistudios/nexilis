@@ -324,8 +324,20 @@ void UDPServer::receiveFromClients()
             {
                 m_clientEndpoints[user->getId()] = clientAddress;
                 auto senderAddress = clientAddress;
-                user->setInetUDPSend([socket = m_socketState, senderAddress](const nx_data& bytes)
-                                     { socket->send(senderAddress, bytes); });
+                std::weak_ptr<User> recipient = handledMessage->getUserHandle();
+                auto initialReply = std::make_shared<std::atomic<bool>>(
+                        handledMessage->getType() == BaseMessage::Type::auth_message);
+                user->setInetUDPSend([socket = m_socketState, senderAddress, recipient, initialReply](const nx_data& bytes)
+                                     {
+                    auto client = recipient.lock();
+                    if (!client)
+                        return;
+                    auto packet = initialReply->exchange(false)
+                                          ? bytes
+                                          : udp_auth::makeResponse(bytes, client->getUdpToken(),
+                                                                   client->nextUdpResponseId());
+                    if (!packet.empty())
+                        socket->send(senderAddress, packet); });
             }
 
             auto msgType = handledMessage->getType();

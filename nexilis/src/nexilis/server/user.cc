@@ -42,6 +42,7 @@ User::User(User&& other) noexcept
       m_ip_address(std::move(other.m_ip_address)),
       m_udpToken(std::move(other.m_udpToken)),
       m_udpTokenSent(other.m_udpTokenSent.load()),
+      m_nextUdpResponseId(other.m_nextUdpResponseId.load()),
       m_replayWindow(std::move(other.m_replayWindow)),
       m_roomId(other.m_roomId.load()),
       m_hasRootAccess(other.m_hasRootAccess.load()),
@@ -94,6 +95,7 @@ User& User::operator=(User&& other) noexcept
         m_ip_address = std::move(other.m_ip_address);
         m_udpToken = std::move(other.m_udpToken);
         m_udpTokenSent.store(other.m_udpTokenSent.load());
+        m_nextUdpResponseId.store(other.m_nextUdpResponseId.load());
         m_replayWindow = std::move(other.m_replayWindow);
         m_roomId.store(other.m_roomId.load());
         {

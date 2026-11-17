@@ -80,6 +80,11 @@ public:
         return m_udpTokenSent.compare_exchange_strong(expected, true);
     }
 
+    uint64_t nextUdpResponseId()
+    {
+        return m_nextUdpResponseId.fetch_add(1);
+    }
+
     /// Accept a fresh request ID in the bounded, out-of-order replay window.
     bool acceptMessageId(uint64_t id);
 
@@ -379,6 +384,7 @@ private:
     std::string m_ip_address;
     std::string m_udpToken;
     std::atomic<bool> m_udpTokenSent{false};
+    std::atomic<uint64_t> m_nextUdpResponseId{1};
     std::shared_ptr<ReplayWindow> m_replayWindow = std::make_shared<ReplayWindow>();
     std::atomic<uint64_t> m_roomId{0};
     mutable std::mutex m_roomTransitionMutex;

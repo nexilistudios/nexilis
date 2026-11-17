@@ -329,13 +329,20 @@ TEST_F(AFInetUDPTest, RetainedCallbackRejectsAfterStopDestructionAndReplacement)
     ASSERT_NE(retained, nullptr);
     ASSERT_TRUE(retained->inetUDPSend({42}));
     char response[1024];
-    ssize_t received;
+    nexilis::nx_data payload;
+    uint64_t sequence = 0;
+    ssize_t received = 0;
     do
     {
         received = recv(peer.fd, response, sizeof(response), 0);
-    } while (received > 1);
-    ASSERT_EQ(received, 1);
-    EXPECT_EQ(response[0], 42);
+        if (received <= 0)
+            break;
+        nexilis::nx_data packet(response, response + received);
+        if (nexilis::udp_auth::readResponse(packet, retained->getUdpToken(), sequence, payload))
+            break;
+    } while (true);
+    ASSERT_GT(received, 0);
+    EXPECT_EQ(payload, (nexilis::nx_data{42}));
     server->stop();
     EXPECT_THROW(retained->inetUDPSend({42}), std::runtime_error);
     server.reset();

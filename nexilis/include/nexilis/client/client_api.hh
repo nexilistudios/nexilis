@@ -36,6 +36,7 @@
 #include <boost/json/object.hpp>
 
 #include <atomic>
+#include <bitset>
 #include <cassert>
 #include <cstdint>
 #include <future>
@@ -58,7 +59,8 @@ public:
             : m_clientId(other.m_clientId.load()),
               m_roomId(other.m_roomId.load()),
               m_nextMessageId(other.m_nextMessageId.load()),
-              m_udpTokenMutex()
+              m_udpTokenMutex(),
+              m_responseWindow(std::move(other.m_responseWindow))
         {
             std::lock_guard<std::mutex> lock(other.m_udpTokenMutex);
             m_udpToken = std::move(other.m_udpToken);
@@ -72,6 +74,7 @@ public:
                 m_clientId.store(other.m_clientId.load());
                 m_roomId.store(other.m_roomId.load());
                 m_nextMessageId.store(other.m_nextMessageId.load());
+                m_responseWindow = std::move(other.m_responseWindow);
                 m_udpToken = std::move(other.m_udpToken);
             }
             return *this;
@@ -121,14 +124,51 @@ public:
         {
             std::lock_guard<std::mutex> lock(m_udpTokenMutex);
             m_udpToken = std::move(token);
+            if (m_responseWindow)
+            {
+                std::lock_guard replayLock(m_responseWindow->mutex);
+                m_responseWindow->highest = 0;
+                m_responseWindow->seen.reset();
+            }
+        }
+
+        bool acceptUdpResponseId(uint64_t id)
+        {
+            if (id == 0 || !m_responseWindow)
+                return false;
+            std::lock_guard lock(m_responseWindow->mutex);
+            auto& window = *m_responseWindow;
+            if (id > window.highest)
+            {
+                const auto delta = id - window.highest;
+                if (delta >= window.seen.size())
+                    window.seen.reset();
+                else
+                    window.seen <<= delta;
+                window.highest = id;
+                window.seen.set(0);
+                return true;
+            }
+            const auto offset = window.highest - id;
+            if (offset >= window.seen.size() || window.seen.test(offset))
+                return false;
+            window.seen.set(offset);
+            return true;
         }
 
     private:
+        struct ResponseWindow
+        {
+            std::mutex mutex;
+            uint64_t highest = 0;
+            std::bitset<1024> seen;
+        };
         std::atomic<uint64_t> m_clientId = 0;
         std::atomic<uint64_t> m_roomId = 0;
         std::atomic<uint64_t> m_nextMessageId = 1;
         mutable std::mutex m_udpTokenMutex;
         std::string m_udpToken;
+        std::shared_ptr<ResponseWindow> m_responseWindow = std::make_shared<ResponseWindow>();
     };
 
     struct DamageEvent
@@ -546,6 +586,11 @@ public:
     std::string getUdpToken() const
     {
         return m_clientData.getUdpToken();
+    }
+
+    bool acceptUdpResponseId(uint64_t id)
+    {
+        return m_clientData.acceptUdpResponseId(id);
     }
 
     void setUdpToken(std::string token)
