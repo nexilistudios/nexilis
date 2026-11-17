@@ -587,18 +587,23 @@ public:
         m_serverData.setMessageEncryption(enabled);
     }
 
-    /// Whether the TCP connection is encrypted with TLS-PSK.
+    /// Whether the Boost TCP connection uses certificate-based TLS.
     bool isTlsEnabled() const
     {
         return m_serverData.isTlsEnabled();
     }
 
-    /// Toggle TLS-PSK transport encryption on/off.
+    /// Toggle TLS transport encryption on/off.
     /// \note Off by default; the transport upgrade applies when the client
     ///       connects, so set it before start().
     void setTls(bool enabled)
     {
         m_serverData.setTls(enabled);
+    }
+
+    const std::string& getServerPublicKeySha256() const
+    {
+        return m_serverData.getServerPublicKeySha256();
     }
 
     std::string getClientUsername(uint64_t client_id)

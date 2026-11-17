@@ -494,7 +494,7 @@ try
                     return CommandResult::not_found;
                 }
 
-                // Root access is available only on an authenticated TLS-PSK
+                // Root access is available only on an authenticated TLS
                 // Boost TCP session. Failed attempts are shared by source
                 // address across reconnects to this server instance.
                 case 1:

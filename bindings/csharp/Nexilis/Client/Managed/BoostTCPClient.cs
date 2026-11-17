@@ -46,7 +46,7 @@ namespace Nexilis.Client
             if (_boostTcpClientPtr == IntPtr.Zero)
             {
                 throw new InvalidOperationException(
-                    "Boost TCP client creation failed. Configure a TLS-PSK password or disable TLS on both peers.");
+                    "Boost TCP client creation failed. Configure a server public-key pin when TLS is enabled.");
             }
         }
 

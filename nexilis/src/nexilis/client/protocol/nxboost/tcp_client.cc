@@ -29,9 +29,11 @@
 #include <boost/asio/streambuf.hpp>
 #include <boost/asio/write.hpp>
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <thread>
 
 namespace nexilis::client::nxboost
 {
@@ -176,7 +178,14 @@ bool TCPClient::connectToMainPort()
                 m_mainSocket->lowest_layer().close();
                 return false;
             }
-            Log::info(header(), "TLS-PSK established on main port: ", m_mainPort);
+            if (!tls::verifyServerKey(m_mainSocket->native_handle(),
+                                      getClientAPI()->getServerPublicKeySha256()))
+            {
+                Log::error(header(), "Server public key does not match the configured pin on main port");
+                m_mainSocket->lowest_layer().close();
+                return false;
+            }
+            Log::info(header(), "Server identity verified on main port: ", m_mainPort);
         }
         Log::debug(header(), "Successfully connected to main port: ", m_mainPort);
         return true;
@@ -217,7 +226,14 @@ bool TCPClient::connectToSwitchedPort(uint16_t port)
                 m_switchedSocket->lowest_layer().close();
                 return false;
             }
-            Log::info(header(), "TLS-PSK established on switched port: ", port);
+            if (!tls::verifyServerKey(m_switchedSocket->native_handle(),
+                                      getClientAPI()->getServerPublicKeySha256()))
+            {
+                Log::error(header(), "Server public key does not match the configured pin on switched port");
+                m_switchedSocket->lowest_layer().close();
+                return false;
+            }
+            Log::info(header(), "Server identity verified on switched port: ", port);
         }
 
         m_switchedPort = port;
@@ -235,12 +251,12 @@ std::shared_ptr<boost::asio::ssl::context> TCPClient::createTlsContext(ClientAPI
 {
     if (api.isTlsEnabled())
     {
-        auto pskCtx = tls::createPskContext(api.getClientPassword(), false);
-        if (!pskCtx)
-        {
-            throw std::runtime_error("TLS-PSK context creation failed (is the password set?)");
-        }
-        return pskCtx;
+        if (!tls::validPublicKeySha256(api.getServerPublicKeySha256()))
+            throw std::runtime_error("A valid server public-key SHA-256 pin is required for Boost TCP TLS");
+        auto context = tls::createClientContext();
+        if (!context)
+            throw std::runtime_error("TLS client context creation failed");
+        return context;
     }
     return std::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::tls);
 }
@@ -646,6 +662,22 @@ void TCPClient::start()
         // clang-format on
 
         ClientProtocol::start(getType());
+
+        // Authentication on the first port only identifies the client. Do not
+        // report readiness until the session port has also verified the pinned
+        // server key; otherwise callers can send commands to the closing
+        // handshake socket and lose them during the switch.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!m_useSwitchedPort.load() && !m_stopped->load() &&
+               getProtocolStatus() == ProtocolStatus::connected &&
+               std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        if (!m_useSwitchedPort.load())
+        {
+            Log::error(header(), "Session port did not verify the server identity");
+            updateProtocolStatus(ProtocolStatus::error);
+            stop();
+        }
     }
     else
     {

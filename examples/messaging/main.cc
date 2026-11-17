@@ -21,6 +21,7 @@
 #include <nexilis/logger/log.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/protocol/nxboost/tcp_server.hh>
+#include <nexilis/tls.hh>
 
 #include <chrono>
 #include <cstdlib>
@@ -95,6 +96,12 @@ int main(int argc, char** argv)
     settings.setMode(nexilis::server::AuthenticationMode::password_protected);
     settings.setPassphrase("salasana");
     settings.setRootPassword("root");
+    // In a deployed game, persist the server private key and distribute the
+    // public-key pin to clients through a trusted channel.
+    const auto identity = nexilis::tls::generateSelfSignedIdentity();
+    if (identity.publicKeySha256.empty())
+        return EXIT_FAILURE;
+    settings.setTlsIdentity(identity.certificatePem, identity.privateKeyPem);
 
     auto server = protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
     server.start();
@@ -106,6 +113,7 @@ int main(int argc, char** argv)
     server_data.setPassword("salasana");
     server_data.setBoostTCPAddress("127.0.0.1");
     server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+    server_data.setServerPublicKeySha256(identity.publicKeySha256);
 
     nexilis::client::ClientAPI alice_api(server_data);
     auto alice = protocol_manager.createProtocol<nexilis::client::nxboost::TCPClient>(alice_api);
@@ -137,6 +145,7 @@ int main(int argc, char** argv)
     bob_data.setPassword("salasana");
     bob_data.setBoostTCPAddress("127.0.0.1");
     bob_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+    bob_data.setServerPublicKeySha256(identity.publicKeySha256);
 
     nexilis::client::ClientAPI bob_api(bob_data);
     auto bob = protocol_manager.createProtocol<nexilis::client::nxboost::TCPClient>(bob_api);
@@ -201,7 +210,7 @@ int main(int argc, char** argv)
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
     }
 
-    // Re-run the same conversation with end-to-end encryption enabled. The
+    // Re-run the same conversation with optional room-message encryption enabled. The
     // feature is optional: encryption only kicks in when the developer opts in.
     // The server relays the ciphertext opaquely, so it can no longer read the
     // messages. Every recipient decrypts them with the connection password.
@@ -209,8 +218,8 @@ int main(int argc, char** argv)
     bob_api.setMessageEncryption(true);
 
     const std::vector<Turn> secret_conversation = {
-            {alice, alice_api, "Pssst, Bob: the server can't read this one."},
-            {bob, bob_api, "Impressive. Genuinely end-to-end encrypted."},
+            {alice, alice_api, "Pssst, Bob: this room message is encrypted on the wire."},
+            {bob, bob_api, "The server also knows the room-message key."},
             {alice, alice_api, "And it only turned on because we asked for it."}};
 
     for (const auto& turn : secret_conversation)
@@ -266,7 +275,7 @@ int main(int argc, char** argv)
                              encryptedMessagesReadable(bob_api, "Bob");
     if (encryptedOk)
     {
-        std::cout << "End-to-end encrypted messages decrypted correctly on both clients" << std::endl;
+        std::cout << "Encrypted room messages decrypted correctly on both clients" << std::endl;
     }
 
     bob.stop();

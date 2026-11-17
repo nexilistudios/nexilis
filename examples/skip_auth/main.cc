@@ -77,7 +77,7 @@ int main(int argc, char** argv)
     // may connect and is identified immediately by the server.
     nexilis::server::ServerConfig settings;
     settings.setMode(nexilis::server::AuthenticationMode::skip);
-    settings.setTls(false); // No shared passphrase is available for TLS-PSK.
+    settings.setTls(false); // Local passwordless example uses plaintext.
 
     auto server = protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
     server.start();

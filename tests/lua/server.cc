@@ -9,6 +9,9 @@
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/client_storage.hh>
 #include <nexilis/server/protocol/nxboost/tcp_server.hh>
+#include <nexilis/tls.hh>
+
+#include <fstream>
 
 int main()
 {
@@ -21,6 +24,11 @@ int main()
     config.setMode(nexilis::server::AuthenticationMode::password_protected);
     config.setPassphrase("lua-test-password");
     config.setRootPassword("lua-test-root");
+    const auto identity = nexilis::tls::generateSelfSignedIdentity();
+    if (identity.publicKeySha256.empty())
+        return 1;
+    config.setTlsIdentity(identity.certificatePem, identity.privateKeyPem);
+    std::ofstream("tests/lua/build/server.pin") << identity.publicKeySha256;
     auto server = manager.createProtocol<nexilis::server::nxboost::TCPServer>(config);
     server.start();
     std::cout << "ready" << std::endl;

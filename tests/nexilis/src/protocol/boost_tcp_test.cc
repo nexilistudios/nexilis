@@ -25,6 +25,7 @@
 
 #include <nexilis/client/protocol/nxboost/tcp_client.hh>
 #include <nexilis/server/protocol/nxboost/tcp_server.hh>
+#include <nexilis/tls.hh>
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -44,6 +45,9 @@ protected:
         settings.setMode(nexilis::server::AuthenticationMode::password_protected);
         settings.setPassphrase("salasana");
         settings.setRootPassword("root");
+        const auto identity = nexilis::tls::generateSelfSignedIdentity();
+        ASSERT_FALSE(identity.publicKeySha256.empty());
+        settings.setTlsIdentity(identity.certificatePem, identity.privateKeyPem);
 
         server = std::make_shared<nexilis::server::nxboost::TCPServer>(
                 protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings));
@@ -55,6 +59,7 @@ protected:
         server_data.setPassword("salasana");
         server_data.setBoostTCPAddress("127.0.0.1");
         server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+        server_data.setServerPublicKeySha256(identity.publicKeySha256);
 
         api = std::make_unique<nexilis::client::ClientAPI>(server_data);
         client = std::make_shared<nexilis::client::nxboost::TCPClient>(
@@ -125,6 +130,23 @@ TEST_F(BoostTCPTest, BoostTCPSuccessfulConnection)
     EXPECT_TRUE(client->isConnected());
     EXPECT_TRUE(server->hasActiveConnections());
     EXPECT_EQ(server->activeConnectionsCount(), 1);
+}
+
+TEST_F(BoostTCPTest, RejectsWrongServerPinBeforeAuthentication)
+{
+    nexilis::client::ClientConfig wrongConfig;
+    wrongConfig.setMode(nexilis::server::AuthenticationMode::password_protected);
+    wrongConfig.setPassword("salasana");
+    wrongConfig.setBoostTCPAddress("127.0.0.1");
+    wrongConfig.setServerPublicKeySha256(std::string(64, '0'));
+    nexilis::client::ClientAPI wrongApi(wrongConfig);
+    nexilis::client::nxboost::TCPClient wrongClient(wrongApi);
+
+    wrongClient.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    EXPECT_FALSE(wrongClient.isConnected());
+    EXPECT_EQ(wrongApi.getClientId(), 0u);
+    wrongClient.stop();
 }
 
 TEST_F(BoostTCPTest, AbandonedHandshakeIsRemovedOnStop)

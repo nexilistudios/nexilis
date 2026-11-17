@@ -41,6 +41,8 @@ int nexilis_client_config_get_message_encryption(const nexilis_ClientConfigC* co
 
 void nexilis_client_config_set_tls(nexilis_ClientConfigC* config, int enabled);
 int nexilis_client_config_get_tls(const nexilis_ClientConfigC* config);
+void nexilis_client_config_set_server_public_key_sha256(nexilis_ClientConfigC* config, const char* hex);
+const char* nexilis_client_config_get_server_public_key_sha256(const nexilis_ClientConfigC* config);
 
 void nexilis_client_config_set_inet_udp(nexilis_ClientConfigC* config, const char* server_address);
 const char* nexilis_client_config_get_inet_udp_server_address(const nexilis_ClientConfigC* config);

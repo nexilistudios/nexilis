@@ -98,23 +98,31 @@ namespace Nexilis.Client
         }
 
         /// <summary>
-        /// Enables or disables TLS-PSK protection of the transport connection
-        /// to the server. On by default for Boost TCP. Both the client and the
-        /// server must use the same TLS setting for a connection to succeed.
+        /// Enables or disables TLS protection of the Boost TCP connection.
+        /// A server public-key pin is required when TLS is enabled.
         /// </summary>
-        /// <param name="enabled">True to enable TLS-PSK transport encryption.</param>
+        /// <param name="enabled">True to enable TLS transport encryption.</param>
         public void SetTls(bool enabled)
         {
             ClientConfigNative.nexilis_client_config_set_tls(_configPtr, enabled ? 1 : 0);
         }
 
         /// <summary>
-        /// Gets whether TLS-PSK transport encryption is enabled.
+        /// Gets whether TLS transport encryption is enabled.
         /// </summary>
-        /// <returns>True if TLS-PSK transport encryption is enabled.</returns>
+        /// <returns>True if TLS transport encryption is enabled.</returns>
         public bool IsTlsEnabled()
         {
             return ClientConfigNative.nexilis_client_config_get_tls(_configPtr) != 0;
+        }
+
+        /// <summary>
+        /// Pins the intended server's SHA-256 public-key fingerprint (64 hex digits).
+        /// Obtain the fingerprint through a trusted channel.
+        /// </summary>
+        public void SetServerPublicKeySha256(string hex)
+        {
+            ClientConfigNative.nexilis_client_config_set_server_public_key_sha256(_configPtr, hex);
         }
 
         /// <summary>

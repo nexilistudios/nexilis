@@ -136,3 +136,14 @@ TEST(ClientConfigTest_c, TlsToggle)
 
     nexilis_client_config_destroy(config);
 }
+
+TEST(ClientConfigTest_c, ServerPublicKeyPin)
+{
+    nexilis_ClientConfigC* config = nexilis_client_config_create();
+    nexilis_client_config_set_server_public_key_sha256(config, "0123456789abcdef");
+    const char* pin = nexilis_client_config_get_server_public_key_sha256(config);
+    ASSERT_NE(pin, nullptr);
+    EXPECT_STREQ(pin, "0123456789abcdef");
+    free(const_cast<char*>(pin));
+    nexilis_client_config_destroy(config);
+}

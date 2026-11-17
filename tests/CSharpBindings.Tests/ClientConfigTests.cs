@@ -94,13 +94,24 @@ namespace Nexilis.Tests
         }
 
         [Fact]
-        public void BoostTcpClientRequiresPasswordByDefault()
+        public void BoostTcpClientRequiresServerPinByDefault()
         {
             using var config = new ClientConfig();
             using var api = new ClientAPI(config);
             using var manager = new ProtocolManager();
 
             Assert.Throws<System.InvalidOperationException>(() => new BoostTCPClient(manager, api));
+        }
+
+        [Fact]
+        public void ServerPublicKeyPinCanBeSet()
+        {
+            using var config = new ClientConfig();
+            config.SetServerPublicKeySha256(new string('a', 64));
+            using var api = new ClientAPI(config);
+            using var manager = new ProtocolManager();
+            using var client = new BoostTCPClient(manager, api);
+            Assert.NotEqual(System.IntPtr.Zero, client.BoostTcpClientPtr);
         }
 
         [Fact]

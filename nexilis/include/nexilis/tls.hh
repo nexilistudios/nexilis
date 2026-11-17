@@ -22,6 +22,9 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <string_view>
+
+typedef struct ssl_st SSL;
 
 namespace nexilis::tls
 {
@@ -55,6 +58,35 @@ std::string derivePsk(const std::string& password);
 /// \param password The shared passphrase. Empty means no PSK can be derived.
 /// \return The configured context, or nullptr when TLS-PSK cannot be set up.
 std::shared_ptr<boost::asio::ssl::context> createPskContext(const std::string& password, bool server);
+
+/// PEM certificate and private key for a server. Keep the private key on the
+/// server; distribute only the public-key SHA-256 pin to clients.
+struct ServerIdentity
+{
+    std::string certificatePem;
+    std::string privateKeyPem;
+    std::string publicKeySha256;
+};
+
+/// Generate a self-signed identity. Persist it for a real server so its pin
+/// stays stable across restarts; a fresh identity is useful for local examples.
+ServerIdentity generateSelfSignedIdentity();
+
+/// SHA-256 of the DER SubjectPublicKeyInfo in a PEM certificate, as 64 hex
+/// digits. Returns an empty string for an invalid certificate.
+std::string publicKeySha256(std::string_view certificatePem);
+
+/// Certificate-based TLS context. The server certificate/key must match.
+/// An empty or invalid identity fails closed.
+std::shared_ptr<boost::asio::ssl::context> createServerContext(
+        std::string_view certificatePem, std::string_view privateKeyPem);
+
+/// Client TLS context for an exact server public-key pin checked after the
+/// handshake. Never send or accept application data before verifyServerKey.
+std::shared_ptr<boost::asio::ssl::context> createClientContext();
+
+bool validPublicKeySha256(std::string_view expectedHex);
+bool verifyServerKey(SSL* ssl, std::string_view expectedHex);
 
 } // namespace nexilis::tls
 

@@ -50,6 +50,9 @@ namespace Nexilis.Client
         public static extern int nexilis_client_config_get_tls(IntPtr config);
 
         [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void nexilis_client_config_set_server_public_key_sha256(IntPtr config, string hex);
+
+        [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
         public static extern void nexilis_client_config_set_boost_tcp_address(IntPtr config, string address);
 
         [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]

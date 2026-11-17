@@ -15,6 +15,7 @@ assert(not ok)
 local ready_count, leave_count = 0, 0
 local client = nexilis.new({
     password = "lua-test-password",
+    server_public_key_sha256 = os.getenv("NEXILIS_TEST_SERVER_PIN") or string.rep("0", 64),
     auto_join = false,
     room_timeout_ms = 3000,
     on_ready = function() ready_count = ready_count + 1 end,

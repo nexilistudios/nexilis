@@ -53,7 +53,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 set(BUILD_SHARED_LIBS ON)
 
-# Used for the optional transport TLS (TLS-PSK) and the end-to-end message
+# Used for the optional certificate-based transport TLS and the room-message
 # encryption (PBKDF2 + AES-256-GCM).
 find_package(OpenSSL 1.1.1 REQUIRED)
 

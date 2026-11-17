@@ -126,6 +126,8 @@ TEST_F(ProtocolManagerTest, CreateProtocol_RootTCPClient)
     nexilis::client::ClientConfig config;
     config.setPassword("salasana");
     config.setBoostTCPAddress("127.0.0.1");
+    // This test only constructs the client; no server connection is attempted.
+    config.setServerPublicKeySha256(std::string(64, '0'));
     config.setMode(nexilis::server::AuthenticationMode::password_protected);
 
     nexilis::client::ClientAPI client_api(config);

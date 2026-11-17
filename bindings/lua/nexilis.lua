@@ -33,6 +33,7 @@ void nexilis_client_config_set_password(nexilis_ClientConfigC *, const char *);
 void nexilis_client_config_set_mode(nexilis_ClientConfigC *, int);
 void nexilis_client_config_set_message_encryption(nexilis_ClientConfigC *, int);
 void nexilis_client_config_set_tls(nexilis_ClientConfigC *, int);
+void nexilis_client_config_set_server_public_key_sha256(nexilis_ClientConfigC *, const char *);
 int nexilis_client_config_get_tls(const nexilis_ClientConfigC *);
 void nexilis_client_config_set_inet_udp(nexilis_ClientConfigC *, const char *);
 void nexilis_client_config_set_inet_tcp(nexilis_ClientConfigC *, const char *);
@@ -210,6 +211,9 @@ function Client.new(options)
         native.nexilis_client_config_set_mode(state.config, options.authentication_mode or 2)
         if options.tls ~= nil then
             native.nexilis_client_config_set_tls(state.config, options.tls and 1 or 0)
+        end
+        if options.server_public_key_sha256 then
+            native.nexilis_client_config_set_server_public_key_sha256(state.config, options.server_public_key_sha256)
         end
         native.nexilis_client_config_set_message_encryption(state.config, options.message_encryption and 1 or 0)
         local address = options.server_address or "127.0.0.1"

@@ -110,7 +110,7 @@ TEST(TLS, CreatePskContextClient)
     EXPECT_NE(ctx, nullptr);
 }
 
-TEST(TLS, BoostTcpClientRequiresPasswordByDefault)
+TEST(TLS, BoostTcpClientRequiresServerPinByDefault)
 {
     client::ClientConfig config;
     client::ClientAPI api(config);
@@ -199,7 +199,9 @@ TEST_F(FramedSocketTest, IncompletePayloadTimesOut)
 
 TEST_F(FramedSocketTest, TlsAcceptsValidFrameThenRejectsOversizedLength)
 {
-    receiver.enableTls(tls::createPskContext("secret", true));
+    const auto identity = tls::generateSelfSignedIdentity();
+    ASSERT_FALSE(identity.publicKeySha256.empty());
+    receiver.enableTls(tls::createServerContext(identity.certificatePem, identity.privateKeyPem));
     // enableTls must precede assign so the stream uses that context.
     receiver.close();
     peer.close();
@@ -207,9 +209,10 @@ TEST_F(FramedSocketTest, TlsAcceptsValidFrameThenRejectsOversizedLength)
     receiver.assign(acceptor.accept());
     auto sender = std::async(std::launch::async, [&]
                              {
-        auto context = tls::createPskContext("secret", false);
+        auto context = tls::createClientContext();
         boost::asio::ssl::stream<boost::asio::ip::tcp::socket> stream(std::move(peer), *context);
         stream.handshake(boost::asio::ssl::stream_base::client);
+        EXPECT_TRUE(tls::verifyServerKey(stream.native_handle(), identity.publicKeySha256));
         auto bytes = client::ClientProtocol::frame(nx_data{42});
         bytes.insert(bytes.end(), {255, 255, 255, 255});
         boost::asio::write(stream, boost::asio::buffer(bytes)); });
@@ -223,7 +226,9 @@ TEST_F(FramedSocketTest, TlsAcceptsValidFrameThenRejectsOversizedLength)
 
 TEST_F(FramedSocketTest, StalledTlsHandshakeTimesOut)
 {
-    receiver.enableTls(tls::createPskContext("secret", true));
+    const auto identity = tls::generateSelfSignedIdentity();
+    ASSERT_FALSE(identity.publicKeySha256.empty());
+    receiver.enableTls(tls::createServerContext(identity.certificatePem, identity.privateKeyPem));
     receiver.close();
     peer.close();
     peer.connect({boost::asio::ip::address_v4::loopback(), acceptor.local_endpoint().port()});
@@ -233,6 +238,44 @@ TEST_F(FramedSocketTest, StalledTlsHandshakeTimesOut)
     EXPECT_FALSE(receiver.receive(received));
     EXPECT_FALSE(receiver.isOpen());
     EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::seconds(8));
+}
+
+TEST(TLS, ServerIdentityRequiresMatchingPrivateKey)
+{
+    const auto first = tls::generateSelfSignedIdentity();
+    const auto second = tls::generateSelfSignedIdentity();
+    ASSERT_FALSE(first.publicKeySha256.empty());
+    ASSERT_FALSE(second.publicKeySha256.empty());
+    EXPECT_NE(first.publicKeySha256, second.publicKeySha256);
+    EXPECT_EQ(tls::publicKeySha256(first.certificatePem), first.publicKeySha256);
+    EXPECT_EQ(tls::createServerContext({}, {}), nullptr);
+    EXPECT_EQ(tls::createServerContext(first.certificatePem, second.privateKeyPem), nullptr);
+    EXPECT_NE(tls::createServerContext(first.certificatePem, first.privateKeyPem), nullptr);
+    EXPECT_TRUE(tls::validPublicKeySha256(first.publicKeySha256));
+    EXPECT_FALSE(tls::validPublicKeySha256("not a pin"));
+}
+
+TEST_F(FramedSocketTest, RejectsServerWithWrongPublicKey)
+{
+    const auto intended = tls::generateSelfSignedIdentity();
+    const auto impostor = tls::generateSelfSignedIdentity();
+    ASSERT_FALSE(intended.publicKeySha256.empty());
+    ASSERT_FALSE(impostor.publicKeySha256.empty());
+    receiver.enableTls(tls::createServerContext(impostor.certificatePem, impostor.privateKeyPem));
+    receiver.close();
+    peer.close();
+    peer.connect({boost::asio::ip::address_v4::loopback(), acceptor.local_endpoint().port()});
+    receiver.assign(acceptor.accept());
+    auto sender = std::async(std::launch::async, [&]
+                             {
+        auto context = tls::createClientContext();
+        boost::asio::ssl::stream<boost::asio::ip::tcp::socket> stream(std::move(peer), *context);
+        stream.handshake(boost::asio::ssl::stream_base::client);
+        EXPECT_FALSE(tls::verifyServerKey(stream.native_handle(), intended.publicKeySha256));
+        EXPECT_TRUE(tls::verifyServerKey(stream.native_handle(), impostor.publicKeySha256)); });
+    nx_data received;
+    EXPECT_FALSE(receiver.receive(received));
+    sender.get();
 }
 
 } // namespace

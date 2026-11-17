@@ -163,10 +163,7 @@ public:
         m_messageEncryption = enabled;
     }
 
-    /// Whether the TCP connection to the server is encrypted with TLS-PSK.
-    /// \note The pre-shared key is derived from the password, so the client
-    ///       can only connect to a server that knows the same password. On
-    ///       by default for Boost TCP; a password is required unless disabled.
+    /// Whether Boost TCP uses certificate-based TLS. On by default.
     bool isTlsEnabled() const
     {
         return m_tls;
@@ -175,6 +172,17 @@ public:
     void setTls(bool enabled)
     {
         m_tls = enabled;
+    }
+
+    /// Expected SHA-256 of the intended server's DER public key (SPKI), as
+    /// 64 hexadecimal digits. Obtain this through a trusted channel.
+    void setServerPublicKeySha256(std::string fingerprint)
+    {
+        m_serverPublicKeySha256 = std::move(fingerprint);
+    }
+    const std::string& getServerPublicKeySha256() const
+    {
+        return m_serverPublicKeySha256;
     }
 
 private:
@@ -203,8 +211,9 @@ private:
     /// End-to-end encryption toggle for room messages.
     bool m_messageEncryption = false;
 
-    /// TLS-PSK transport encryption toggle for TCP connections.
+    /// TLS transport encryption toggle for TCP connections.
     bool m_tls = true;
+    std::string m_serverPublicKeySha256;
 };
 
 } // namespace nexilis::client

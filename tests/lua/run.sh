@@ -21,4 +21,5 @@ tests/lua/build/server > tests/lua/build/server.log 2>&1 &
 server_pid=$!
 trap 'kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT
 sleep 1
+export NEXILIS_TEST_SERVER_PIN="$(cat tests/lua/build/server.pin)"
 luajit tests/lua/client_test.lua integration

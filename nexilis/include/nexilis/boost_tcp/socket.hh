@@ -31,7 +31,7 @@ namespace nexilis::boost_tcp
 /// Thin wrapper around a boost::asio TCP connection.
 ///
 /// When a TLS context is supplied via enableTls() the transport is upgraded
-/// to TLS-PSK, typically derived from the Nexilis authentication passphrase.
+/// to TLS.
 /// Without it the connection stays plaintext. TLS and plaintext are mutually
 /// exclusive per connection: the TLS handshake happens lazily on the first
 /// I/O operation and a mismatch simply fails the connection instead of
@@ -58,7 +58,7 @@ public:
     void assign(boost::asio::ip::tcp::socket&& socket);
 
     /// Upgrade the connection to TLS.
-    /// \param context A context from tls::createPskContext(), or nullptr to
+    /// \param context A TLS context, or nullptr to
     ///        keep the connection plaintext. Must be set before the first
     ///        send()/receive(); the handshake runs lazily there.
     void enableTls(std::shared_ptr<boost::asio::ssl::context> context);

@@ -123,16 +123,16 @@ void TCPServer::start()
     if (!m_stopped || m_stopped->load() || m_listenThread.joinable() ||
         m_ioContextThread.joinable() || !m_acceptor.is_open())
         return;
-    // Build the shared TLS context once. When TLS is enabled but the context
-    // cannot be created (e.g. no passphrase configured), connections are
-    // refused rather than silently served in plaintext.
+    // Build the server-only TLS identity once. Missing or invalid credentials
+    // refuse connections instead of serving them in plaintext.
     if (getSettings().isTlsEnabled())
     {
-        m_tlsContext = tls::createPskContext(getSettings().getPassword(), true);
+        m_tlsContext = tls::createServerContext(getSettings().getTlsCertificatePem(),
+                                                getSettings().getTlsPrivateKeyPem());
         if (!m_tlsContext)
         {
-            Log::critical(header(), "TLS-PSK context creation failed, TLS connections will be refused "
-                                    "(is the passphrase set?)");
+            Log::critical(header(), "TLS server certificate or private key is missing or invalid; "
+                                    "TLS connections will be refused");
         }
     }
 

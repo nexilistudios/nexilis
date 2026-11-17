@@ -22,6 +22,7 @@
 #include <nexilis/ports.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/client_storage.hh>
+#include <nexilis/tls.hh>
 
 #include <nexilis/client/protocol/nxboost/tcp_client.hh>
 #include <nexilis/server/protocol/nxboost/tcp_server.hh>
@@ -43,6 +44,13 @@ int main()
     settings.setMode(nexilis::server::AuthenticationMode::password_protected);
     settings.setPassphrase("salasana");
     settings.setRootPassword("root");
+    const auto identity = nexilis::tls::generateSelfSignedIdentity();
+    if (identity.publicKeySha256.empty())
+    {
+        std::cerr << "premake_test: failed to generate TLS server identity" << std::endl;
+        return 1;
+    }
+    settings.setTlsIdentity(identity.certificatePem, identity.privateKeyPem);
 
     auto server = protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
     server.start();
@@ -52,6 +60,7 @@ int main()
     nexilis::client::ClientConfig server_data;
     server_data.setPassword("salasana");
     server_data.setBoostTCPAddress("127.0.0.1");
+    server_data.setServerPublicKeySha256(identity.publicKeySha256);
     server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
 
     nexilis::client::ClientAPI client_api(server_data);

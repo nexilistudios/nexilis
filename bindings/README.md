@@ -24,6 +24,12 @@ path if a copied Boost library has further shared-library dependencies.
 
 To run the C# test project after the native libraries are available, use `make test-csharp`.
 
+Boost TCP clients require the intended server's public-key SHA-256 pin when
+TLS is enabled. Set it with `ClientConfig.SetServerPublicKeySha256` or the
+`NexilisClient.ServerPublicKeySha256` property. Obtain the pin through a
+trusted channel; the connection password alone does not authenticate the
+server. See [TLS transport setup](../docs/server_message.md#tls-transport-and-server-identity).
+
 For server-authoritative 3D shots, use `NexilisClient.Fire(x, y, z, slot)`.
 The former `Shoot(targetId, damage)` request is rejected by servers.
 

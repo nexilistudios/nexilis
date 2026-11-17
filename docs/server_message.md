@@ -19,7 +19,7 @@ The receiver reads exactly 4 bytes for the length, then exactly that many bytes 
 After a request is authenticated and accepted by the replay window, the server applies a per-client command throughput limit before parsing or dispatching it. The limiter is a token bucket with a default rate of 120 commands per second and a burst allowance of one second's worth; excess commands are dropped without a response. Configure it with `nexilis::server::ServerConfig::setMaxCommandRate`; zero or a negative value disables the limit.
 
 Clients send the initial authentication payload after their transport socket is
-set up. Boost TCP also completes its TCP and TLS-PSK connection before sending
+set up. Boost TCP also completes its TCP and certificate-based TLS connection before sending
 the payload. The client's `waitUntil*Ready()` checks run after this exchange
 because they wait for the server's authentication response.
 
@@ -49,7 +49,7 @@ transport obtains its token in the `client_id` response and can use it for UDP.
 The 1024-byte receive buffer leaves up to 1004 bytes for the normal request
 payload. Legacy UDP datagrams without this envelope are dropped. UDP remains
 plaintext: an on-path observer of the initial UDP authentication can capture
-the session key. Use Boost TCP with TLS-PSK for security-sensitive traffic.
+the session key. Use Boost TCP with a pinned server public key for security-sensitive traffic.
 
 ## Identification (uint64_t)
 
@@ -228,22 +228,43 @@ seed so team selection screens can show the existing team roster.
 
 The Boost TCP server sends JSON responses terminated by a newline character (`\n`); its client reads until `\n`. The POSIX `af_inet` TCP transport instead prefixes server responses with a 4-byte length. These transports should not be assumed to have interchangeable response framing.
 
-## TLS-PSK transport protection
+## TLS transport and server identity
 
-The Boost TCP transport uses TLS-PSK by default on both client and server. It encrypts TCP connections, including authentication. The pre-shared key is derived from the authentication passphrase; certificates are not used. Other transports do not implement TLS-PSK.
+Boost TCP uses certificate-based TLS by default. The server has a PEM
+certificate and private key that clients do not receive. A client pins the
+SHA-256 hash of the certificate's DER SubjectPublicKeyInfo (the public key),
+obtained through a trusted channel. It checks the pin and certificate dates
+after each TLS handshake, before sending authentication or accepting a response.
+The check applies to both the initial and switched TCP connections. A missing
+identity or pin fails closed. The connection password remains the separate
+application-level client admission secret; it is no longer used as the TLS
+server identity. Other transports do not implement TLS.
 
-For a password protected connection, set the same nonempty passphrase on both sides. To use plaintext Boost TCP, both sides must explicitly opt out:
+Configure a persistent server identity and give clients only its pin:
+
+```cpp
+// Load these PEM strings from server-only files or a secret store.
+settings.setTlsIdentity(certificate_pem, private_key_pem);
+config.setServerPublicKeySha256(nexilis::tls::publicKeySha256(certificate_pem));
+```
+
+Never distribute the private key or derive the pin from a certificate fetched
+over the same untrusted connection. Keep the identity stable across restarts;
+rotating its public key requires updating clients' trusted pins. The
+`examples/messaging` program generates a temporary identity because its server
+and clients run in one process.
+
+To use plaintext Boost TCP, both sides must explicitly opt out:
 
 - `nexilis::server::ServerConfig::setTls(false)` on the server.
 - `nexilis::client::ClientConfig::setTls(false)` (or `nexilis_client_config_set_tls` / the C# `ClientConfig.SetTls` / Lua `tls = false`) on every client.
 
 Configuration details:
 
-- The PSK is derived with PBKDF2-HMAC-SHA256 (100000 iterations) from the passphrase with the domain-separated salt `"nexilis-tls-psk-v1:"`, producing a 32-byte key (`nexilis::tls::derivePsk`).
-- The code configures TLS 1.2 PSK cipher suites (`PSK-AES128-GCM-SHA256` and `PSK-CHACHA20-POLY1305`) and TLS 1.3 cipher suites (`TLS_AES_128_GCM_SHA256` and `TLS_CHACHA20_POLY1305_SHA256`). Verify the negotiated protocol version in each supported OpenSSL environment before making compatibility claims.
-- A passphrase must be set on both server and client or the handshake fails. If the server has TLS enabled but cannot build a context (no passphrase), it refuses incoming connections. The client also cannot establish TLS without a password.
+- The server refuses TLS connections if its certificate or private key is missing, invalid, or mismatched. The client rejects a missing or malformed 64-digit hex pin before connecting.
+- The client rejects a TLS peer with a different public key, no certificate, or a certificate outside its validity period. The server public key is independent of the connection password.
 - If only one side enables TLS, the handshake fails rather than silently downgrading to plaintext.
-- The handshake happens lazily: the server accepts it before the first message is read or written, and the client performs it right after the TCP connect. TLS is applied to both the initial connection and the fixed "switched" port the server uses for the authenticated session.
+- The handshake happens lazily on the server before the first message is read or written. The client completes the TLS handshake and verifies the pin immediately after each TCP connect.
 
 ## Room creation
 
@@ -261,7 +282,7 @@ callback to configure each new room before the server acknowledges creation.
 Command-channel passphrase authentication (`authentication`, action `2`) is
 rejected; clients authenticate during the initial connection handshake. Root
 authentication (`authentication`, action `1`) requires an established
-`password_protected` session with common access over TLS-PSK Boost TCP and a
+`password_protected` session with common access over TLS Boost TCP and a
 configured root password. Five failed root attempts from one source address
 block further attempts from that address for ten minutes, including after a
 reconnect. The attempt state is scoped to the server protocol instance and
@@ -286,7 +307,7 @@ are rejected until users disconnect or expire.
 
 `ClientAPI::setMessageEncryption(true)` affects room broadcasts when the client has a nonempty password. It does not encrypt othercast or unicast messages. The message key is derived from that same password and the room ID; the server holds the password, so this feature does **not** hide message contents from the server.
 
-The current broadcast implementation also falls back to the plaintext payload if key derivation or encryption fails. Treat this option as experimental and do not rely on it for confidentiality until that behavior is changed and tested. TLS-PSK protects only the Boost TCP transport when both peers leave it enabled and use the same passphrase.
+The current broadcast implementation also falls back to the plaintext payload if key derivation or encryption fails. Treat this option as experimental and do not rely on it for confidentiality until that behavior is changed and tested. Certificate-based TLS protects only the Boost TCP transport when both peers leave it enabled and the client has the correct server pin.
 
 ## Server room storage ownership
 

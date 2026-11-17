@@ -102,6 +102,23 @@ int nexilis_client_config_get_tls(const nexilis_ClientConfigC* config)
     return 0;
 }
 
+void nexilis_client_config_set_server_public_key_sha256(nexilis_ClientConfigC* config, const char* hex)
+{
+    if (config && config->data && hex)
+        config->data->setServerPublicKeySha256(hex);
+}
+
+const char* nexilis_client_config_get_server_public_key_sha256(const nexilis_ClientConfigC* config)
+{
+    if (!config || !config->data)
+        return nullptr;
+    const auto& pin = config->data->getServerPublicKeySha256();
+    char* result = static_cast<char*>(malloc(pin.size() + 1));
+    if (result)
+        std::memcpy(result, pin.c_str(), pin.size() + 1);
+    return result;
+}
+
 void nexilis_client_config_set_inet_udp(nexilis_ClientConfigC* config, const char* server_address)
 {
     if (config && config->data && server_address)

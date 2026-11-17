@@ -41,7 +41,7 @@ class TCPClient : public virtual NxClass,
                   public ClientProtocol
 {
 public:
-    /// TLS transport used for the TCP connections (TLS-PSK when enabled).
+    /// TLS transport used for the TCP connections.
     using TlsSocket = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>;
 
     /// Constructor.

@@ -27,6 +27,7 @@
 #include <nexilis/server/protocol/nxboost/tcp_server.hh>
 #include <nexilis/server/protocol/nxboost/udp_server.hh>
 #include <nexilis/server/room_storage.hh>
+#include <nexilis/tls.hh>
 
 static nexilis::ProtocolManager protocol_manager;
 
@@ -148,6 +149,10 @@ class ProtocolTestBoostTCP : public ProtocolTest<Server, Client>
 protected:
     void setup() override
     {
+        static const auto identity = nexilis::tls::generateSelfSignedIdentity();
+        ASSERT_FALSE(identity.publicKeySha256.empty());
+        this->settings.setTlsIdentity(identity.certificatePem, identity.privateKeyPem);
+        this->server_data.setServerPublicKeySha256(identity.publicKeySha256);
         this->server_data.setBoostTCPAddress("127.0.0.1");
     }
 };

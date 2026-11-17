@@ -14,7 +14,7 @@ cmake --build examples/skip_auth/build
 ./examples/skip_auth/build/skip_auth
 ```
 
-For an existing clone, run `git submodule update --init --recursive` first. The `skip_auth` example starts a server and two clients on localhost and shows room messaging. It deliberately accepts clients without a password and disables TLS-PSK; use it only for local experimentation. See [examples/messaging](examples/messaging/main.cc) for password authentication and default TLS-PSK on the Boost TCP transport.
+For an existing clone, run `git submodule update --init --recursive` first. The `skip_auth` example starts a server and two clients on localhost and shows room messaging. It deliberately accepts clients without a password and disables TLS; use it only for local experimentation. See [examples/messaging](examples/messaging/main.cc) for password authentication and a pinned server identity on the Boost TCP transport.
 
 To build the native libraries directly:
 
@@ -39,7 +39,7 @@ On Linux with the MinGW-w64 cross compiler and Windows OpenSSL development libra
 
 ## Security
 
-Boost TCP uses TLS with a password-derived pre-shared key by default on both client and server. Configure the same nonempty passphrase on both sides; connections fail if TLS-PSK cannot be established. Applications can explicitly call `setTls(false)` on both sides for plaintext TCP, as the passwordless `skip_auth` example does. Other transports do not implement TLS-PSK and may send plaintext. The optional encrypted room broadcast uses a key derived from the server authentication password, which the server also knows; it does not provide confidentiality from the server. See [protocol and security notes](docs/server_message.md#security-notes) before deploying outside a trusted environment.
+Boost TCP uses certificate-based TLS by default. The server configures a certificate and private key with `setTlsIdentity`; each client pins that server's public-key SHA-256 with `setServerPublicKeySha256`. The application password separately controls client admission. Missing or mismatched TLS identity configuration rejects the connection. Applications can explicitly call `setTls(false)` on both sides for plaintext TCP, as the passwordless `skip_auth` example does. Other transports do not implement TLS and may send plaintext. The optional encrypted room broadcast uses a key derived from the server authentication password, which the server also knows; it does not provide confidentiality from the server. See [protocol and security notes](docs/server_message.md#security-notes) before deploying outside a trusted environment.
 
 ## License
 

@@ -25,6 +25,7 @@ local nexilis = require("nexilis")
 local client = nexilis.new({
     server_address = "127.0.0.1",
     password = "password",
+    server_public_key_sha256 = assert(os.getenv("NEXILIS_SERVER_PIN")),
     authentication_mode = nexilis.AuthenticationMode.PASSWORD_PROTECTED,
     auto_join = false,
     on_ready = function(_, room) print("joined", room.name) end,
@@ -87,9 +88,11 @@ pointers after closing the client. `nexilis.native` exposes the declared C
 functions for advanced uses, but resource ownership remains the caller's
 responsibility.
 
-Boost TCP uses TLS-PSK by default. Set `password` to the server's nonempty
-passphrase; set `tls = false` only when connecting to a server that explicitly
-disables TLS-PSK. UDP traffic does not use TLS-PSK.
+Boost TCP uses certificate-based TLS by default. Set
+`server_public_key_sha256` to the intended server's public-key pin, obtained
+through a trusted channel, and set `password` to the server's application
+passphrase. Set `tls = false` only when connecting to a server that explicitly
+disables TLS. UDP traffic does not use TLS.
 
 Run the smoke and live server tests with `make test-lua`. This target is part of
 `make test`; `make unit-test` remains C++, C, and C# only.

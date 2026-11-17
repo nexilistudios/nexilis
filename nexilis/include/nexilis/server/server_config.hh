@@ -113,10 +113,7 @@ public:
         return m_roomLimits;
     }
 
-    /// Whether TCP connections are encrypted with TLS-PSK.
-    /// \note The pre-shared key is derived from the passphrase, so a client
-    ///       only connects when it knows the same passphrase. On by default
-    ///       for Boost TCP; a passphrase is required unless disabled.
+    /// Whether Boost TCP uses certificate-based TLS. On by default.
     bool isTlsEnabled() const
     {
         return m_tls;
@@ -127,12 +124,30 @@ public:
         m_tls = enabled;
     }
 
+    /// Install a PEM certificate and its private key. Keep the key on the
+    /// server and publish only the certificate's public-key SHA-256 pin.
+    void setTlsIdentity(std::string certificatePem, std::string privateKeyPem)
+    {
+        m_tlsCertificatePem = std::move(certificatePem);
+        m_tlsPrivateKeyPem = std::move(privateKeyPem);
+    }
+    const std::string& getTlsCertificatePem() const
+    {
+        return m_tlsCertificatePem;
+    }
+    const std::string& getTlsPrivateKeyPem() const
+    {
+        return m_tlsPrivateKeyPem;
+    }
+
 private:
     std::string m_rootPassword;
     float m_tickrate = 60.f;
     float m_maxCommandRate = NEXILIS_DEFAULT_MAX_COMMAND_RATE;
     std::chrono::milliseconds m_datagramIdleTimeout = std::chrono::seconds(120);
     bool m_tls = true;
+    std::string m_tlsCertificatePem;
+    std::string m_tlsPrivateKeyPem;
     GameplayLimits m_gameplayLimits;
     RoomLimits m_roomLimits;
 };

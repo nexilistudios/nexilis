@@ -123,6 +123,6 @@ The on-wire byte layout that these calls produce and consume is described in the
 The initial connection handshake handles the server passphrase. The legacy
 `authentication` action `2` command is rejected on established sessions. Root
 access uses `authentication` action `1` only after password authentication on
-TLS-PSK Boost TCP; failed attempts are limited by source address as described in
+certificate-based TLS Boost TCP; failed attempts are limited by source address as described in
 the [security notes](server_message.md#security-notes). Other transports and
 `skip` mode cannot use this command to gain root access.

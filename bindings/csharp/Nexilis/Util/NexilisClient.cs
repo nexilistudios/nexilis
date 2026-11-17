@@ -65,6 +65,9 @@ namespace Nexilis.Util
         /// <summary>Server password. Set before <see cref="ConnectAsync"/>.</summary>
         public string Password { get; set; } = "password";
 
+        /// <summary>Expected SHA-256 of the intended server's public key (64 hex digits).</summary>
+        public string ServerPublicKeySha256 { get; set; } = "";
+
         /// <summary>Authentication mode (0 = empty, 1 = skip, 2 = password_protected).</summary>
         public int AuthenticationMode { get; set; } = 2;
 
@@ -179,6 +182,7 @@ namespace Nexilis.Util
             clientConfig.SetBoostUDP(ServerAddress);
             clientConfig.SetPassword(Password);
             clientConfig.SetMode(AuthenticationMode);
+            clientConfig.SetServerPublicKeySha256(ServerPublicKeySha256);
 
             ClientApi = new ClientAPI(clientConfig);
             TcpClient = new BoostTCPClient(ProtocolManager, ClientApi);

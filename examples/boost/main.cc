@@ -22,6 +22,7 @@
 #include <nexilis/client/protocol/nxboost/udp_client.hh>
 #include <nexilis/server/protocol/nxboost/tcp_server.hh>
 #include <nexilis/server/protocol/nxboost/udp_server.hh>
+#include <nexilis/tls.hh>
 
 #include <nexilis/client/client_api.hh>
 #include <nexilis/client/packet.hh>
@@ -42,6 +43,10 @@ int main(int argc, char** argv)
     settings.setMode(nexilis::server::AuthenticationMode::password_protected);
     settings.setPassphrase("salasana");
     settings.setRootPassword("root");
+    const auto identity = nexilis::tls::generateSelfSignedIdentity();
+    if (identity.publicKeySha256.empty())
+        return 1;
+    settings.setTlsIdentity(identity.certificatePem, identity.privateKeyPem);
 
     auto tcp_server = protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
     tcp_server.start();
@@ -56,6 +61,7 @@ int main(int argc, char** argv)
     tcp_server_data.setPassword("salasana");
     tcp_server_data.setBoostTCPAddress("127.0.0.1");
     tcp_server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+    tcp_server_data.setServerPublicKeySha256(identity.publicKeySha256);
 
     nexilis::client::ClientAPI tcp_client_api(tcp_server_data);
     auto tcp_client = protocol_manager.createProtocol<nexilis::client::nxboost::TCPClient>(tcp_client_api);
