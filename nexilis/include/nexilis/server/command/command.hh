@@ -93,7 +93,7 @@ public:
     /// Convert ClientMsgType to nx_data (and add a '\n') as a last character.
     static nx_data clientMessageData(CommandType cmd, const std::string& type, uint64_t message_id, const ClientMsgType& params);
 
-    /// Send message to every protocol that is avainable for a client.
+    /// Send a response only through the protocol that received the request.
     static bool sendMessageToClient(nx_data data, User& user, NXProtocol& protocol);
 
     /// Send message in room context.

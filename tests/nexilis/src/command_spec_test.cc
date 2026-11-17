@@ -77,11 +77,74 @@ protected:
     }
 };
 
+class SendTestProtocol : public NXProtocol
+{
+public:
+    explicit SendTestProtocol(Type type)
+        : m_type(type)
+    {
+    }
+
+    void start() override
+    {
+    }
+    void stop() override
+    {
+    }
+    Type getType() override
+    {
+        return m_type;
+    }
+
+private:
+    Type m_type;
+};
+
+TEST(CommandSendTest, DoesNotDowngradeFailedTcpSendToOtherTransport)
+{
+    server::User user(1, "test-address");
+    SendTestProtocol tcp(NXProtocol::Type::BOOST_TCP_SERVER);
+    unsigned udpSends = 0;
+    unsigned plaintextTcpSends = 0;
+    user.setBoostUDPSend([&](const nx_data&)
+                         { ++udpSends; });
+    user.setInetTCPSend([&](const nx_data&)
+                        { ++plaintextTcpSends; });
+
+    EXPECT_FALSE(server::Command::sendMessageToClient({1}, user, tcp));
+    user.setBoostTCPSend([](const nx_data&)
+                         { throw std::runtime_error("closed"); });
+    EXPECT_THROW(server::Command::sendMessageToClient({2}, user, tcp), std::runtime_error);
+    EXPECT_EQ(udpSends, 0);
+    EXPECT_EQ(plaintextTcpSends, 0);
+
+    user.setBoostTCPSend([](const nx_data&) {});
+    EXPECT_TRUE(server::Command::sendMessageToClient({3}, user, tcp));
+    EXPECT_EQ(udpSends, 0);
+    EXPECT_EQ(plaintextTcpSends, 0);
+}
+
+TEST(CommandSendTest, UsesOnlyTheRequestTransport)
+{
+    server::User user(1, "test-address");
+    SendTestProtocol udp(NXProtocol::Type::BOOST_UDP_SERVER);
+    unsigned tcpSends = 0;
+    unsigned udpSends = 0;
+    user.setBoostTCPSend([&](const nx_data&)
+                         { ++tcpSends; });
+    user.setBoostUDPSend([&](const nx_data&)
+                         { ++udpSends; });
+
+    EXPECT_TRUE(server::Command::sendMessageToClient({1}, user, udp));
+    EXPECT_EQ(udpSends, 1);
+    EXPECT_EQ(tcpSends, 0);
+}
+
 TEST_F(CommandSpecTest, Constructs)
 {
     EXPECT_EQ(spec.user.getId(), 1);
     EXPECT_EQ(spec.user.getUsername(), "");
-    EXPECT_EQ(spec.protocol.getType(), NXProtocol::Type::UNKNOWN);
+    EXPECT_EQ(spec.protocol.getType(), NXProtocol::Type::BOOST_TCP_SERVER);
 }
 
 TEST_F(CommandSpecTest, ArgsHelper)

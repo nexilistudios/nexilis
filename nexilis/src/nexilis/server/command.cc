@@ -632,29 +632,13 @@ bool Command::sendMessageToClient(nx_data data, User& user, NXProtocol& protocol
         }
     };
 
+    // A callback on another transport can have weaker confidentiality or a
+    // different endpoint. In particular, a TLS reply must never fall back to
+    // plaintext UDP or TCP after the original send fails.
     if (trySend(protocol.getType()))
-    {
         return true;
-    }
 
-    static const NXProtocol::Type allServerProtocols[] = {
-            NXProtocol::Type::BOOST_TCP_SERVER,
-            NXProtocol::Type::BOOST_UDP_SERVER,
-            NXProtocol::Type::AF_UNIX_SOCK_STREAM_SERVER,
-            NXProtocol::Type::AF_UNIX_SOCK_DGRAM_SERVER,
-            NXProtocol::Type::AF_INET_TCP_SERVER,
-            NXProtocol::Type::AF_INET_UDP_SERVER,
-    };
-
-    for (auto fallbackType : allServerProtocols)
-    {
-        if (fallbackType == protocol.getType())
-            continue;
-        if (trySend(fallbackType))
-            return true;
-    }
-
-    Log::error("Failed to send message to client via any protocol");
+    Log::error("Failed to send message to client via request protocol");
     return false;
 }
 

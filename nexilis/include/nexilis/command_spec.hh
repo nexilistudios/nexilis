@@ -30,7 +30,7 @@ namespace nexilis
 class CommandSpec
 {
 public:
-    /// Minimal concrete NXProtocol for testing.
+    /// Minimal Boost TCP protocol matching the fixture's send callback.
     class TestProtocol : public NXProtocol
     {
     public:
@@ -42,7 +42,7 @@ public:
         }
         NXProtocol::Type getType() override
         {
-            return NXProtocol::Type::UNKNOWN;
+            return NXProtocol::Type::BOOST_TCP_SERVER;
         }
     };
 

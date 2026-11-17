@@ -41,8 +41,9 @@ authentication payload. The cookie is bound to the source IP and port and
 expires after roughly one to two minutes. The server sends no application
 response until the cookie has been returned. A valid `skip`-mode authentication
 response contains a random 16-byte `udp_token` alongside `client_id`. In
-`password_protected` mode, UDP servers refuse to start. Password-protected
-clients must use pinned TLS Boost TCP for all requests and responses.
+`password_protected` mode, initial UDP authentication is rejected. A session
+established over pinned TLS Boost TCP can subsequently use Boost UDP with its
+session token. Boost UDP traffic is authenticated but remains plaintext.
 
 Later requests use `NXUS`, the 8-byte client ID, message ID, a 16-byte MAC tag,
 and command bytes. The server checks the MAC and source
@@ -229,6 +230,13 @@ the equipped weapon against its server inventory before broadcasting it.
 
 ## Response format
 
+Responses to client commands use the transport that received the request. If
+that transport cannot send to a recipient, the send fails instead of retrying
+through another registered transport. This also applies to room commands
+triggered by a client request; a room member must be reachable on that
+transport to receive the event. In particular, a failed TLS send cannot
+deliver the response over plaintext UDP or TCP.
+
 `Get::Info::clients` replies as `info_general` with `client_amount`, the
 server-wide connected client count. C++ clients expose the latest value through
 `ClientAPI::getServerClientCount()`. Joining a room also sends a full leaderboard
@@ -274,7 +282,7 @@ Configuration details:
 - The server refuses TLS connections if its certificate or private key is missing, invalid, or mismatched. The client rejects a missing or malformed 64-digit hex pin before connecting.
 - The client rejects a TLS peer with a different public key, no certificate, or a certificate outside its validity period. The server public key is independent of the connection password.
 - If only one side enables TLS, the handshake fails rather than silently downgrading to plaintext.
-- Password-protected Boost TCP refuses to start without TLS; the client also requires a valid server public-key pin. Password-protected clients and servers refuse plaintext IPv4, Unix socket, and UDP transports.
+- Password-protected Boost TCP refuses to start without TLS; the client also requires a valid server public-key pin. Password-protected clients and servers refuse plaintext IPv4, Unix socket, and raw UDP transports. Boost UDP accepts token-authenticated session traffic after TLS authentication, but does not encrypt it.
 - The Boost TCP client captures its TLS setting when the protocol object is constructed; changing the client API setting afterward does not downgrade an existing protocol object.
 - The handshake happens lazily on the server before the first message is read or written. The client completes the TLS handshake and verifies the pin immediately after each TCP connect.
 
