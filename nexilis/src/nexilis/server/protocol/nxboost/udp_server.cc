@@ -137,11 +137,8 @@ UDPServer& UDPServer::operator=(UDPServer&& other)
 
 void UDPServer::start()
 {
-    if (getSettings().getMode() == AuthenticationMode::password_protected)
-    {
-        Log::critical(header(), "Password-protected mode requires an encrypted transport");
-        return;
-    }
+    // Password-protected sessions are established over pinned TLS Boost TCP;
+    // gameplay UDP is authenticated with the per-session token MAC.
     if (!m_stopped || m_stopped->load() || m_receiveThread.joinable())
         return;
 

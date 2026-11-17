@@ -93,8 +93,8 @@ UDPClient& UDPClient::operator=(UDPClient&& other)
 
 void UDPClient::start()
 {
-    if (getClientAPI()->getMode() == server::AuthenticationMode::password_protected)
-        throw std::runtime_error("Password-protected mode requires an encrypted transport");
+    // Password-protected sessions are established over pinned TLS Boost TCP;
+    // gameplay UDP is authenticated with the per-session token MAC.
     if (m_stopped->load())
     {
         Log::debug("BoostUDPClient already stopped, cannot start");
