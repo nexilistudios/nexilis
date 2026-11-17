@@ -281,6 +281,8 @@ void UDPServer::receiveFromClients()
             }
             if (udp_auth::hasPrefix(buffer, udp_auth::authentication))
             {
+                if (getSettings().getMode() == AuthenticationMode::password_protected)
+                    continue;
                 if (!udp_auth::checkAuthentication(buffer, m_cookieKey, endpointKey, payload))
                     continue;
                 if (payload.size() >= 8 && ClientStorage::getClientById(Util::uint64FromFront(payload)))

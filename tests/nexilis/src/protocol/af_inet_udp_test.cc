@@ -43,7 +43,7 @@ protected:
     {
         nexilis::Log::startConsoleDebugging();
 
-        settings.setMode(nexilis::server::AuthenticationMode::password_protected);
+        settings.setMode(nexilis::server::AuthenticationMode::skip);
         settings.setPassphrase("salasana");
         settings.setRootPassword("root");
 
@@ -57,7 +57,7 @@ protected:
         server_data.setPassword("salasana");
         server_data.setInetUDP("127.0.0.1");
         server_data.setInetUDPServerPort(port);
-        server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+        server_data.setMode(nexilis::server::AuthenticationMode::skip);
 
         api = std::make_unique<nexilis::client::ClientAPI>(server_data);
         client = std::make_shared<nexilis::client::af_inet::UDPClient>(
@@ -242,7 +242,9 @@ struct UDPTestPeer
             !nexilis::udp_auth::hasPrefix(response, nexilis::udp_auth::challenge))
             return {};
         nexilis::nx_data cookie(response.begin() + 4, response.begin() + received);
-        if (!send(nexilis::udp_auth::makeAuthentication(cookie, {'s', 'a', 'l', 'a', 's', 'a', 'n', 'a'})))
+        nexilis::nx_data skipRequest(16, 0);
+        skipRequest.insert(skipRequest.end(), {1, 0, 0});
+        if (!send(nexilis::udp_auth::makeAuthentication(cookie, skipRequest)))
             return {};
         // The authentication reply follows callback installation.
         if (recv(fd, response.data(), response.size(), 0) <= 0)
@@ -304,6 +306,20 @@ TEST_F(AFInetUDPTest, IdleDatagramTransportRemovesUserAndLeavesRoom)
 
     EXPECT_FALSE(nexilis::server::ClientStorage::contains(userId));
     EXPECT_FALSE(room->contains(userId));
+}
+
+TEST_F(AFInetUDPTest, PasswordProtectedModeRejectsUdpBootstrap)
+{
+    server->stop();
+    server.reset();
+    settings.setMode(nexilis::server::AuthenticationMode::password_protected);
+    server = std::make_shared<nexilis::server::af_inet::UDPServer>(
+            protocol_manager.createProtocol<nexilis::server::af_inet::UDPServer>(settings, port));
+    server->start();
+
+    UDPTestPeer peer;
+    EXPECT_EQ(peer.authenticate(port), nullptr);
+    EXPECT_TRUE(nexilis::server::ClientStorage::getAllClients().empty());
 }
 
 TEST_F(AFInetUDPTest, RetainedCallbackRejectsAfterStopDestructionAndReplacement)

@@ -35,7 +35,7 @@ protected:
     {
         nexilis::Log::startConsoleDebugging();
 
-        settings.setMode(nexilis::server::AuthenticationMode::password_protected);
+        settings.setMode(nexilis::server::AuthenticationMode::skip);
         settings.setPassphrase("salasana");
         settings.setRootPassword("root");
 
@@ -48,7 +48,7 @@ protected:
         nexilis::client::ClientConfig server_data;
         server_data.setPassword("salasana");
         server_data.setBoostUDPAddress("localhost");
-        server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+        server_data.setMode(nexilis::server::AuthenticationMode::skip);
 
         api = std::make_unique<nexilis::client::ClientAPI>(server_data);
         client = std::make_shared<nexilis::client::nxboost::UDPClient>(
@@ -264,7 +264,7 @@ TEST_F(BoostUDPTest, IdleDatagramTransportRemovesUserAndLeavesRoom)
     nexilis::client::ClientConfig server_data;
     server_data.setPassword("salasana");
     server_data.setBoostUDPAddress("localhost");
-    server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+    server_data.setMode(nexilis::server::AuthenticationMode::skip);
 
     api = std::make_unique<nexilis::client::ClientAPI>(server_data);
     client = std::make_shared<nexilis::client::nxboost::UDPClient>(

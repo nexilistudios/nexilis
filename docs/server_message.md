@@ -39,8 +39,10 @@ new client sends a 20-byte `NXUH` hello and receives a 20-byte `NXUC` cookie
 challenge. It then sends `NXUA`, the 16-byte cookie, and its normal initial
 authentication payload. The cookie is bound to the source IP and port and
 expires after roughly one to two minutes. The server sends no application
-response until the cookie has been returned. A valid authentication response
-contains a random 16-byte `udp_token` alongside `client_id`.
+response until the cookie has been returned. A valid `skip`-mode authentication
+response contains a random 16-byte `udp_token` alongside `client_id`. In
+`password_protected` mode, servers reject UDP authentication requests; the
+client must obtain the token over an authenticated stream before using UDP.
 
 Later requests use `NXUS`, the 8-byte client ID, message ID, a 16-byte MAC tag,
 and command bytes. The server checks the MAC and source
@@ -48,8 +50,8 @@ IP/port before dispatching a command. A client authenticated over another
 transport obtains its token in the `client_id` response and can use it for UDP.
 The 1024-byte receive buffer leaves up to 1004 bytes for the normal request
 payload. Legacy UDP datagrams without this envelope are dropped. UDP remains
-plaintext: an on-path observer of the initial UDP authentication can capture
-the session key. Use Boost TCP with a pinned server public key for security-sensitive traffic.
+plaintext. Use Boost TCP with a pinned server public key to establish a
+password-protected session before attaching UDP.
 
 ## Identification (uint64_t)
 
