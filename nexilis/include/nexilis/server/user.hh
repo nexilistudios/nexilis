@@ -122,6 +122,11 @@ public:
         return m_roomId.load();
     }
 
+    std::mutex& roomTransitionMutex() const
+    {
+        return m_roomTransitionMutex;
+    }
+
     /// Transports that can keep one logical user connected.
     enum class Transport : std::uint8_t
     {
@@ -376,6 +381,7 @@ private:
     std::atomic<bool> m_udpTokenSent{false};
     std::shared_ptr<ReplayWindow> m_replayWindow = std::make_shared<ReplayWindow>();
     std::atomic<uint64_t> m_roomId{0};
+    mutable std::mutex m_roomTransitionMutex;
     mutable std::mutex m_shotMutex;
     std::chrono::steady_clock::time_point m_lastShotTime{};
     mutable std::mutex m_broadcastMutex;

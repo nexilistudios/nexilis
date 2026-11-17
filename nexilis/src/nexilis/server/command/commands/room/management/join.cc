@@ -30,6 +30,8 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
 
     auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 3);
     uint64_t roomId = Util::convertToType<uint64_t>(payload);
+    if (roomId == 0)
+        return CommandResult::invalid_input;
     auto room = RoomStorage::getRoomById(roomId);
 
     if (!room)
@@ -38,12 +40,14 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
         return CommandResult::invalid_input;
     }
 
-    if (!room->tryJoinRoom(user_id))
-        return CommandResult::invalid_input;
-
-    args.getUser().setRoomId(room->getId());
-    assert(room->contains(user_id));
-    assert(args.getUser().getRoomId() == roomId);
+    {
+        std::lock_guard lock(args.getUser().roomTransitionMutex());
+        if (args.getUser().getRoomId() != 0 || !room->tryJoinRoom(user_id))
+            return CommandResult::invalid_input;
+        args.getUser().setRoomId(room->getId());
+        assert(room->contains(user_id));
+        assert(args.getUser().getRoomId() == roomId);
+    }
 
     auto roomCommand = Command::createRoomCommand(roomId, args.getUser(), args.getData(),
                                                   {{"username", boost::json::value(args.getUser().getUsername())}}, args.getMessageId());
@@ -57,7 +61,7 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
         if (existingClientId == user_id)
             continue;
         auto existingUser = ClientStorage::getClientById(existingClientId);
-        if (!existingUser)
+        if (!existingUser || existingUser->getRoomId() != roomId)
             continue;
 
         // Send "join" to create a ClientSession on the joining client

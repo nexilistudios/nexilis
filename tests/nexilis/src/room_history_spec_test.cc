@@ -29,6 +29,7 @@
 #include <boost/json/parse.hpp>
 #include <boost/json/serialize.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -155,6 +156,37 @@ TEST_F(RoomHistorySpecTest, BroadcastWithoutRoomFails)
     ASSERT_EQ(command.read(broadcastBytes("nope"), *user(SENDER_ID), protocol, 1),
               server::CommandResult::error);
     EXPECT_TRUE(room()->getBroadcasts().empty());
+}
+
+TEST_F(RoomHistorySpecTest, JoiningAnotherRoomRequiresLeavingFirst)
+{
+    constexpr uint64_t otherRoomId = ROOM_ID + 1;
+    ASSERT_TRUE(server::RoomStorage::add(server::Room(RoomData(SENDER_ID, "other", otherRoomId))));
+    auto joinOther = joinBytes();
+    auto otherIdBytes = Util::convertToByteVector(otherRoomId);
+    std::copy(otherIdBytes.begin(), otherIdBytes.end(), joinOther.begin() + 3);
+
+    auto joiner = user(JOINER_ID);
+    ASSERT_EQ(command.read(joinBytes(), *joiner, protocol, 1), server::CommandResult::success);
+    EXPECT_EQ(joiner->getRoomId(), ROOM_ID);
+    EXPECT_TRUE(room()->contains(JOINER_ID));
+
+    EXPECT_EQ(command.read(joinOther, *joiner, protocol, 2), server::CommandResult::invalid_input);
+    EXPECT_EQ(joiner->getRoomId(), ROOM_ID);
+    EXPECT_TRUE(room()->contains(JOINER_ID));
+    EXPECT_FALSE(server::RoomStorage::getRoomById(otherRoomId)->contains(JOINER_ID));
+
+    nx_data joinZero = joinBytes();
+    std::fill(joinZero.begin() + 3, joinZero.end(), 0);
+    EXPECT_EQ(command.read(joinZero, *joiner, protocol, 4), server::CommandResult::invalid_input);
+
+    nx_data leaveBytes{static_cast<uint8_t>(CommandType::room),
+                       static_cast<uint8_t>(RoomCommandType::Root::management),
+                       static_cast<uint8_t>(RoomCommandType::Management::leave)};
+    EXPECT_EQ(command.read(leaveBytes, *joiner, protocol, 3), server::CommandResult::success);
+    EXPECT_EQ(joiner->getRoomId(), 0);
+    EXPECT_FALSE(room()->contains(JOINER_ID));
+    EXPECT_FALSE(server::RoomStorage::getRoomById(otherRoomId)->contains(JOINER_ID));
 }
 
 TEST_F(RoomHistorySpecTest, JoinSendsStoredBroadcasts)

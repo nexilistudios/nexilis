@@ -14,6 +14,7 @@
    You should have received a copy of the GNU Lesser General Public License
    along with this file.  If not, see <https://gnu.org>. */
 
+#include <nexilis/server/client_storage.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
 #include <nexilis/server/room_storage.hh>
@@ -24,24 +25,29 @@ namespace nexilis::server
 CommandResult ServerImpl::room_management_leave(const DefaultArgs& args)
 {
     auto& user = args.getUser();
-    auto currentRoom = RoomStorage::getRoomById(user.getRoomId());
-
-    if (!currentRoom)
+    std::shared_ptr<Room> currentRoom;
     {
-        Log::warning("Client not currently in room so cannot leave current room.");
-        return CommandResult::failure;
+        std::lock_guard lock(user.roomTransitionMutex());
+        currentRoom = RoomStorage::getRoomById(user.getRoomId());
+        if (!currentRoom || !currentRoom->contains(user.getId()))
+        {
+            Log::warning("Client not currently in room so cannot leave current room.");
+            return CommandResult::failure;
+        }
+        currentRoom->leaveRoom(user.getId());
+        user.setRoomId(0);
     }
-
-    currentRoom->leaveRoom(user.getId());
 
     std::map<std::string, boost::json::value> params;
     auto roomCommand = Command::createRoomCommand(currentRoom->getId(), user, args.getData(), params, args.getMessageId());
-    Command::sendRoomCommand(roomCommand, user, args.getProtocol());
-    // The leaver has already been removed from the room, so the broadcast
-    // above cannot update its local room state. Send it the leave event too.
+    for (auto clientId : currentRoom->getClients())
+    {
+        auto client = ClientStorage::getClientById(clientId);
+        if (client && client->getRoomId() == currentRoom->getId())
+            Command::sendMessageToClient(roomCommand, *client, args.getProtocol());
+    }
     Command::sendMessageToClient(roomCommand, user, args.getProtocol());
 
-    user.setRoomId(0);
     return CommandResult::success;
 }
 

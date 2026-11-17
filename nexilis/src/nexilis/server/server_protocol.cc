@@ -219,6 +219,15 @@ void ServerProtocol::leaveAndRemoveUser(User& user, NXProtocol& protocol)
         // A closed transport must not prevent the user from being removed.
     }
 
+    // Remove memberships left by earlier inconsistent state as well as the
+    // room recorded on the user. Never leave a dead member occupying capacity.
+    for (const auto& room : RoomStorage::getAllRooms())
+    {
+        if (room->contains(user.getId()))
+            room->leaveRoom(user.getId());
+    }
+    user.setRoomId(0);
+
     try
     {
         ClientStorage::remove(user.getId());

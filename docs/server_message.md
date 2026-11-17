@@ -276,6 +276,8 @@ fields, rejecting truncated and oversized requests. It accepts capacities from 1
 includes `max_size` in the creation response and room listing, and rejects joins
 when the room is full. Applications can install a `RoomStorage::setCreateHandler`
 callback to configure each new room before the server acknowledges creation.
+Each client may belong to one room at a time. A join while already in a room is
+rejected; the client must leave before joining another room.
 
 ## Security notes
 

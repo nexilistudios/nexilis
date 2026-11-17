@@ -771,7 +771,8 @@ bool Command::sendRoomCommand(const nx_data& data, User& user, NXProtocol& proto
             for (auto& roomClient : room->getClients())
             {
                 auto client = ClientStorage::getClientById(roomClient);
-                if (!client || !sendMessageToClient(data, *client, protocol))
+                if (!client || client->getRoomId() != room->getId() ||
+                    !sendMessageToClient(data, *client, protocol))
                     all_success = false;
             }
             return all_success;
