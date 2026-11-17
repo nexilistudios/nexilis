@@ -42,7 +42,8 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
 
     {
         std::lock_guard lock(args.getUser().roomTransitionMutex());
-        if (args.getUser().getRoomId() != 0 || !room->tryJoinRoom(user_id))
+        if (args.getUser().getRoomId() != 0 || !room->allowsUser(args.getUser()) ||
+            !room->tryJoinRoom(user_id))
             return CommandResult::invalid_input;
         args.getUser().setRoomId(room->getId());
         assert(room->contains(user_id));

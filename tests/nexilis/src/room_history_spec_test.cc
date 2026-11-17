@@ -23,6 +23,7 @@
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/command_result.hh>
 #include <nexilis/server/room_storage.hh>
+#include <nexilis/server/server_json.hh>
 #include <nexilis/server/user.hh>
 #include <nexilis/util.hh>
 
@@ -187,6 +188,28 @@ TEST_F(RoomHistorySpecTest, JoiningAnotherRoomRequiresLeavingFirst)
     EXPECT_EQ(joiner->getRoomId(), 0);
     EXPECT_FALSE(room()->contains(JOINER_ID));
     EXPECT_FALSE(server::RoomStorage::getRoomById(otherRoomId)->contains(JOINER_ID));
+}
+
+TEST_F(RoomHistorySpecTest, AdmissionPolicyHidesRoomAndRejectsJoin)
+{
+    room()->setAdmissionHandler([](const server::User& candidate)
+                                { return candidate.getId() == SENDER_ID; });
+    room()->joinRoom(SENDER_ID);
+    user(SENDER_ID)->setRoomId(ROOM_ID);
+
+    auto denied = user(JOINER_ID);
+    EXPECT_EQ(command.read(joinBytes(), *denied, protocol, 5), server::CommandResult::invalid_input);
+    EXPECT_EQ(denied->getRoomId(), 0);
+    EXPECT_FALSE(room()->contains(JOINER_ID));
+
+    auto hiddenRooms = server::ServerJson::getRoomData(denied.get());
+    EXPECT_EQ(hiddenRooms.at("room_amount").as_int64(), 0);
+    EXPECT_TRUE(hiddenRooms.at("rooms").as_array().empty());
+    auto hiddenClients = server::ServerJson::getClientData(denied.get());
+    EXPECT_EQ(hiddenClients.at("client_amount").as_uint64(), 1);
+
+    auto allowedRooms = server::ServerJson::getRoomData(user(SENDER_ID).get());
+    EXPECT_EQ(allowedRooms.at("room_amount").as_uint64(), 1);
 }
 
 TEST_F(RoomHistorySpecTest, JoinSendsStoredBroadcasts)

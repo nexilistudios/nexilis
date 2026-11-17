@@ -45,6 +45,7 @@ public:
     /// \param victimId The id of the player that died.
     using DeathHandler = std::function<void(Room& room, uint64_t killerId, uint64_t victimId)>;
     using TeamHandler = std::function<void(Room& room, uint64_t playerId)>;
+    using AdmissionHandler = std::function<bool(const User& user)>;
     using ActionHandler = std::function<bool(Room& room, uint64_t playerId, uint8_t action)>;
     using CombatHandler = std::function<bool(uint64_t shooterId, uint64_t targetId)>;
     using TeamSelectionHandler = std::function<bool(uint64_t playerId)>;
@@ -110,6 +111,9 @@ public:
     void joinRoom(uint64_t userId);
     /// Atomically enforce the room capacity and insert a new member.
     bool tryJoinRoom(uint64_t userId);
+    /// A server policy for joining and discovering this room. Unset means public.
+    void setAdmissionHandler(AdmissionHandler handler);
+    bool allowsUser(const User& user) const;
 
     /// User leaves the room.
     /// \param userId The id the user that leaves the room.
@@ -233,6 +237,7 @@ public:
 private:
     std::vector<uint64_t> m_clientIds;
     mutable std::mutex m_membershipMutex;
+    mutable std::mutex m_admissionMutex;
     mutable std::mutex m_broadcastMutex;
     std::deque<Broadcast> m_broadcasts;
     std::unordered_map<uint64_t, float> m_playerHealth;
@@ -241,6 +246,7 @@ private:
     std::unordered_map<uint64_t, std::string> m_playerTeams;
     float m_defaultHealth = 100.0f;
     DeathHandler m_deathHandler;
+    AdmissionHandler m_admissionHandler;
     TeamHandler m_teamHandler;
     ActionHandler m_actionHandler;
     CombatHandler m_combatHandler;

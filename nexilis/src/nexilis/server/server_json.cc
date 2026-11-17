@@ -23,19 +23,30 @@
 #include <boost/json/parse.hpp>
 #include <boost/json/serialize.hpp>
 
+#include <algorithm>
+
 namespace nexilis::server
 {
 
 boost::json::object ServerJson::getRoomData()
 {
+    return getRoomData(nullptr);
+}
+
+boost::json::object ServerJson::getRoomData(const User* viewer)
+{
     boost::json::object roomDataObj;
 
     auto rooms = RoomStorage::getAllRooms();
+    if (viewer)
+        std::erase_if(rooms, [viewer](const auto& room)
+                      { return !room->allowsUser(*viewer); });
 
     if (rooms.empty())
     {
         Log::info("Empty room data");
         roomDataObj["room_amount"] = 0;
+        roomDataObj["rooms"] = boost::json::array();
     }
     else
     {
@@ -48,9 +59,21 @@ boost::json::object ServerJson::getRoomData()
 
 boost::json::object ServerJson::getClientData()
 {
+    return getClientData(nullptr);
+}
+
+boost::json::object ServerJson::getClientData(const User* viewer)
+{
     boost::json::object clientDataObj;
 
     auto clients = ClientStorage::getAllClients();
+    if (viewer)
+        std::erase_if(clients, [viewer](const auto& client)
+                      {
+            if (client->getId() == viewer->getId() || client->getRoomId() == 0)
+                return false;
+            auto room = RoomStorage::getRoomById(client->getRoomId());
+            return room && !room->allowsUser(*viewer); });
 
     if (clients.empty())
     {

@@ -26,7 +26,7 @@ CommandResult ServerImpl::get_info_rooms(const DefaultArgs& args)
 {
     Log::debug("get_info_rooms: ", args);
 
-    auto d = ServerJson::getRoomData();
+    auto d = ServerJson::getRoomData(&args.getUser());
     auto params = convert_to_map(d);
     auto data = Command::clientMessageData(CommandType::getting, "info_rooms", args.getMessageId(), params);
 

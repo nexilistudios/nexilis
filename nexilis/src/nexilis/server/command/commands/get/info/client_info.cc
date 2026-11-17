@@ -26,7 +26,7 @@ CommandResult ServerImpl::get_info_clients(const DefaultArgs& args)
 {
     Log::debug("get_info_clients: ", args);
 
-    auto d = ServerJson::getClientData();
+    auto d = ServerJson::getClientData(&args.getUser());
     auto params = convert_to_map(d);
     auto data = Command::clientMessageData(CommandType::getting, "info_general", args.getMessageId(), params);
 

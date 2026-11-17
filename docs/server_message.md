@@ -278,6 +278,13 @@ when the room is full. Applications can install a `RoomStorage::setCreateHandler
 callback to configure each new room before the server acknowledges creation.
 Each client may belong to one room at a time. A join while already in a room is
 rejected; the client must leave before joining another room.
+Servers can set `Room::setAdmissionHandler` to decide which authenticated users
+may discover and join a room. The handler receives the server-side `User` and
+returns `true` to allow access. An unset handler leaves the room public. A
+denied user cannot join or see that room in `info_rooms`, `info_general`, or
+`info_clients`; an exception in the handler denies access. Set the handler in
+`RoomStorage::setCreateHandler` before room creation is acknowledged. Changing
+the handler later does not evict users who already joined.
 
 ## Security notes
 

@@ -37,8 +37,8 @@ CommandResult ServerImpl::get_info_general(const DefaultArgs& args)
 {
     Log::debug("get_info_general: ", args);
 
-    auto room_data = ServerJson::getRoomData();
-    auto client_data = ServerJson::getClientData();
+    auto room_data = ServerJson::getRoomData(&args.getUser());
+    auto client_data = ServerJson::getClientData(&args.getUser());
     merge_boost_json(client_data, room_data);
     auto params = convert_to_map(room_data);
     auto data = Command::clientMessageData(CommandType::getting, "info_general", args.getMessageId(), params);

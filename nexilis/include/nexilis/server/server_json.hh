@@ -36,9 +36,11 @@ public:
 
     /// Get data about the rooms in the server.
     static boost::json::object getRoomData();
+    static boost::json::object getRoomData(const User* viewer);
 
     /// Get data about the clients in the server.
     static boost::json::object getClientData();
+    static boost::json::object getClientData(const User* viewer);
 
     /// Return all data from the server.
     static boost::json::object getServerData();

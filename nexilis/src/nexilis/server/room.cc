@@ -38,6 +38,7 @@ Room::Room(Room&& other)
       m_playerTeams(std::move(other.m_playerTeams)),
       m_defaultHealth(other.m_defaultHealth),
       m_deathHandler(std::move(other.m_deathHandler)),
+      m_admissionHandler(std::move(other.m_admissionHandler)),
       m_teamHandler(std::move(other.m_teamHandler)),
       m_actionHandler(std::move(other.m_actionHandler)),
       m_combatHandler(std::move(other.m_combatHandler)),
@@ -66,6 +67,7 @@ Room& Room::operator=(Room&& other)
         m_playerTeams = std::move(other.m_playerTeams);
         m_defaultHealth = other.m_defaultHealth;
         m_deathHandler = std::move(other.m_deathHandler);
+        m_admissionHandler = std::move(other.m_admissionHandler);
         m_teamHandler = std::move(other.m_teamHandler);
         m_actionHandler = std::move(other.m_actionHandler);
         m_combatHandler = std::move(other.m_combatHandler);
@@ -108,6 +110,29 @@ bool Room::tryJoinRoom(uint64_t userId)
     }
     Log::info("New user in room: ", getId(), " user: ", userId);
     return true;
+}
+
+void Room::setAdmissionHandler(AdmissionHandler handler)
+{
+    std::lock_guard lock(m_admissionMutex);
+    m_admissionHandler = std::move(handler);
+}
+
+bool Room::allowsUser(const User& user) const
+{
+    AdmissionHandler handler;
+    {
+        std::lock_guard lock(m_admissionMutex);
+        handler = m_admissionHandler;
+    }
+    try
+    {
+        return !handler || handler(user);
+    }
+    catch (...)
+    {
+        return false;
+    }
 }
 
 std::vector<uint64_t> Room::getClients() const
