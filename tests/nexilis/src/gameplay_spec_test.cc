@@ -449,7 +449,7 @@ protected:
 
     /// Put both clients in a stored room. Every member gets a no-op outbound
     /// callback so broadcasts report success.
-    void setUpRoom()
+    void setUpRoom(bool allowLegacyMovement = true)
     {
         server::RoomStorage::add(server::Room(RoomData(SENDER_ID, "gameplay_room", ROOM_ID)));
         auto room = server::RoomStorage::getRoomById(ROOM_ID);
@@ -464,6 +464,9 @@ protected:
         // Client position requests are disabled by default, so the legacy
         // position tests must opt in explicitly.
         room->setClientPositionAllowed(true);
+        // These legacy movement tests intentionally exercise client-declared motion.
+        if (allowLegacyMovement)
+            room->setLegacyClientMovementAllowed(true);
         room->setShotHandler([this](uint64_t, const Vector3f&, uint8_t, uint8_t)
                              { return m_nextHit; });
     }
@@ -1637,6 +1640,59 @@ TEST_F(GameplaySpecTest, Player3DMovementAppliesDisplacementAndBroadcasts)
     EXPECT_EQ(msg.at("action").as_string(), "movement");
     EXPECT_EQ(Util::toUint64(msg.at("callback")), MESSAGE_ID);
     EXPECT_NEAR(msg.at("x").as_double(), 10.0f * 0.1f, 0.01);
+}
+
+TEST_F(GameplaySpecTest, MovementRequiresAnInputHandlerOrLegacyOptIn)
+{
+    setUpRoom(false);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    EXPECT_FALSE(room->isLegacyClientMovementAllowed());
+    int deliveries = 0;
+    m_target->setBoostTCPSend([&](const nx_data&)
+                              { ++deliveries; });
+
+    EXPECT_EQ(read(player3DMovementBytes({1.0f, 0.0f, 0.0f}, 0.1f), *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(read(player2DMovementBytes({1.0f, 0.0f}, 0.1f), *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_FLOAT_EQ(m_sender->getObject3D().getPosition().x, 0.0f);
+    EXPECT_FLOAT_EQ(m_sender->getObject2D().getPosition().x, 0.0f);
+    EXPECT_EQ(deliveries, 0);
+}
+
+TEST_F(GameplaySpecTest, InputHandlersReceiveBoundedDirectionWithoutApplyingClientDuration)
+{
+    setUpRoom(false);
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    EXPECT_FALSE(room->isLegacyClientMovementAllowed());
+    int threeDCalls = 0;
+    int twoDCalls = 0;
+    room->setMovementInputHandler([&](uint64_t id, const Vector3f& input, float yaw)
+                                  {
+        EXPECT_EQ(id, SENDER_ID);
+        EXPECT_FLOAT_EQ(input.x, 0.5f);
+        EXPECT_FLOAT_EQ(yaw, 0.0f);
+        ++threeDCalls;
+        return true; });
+    room->setMovement2DInputHandler([&](uint64_t id, const Vector2f& input)
+                                    {
+        EXPECT_EQ(id, SENDER_ID);
+        EXPECT_FLOAT_EQ(input.x, 0.5f);
+        ++twoDCalls;
+        return true; });
+
+    EXPECT_EQ(read(player3DMovementBytes({0.5f, 0.0f, 0.0f}, 1000.0f), *m_sender),
+              server::CommandResult::success);
+    EXPECT_EQ(read(player2DMovementBytes({0.5f, 0.0f}, 1000.0f), *m_sender),
+              server::CommandResult::success);
+    EXPECT_EQ(read(player3DMovementBytes({2.0f, 0.0f, 0.0f}, 0.1f), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(player2DMovementBytes({2.0f, 0.0f}, 0.1f), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(threeDCalls, 1);
+    EXPECT_EQ(twoDCalls, 1);
+    EXPECT_FLOAT_EQ(m_sender->getObject3D().getPosition().x, 0.0f);
+    EXPECT_FLOAT_EQ(m_sender->getObject2D().getPosition().x, 0.0f);
 }
 
 TEST_F(GameplaySpecTest, Player3DMovementRejectsExcessiveDelta)

@@ -44,10 +44,12 @@ Room::Room(Room&& other)
       m_combatHandler(std::move(other.m_combatHandler)),
       m_teamSelectionHandler(std::move(other.m_teamSelectionHandler)),
       m_movementInputHandler(std::move(other.m_movementInputHandler)),
+      m_movement2DInputHandler(std::move(other.m_movement2DInputHandler)),
       m_shotHandler(std::move(other.m_shotHandler)),
       m_spawnHandler(std::move(other.m_spawnHandler)),
       m_gameItemPickupHandler(std::move(other.m_gameItemPickupHandler)),
       m_clientPositionAllowed(other.m_clientPositionAllowed),
+      m_legacyClientMovementAllowed(other.m_legacyClientMovementAllowed.load()),
       m_clientObjectCreationAllowed(other.m_clientObjectCreationAllowed),
       m_clientGameItemCreationAllowed(other.m_clientGameItemCreationAllowed),
       m_clientRoomRemovalAllowed(other.m_clientRoomRemovalAllowed),
@@ -73,10 +75,12 @@ Room& Room::operator=(Room&& other)
         m_combatHandler = std::move(other.m_combatHandler);
         m_teamSelectionHandler = std::move(other.m_teamSelectionHandler);
         m_movementInputHandler = std::move(other.m_movementInputHandler);
+        m_movement2DInputHandler = std::move(other.m_movement2DInputHandler);
         m_shotHandler = std::move(other.m_shotHandler);
         m_spawnHandler = std::move(other.m_spawnHandler);
         m_gameItemPickupHandler = std::move(other.m_gameItemPickupHandler);
         m_clientPositionAllowed = other.m_clientPositionAllowed;
+        m_legacyClientMovementAllowed.store(other.m_legacyClientMovementAllowed.load());
         m_clientObjectCreationAllowed = other.m_clientObjectCreationAllowed;
         m_clientGameItemCreationAllowed = other.m_clientGameItemCreationAllowed;
         m_clientRoomRemovalAllowed = other.m_clientRoomRemovalAllowed;
@@ -312,6 +316,26 @@ bool Room::onMovementInput(uint64_t playerId, const Vector3f& input, float yaw)
 bool Room::hasMovementInputHandler() const
 {
     return static_cast<bool>(m_movementInputHandler);
+}
+void Room::setMovement2DInputHandler(Movement2DInputHandler handler)
+{
+    m_movement2DInputHandler = std::move(handler);
+}
+bool Room::onMovement2DInput(uint64_t playerId, const Vector2f& input)
+{
+    return m_movement2DInputHandler && m_movement2DInputHandler(playerId, input);
+}
+bool Room::hasMovement2DInputHandler() const
+{
+    return static_cast<bool>(m_movement2DInputHandler);
+}
+void Room::setLegacyClientMovementAllowed(bool allowed)
+{
+    m_legacyClientMovementAllowed.store(allowed);
+}
+bool Room::isLegacyClientMovementAllowed() const
+{
+    return m_legacyClientMovementAllowed.load();
 }
 void Room::setShotHandler(ShotHandler handler)
 {

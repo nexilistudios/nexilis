@@ -16,6 +16,10 @@ Each TCP and Unix stream request is prefixed with a **4-byte big-endian uint32_t
 
 The receiver reads exactly 4 bytes for the length, then exactly that many bytes for the payload. The tag authenticates the client ID, message ID, and complete command using the random per-session `udp_token` key delivered in the initial `client_id` response. The key is never included in later requests. Initial password or `skip` authentication has no session key yet and is the only unsigned request. The server rejects unsigned or incorrectly signed commands before dispatch.
 
+The Boost TCP server also reads requests already buffered by OpenSSL, including
+an unprocessed TLS record after a previous request, without waiting for new
+socket activity.
+
 The Boost TCP server sends a separate random 16-byte `switch_token` (32 hex
 characters) in the initial `port` response on the handshake connection. After
 connecting to the switched port, the client sends one framed switch proof:
@@ -112,10 +116,14 @@ existing players include their current yaw.
 
 The `room/player_3D/movement` request similarly accepts its legacy three-float
 velocity plus float delta time, or one additional float yaw. Movement responses
-relay that yaw, and the legacy form uses zero. The legacy movement handler
-rejects durations outside (0, 0.25] seconds and applies each accepted move
-during command dispatch. The 2D movement request uses the same duration range
-and applies its vector as one displacement rather than streaming tick updates.
+relay that yaw, and the legacy form uses zero. Rooms reject legacy 2D and 3D
+movement by default. A server application may explicitly call
+`Room::setLegacyClientMovementAllowed(true)` for a room that trusts client-declared
+movement; the resulting motion is not checked against game geometry. The legacy
+movement handler rejects durations outside (0, 0.25] seconds and applies each
+accepted move during command dispatch. The 2D movement request uses the same
+duration range and applies its vector as one displacement rather than streaming
+tick updates.
 For these legacy handlers, the server also reserves each requested duration
 from a per-user budget shared across 2D, 3D, and transports. The budget refills
 at one second per second and holds at most 0.25 seconds, so sending many packets
@@ -123,14 +131,18 @@ cannot multiply elapsed movement time. A request that exceeds the available
 budget is rejected. The 2D displacement must fit the configured maximum
 movement speed for its duration; the 3D velocity is scaled to that speed.
 
-An application room can disable client position requests and install a movement
-input handler. In that room, the three movement floats are input direction and
-jump intent, the client delta time is ignored, and the application updates and
-broadcasts positions on its server tick. The application must validate speed,
-collisions, and input age. Client position requests (`room/player_3D/position`)
-are disabled by default; a room that wants client-authoritative positions must
-explicitly call `setClientPositionAllowed(true)`. Other rooms retain the legacy
-movement behavior.
+An application room can install a 3D movement input handler with
+`Room::setMovementInputHandler`. In that room, the three movement floats are
+input direction and jump intent, each limited to [-1, 1]. A 2D room can install
+`Room::setMovement2DInputHandler`; its two movement floats then represent input
+components, also limited to [-1, 1], rather than displacement. In both modes,
+the client delta time is ignored. The application should record arrival time,
+consume input on its server tick, validate input age and game-specific movement
+rules, and broadcast positions computed from server state. The input handler
+takes precedence over the legacy opt-in. Client position requests
+(`room/player_3D/position` and `room/player_2D/position`) are disabled by default;
+a room that wants direct client positions must separately call
+`setClientPositionAllowed(true)`.
 
 The same room setting gates `room/player_2D/position`. This request requires
 exactly two finite floats; the server clamps both 2D coordinates to the

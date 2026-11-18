@@ -50,6 +50,7 @@ public:
     using CombatHandler = std::function<bool(uint64_t shooterId, uint64_t targetId)>;
     using TeamSelectionHandler = std::function<bool(uint64_t playerId)>;
     using MovementInputHandler = std::function<bool(uint64_t playerId, const Vector3f& input, float yaw)>;
+    using Movement2DInputHandler = std::function<bool(uint64_t playerId, const Vector2f& input)>;
     struct ShotHit
     {
         uint64_t targetId;
@@ -188,6 +189,15 @@ public:
     void setMovementInputHandler(MovementInputHandler handler);
     bool onMovementInput(uint64_t playerId, const Vector3f& input, float yaw);
     bool hasMovementInputHandler() const;
+    /// An application callback for server-owned 2D movement. The packet's
+    /// duration is ignored; the callback must queue bounded input for its tick.
+    void setMovement2DInputHandler(Movement2DInputHandler handler);
+    bool onMovement2DInput(uint64_t playerId, const Vector2f& input);
+    bool hasMovement2DInputHandler() const;
+    /// Allow legacy client-declared 2D displacement and 3D velocity/duration.
+    /// Disabled by default because the library cannot check game geometry.
+    void setLegacyClientMovementAllowed(bool allowed);
+    bool isLegacyClientMovementAllowed() const;
     /// Required to accept 3D shots; resolves aim requests from server state.
     void setShotHandler(ShotHandler handler);
     bool hasShotHandler() const;
@@ -252,10 +262,12 @@ private:
     CombatHandler m_combatHandler;
     TeamSelectionHandler m_teamSelectionHandler;
     MovementInputHandler m_movementInputHandler;
+    Movement2DInputHandler m_movement2DInputHandler;
     ShotHandler m_shotHandler;
     SpawnHandler m_spawnHandler;
     GameItemPickupHandler m_gameItemPickupHandler;
     bool m_clientPositionAllowed = false;
+    std::atomic<bool> m_legacyClientMovementAllowed{false};
     bool m_clientObjectCreationAllowed = false;
     bool m_clientGameItemCreationAllowed = false;
     bool m_clientRoomRemovalAllowed = false;

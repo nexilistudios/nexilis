@@ -37,6 +37,11 @@ transports are available only in skip mode.
 For server-authoritative 3D shots, use `NexilisClient.Fire(x, y, z, slot)`.
 The former `Shoot(targetId, damage)` request is rejected by servers.
 
+Movement packets from C, C#, and Lua clients keep their existing wire format.
+Servers reject them in a room unless the application installs a movement input
+handler or explicitly enables legacy client movement for that room. See the
+[movement protocol](../docs/server_message.md#application-match-extension).
+
 `Room.GetClients()` and `ClientAPI.GetClientFromClientId()` return independently
 owned session snapshots. Dispose each returned `ClientSession` after use.
 Snapshots remain valid after room clients change or the room is destroyed;

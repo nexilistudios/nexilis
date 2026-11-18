@@ -41,14 +41,25 @@ CommandResult ServerImpl::room_player2d_movement(const DefaultArgs& args)
     const float vecX = Util::floatFromFront(payload);
     const float vecY = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 4));
     const float delta = Util::floatFromFront(Util::removeAmountOfBytesFromVector(payload, 8));
-    if (!std::isfinite(vecX) || !std::isfinite(vecY) || !std::isfinite(delta) ||
-        delta <= 0.0f || delta > kMaxClientMovementDelta)
+    if (!std::isfinite(vecX) || !std::isfinite(vecY) || !std::isfinite(delta))
         return CommandResult::invalid_input;
 
     auto& user = args.getUser();
     auto room = RoomStorage::getRoomById(user.getRoomId());
     if (!room)
         return CommandResult::failure;
+    if (room->hasMovement2DInputHandler())
+    {
+        if (std::abs(vecX) > 1.0f || std::abs(vecY) > 1.0f)
+            return CommandResult::invalid_input;
+        return room->onMovement2DInput(user.getId(), Vector2f(vecX, vecY))
+                       ? CommandResult::success
+                       : CommandResult::invalid_input;
+    }
+    if (!room->isLegacyClientMovementAllowed())
+        return CommandResult::unauthorized;
+    if (delta <= 0.0f || delta > kMaxClientMovementDelta)
+        return CommandResult::invalid_input;
 
     const double displacement = std::hypot(static_cast<double>(vecX),
                                            static_cast<double>(vecY));

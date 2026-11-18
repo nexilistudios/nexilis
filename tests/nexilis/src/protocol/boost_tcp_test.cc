@@ -138,6 +138,20 @@ TEST_F(BoostTCPTest, BoostTCPSuccessfulConnection)
     EXPECT_EQ(server->activeConnectionsCount(), 1);
 }
 
+TEST_F(BoostTCPTest, BackToBackTlsRequestsReceiveBothResponses)
+{
+    client->start();
+    ASSERT_TRUE(client->isConnected());
+
+    client->sendMessageAsync(nexilis::client::Packet::Set::General::username(*api, "Alice")).get();
+    client->sendMessageAsync(nexilis::client::Packet::Room::Management::create(*api, "chat")).get();
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (api->getActiveRooms().empty() && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    EXPECT_FALSE(api->getActiveRooms().empty());
+}
+
 TEST_F(BoostTCPTest, PasswordModeRejectsPlaintextClient)
 {
     nexilis::client::ClientConfig config;

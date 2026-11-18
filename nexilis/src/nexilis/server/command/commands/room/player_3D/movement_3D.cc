@@ -61,11 +61,19 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
         Log::warning("Movement yaw ", rawYaw, " normalized to ", yaw);
     }
 
-    auto inputRoom = RoomStorage::getRoomById(user.getRoomId());
-    if (inputRoom && inputRoom->hasMovementInputHandler())
-        return inputRoom->onMovementInput(user.getId(), Vector3f(vec_x, vec_y, vec_z), yaw)
+    auto room = RoomStorage::getRoomById(user.getRoomId());
+    if (!room)
+        return CommandResult::failure;
+    if (room->hasMovementInputHandler())
+    {
+        if (std::abs(vec_x) > 1.0f || std::abs(vec_y) > 1.0f || std::abs(vec_z) > 1.0f)
+            return CommandResult::invalid_input;
+        return room->onMovementInput(user.getId(), Vector3f(vec_x, vec_y, vec_z), yaw)
                        ? CommandResult::success
                        : CommandResult::invalid_input;
+    }
+    if (!room->isLegacyClientMovementAllowed())
+        return CommandResult::unauthorized;
 
     if (delta <= 0.0f || delta > kMaxClientMovementDelta)
         return CommandResult::invalid_input;
@@ -85,13 +93,6 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
     auto movement_vector = Vector3f(vec_x, vec_y, vec_z);
     try
     {
-        auto room = RoomStorage::getRoomById(user.getRoomId());
-        if (!room)
-        {
-            Log::warning("room_player3d_movement: room not found for user ", user.getRoomId());
-            return CommandResult::failure;
-        }
-
         if (!user.acceptMovementDuration(std::chrono::steady_clock::now(), delta))
             return CommandResult::invalid_input;
 

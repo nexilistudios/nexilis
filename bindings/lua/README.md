@@ -71,6 +71,9 @@ The `on_remote_client_added`, `on_remote_client_removed`, `on_remote_client_posi
 packets. Convenience methods route reliable packets over TCP and select UDP for
 position, movement, and audio packets. In password-protected mode all packets
 use pinned TLS Boost TCP.
+The server accepts movement only in rooms with an application movement input
+handler or an explicit legacy movement opt-in. The 3D input handler treats the
+three movement values as bounded input components and ignores client delta time.
 
 `client:fire(x, y, z, slot)` sends an aim direction and weapon slot for the
 room's server-side shot handler. The old `shoot` packet with a client-selected

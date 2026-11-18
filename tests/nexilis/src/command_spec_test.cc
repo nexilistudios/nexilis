@@ -322,15 +322,18 @@ TEST_F(CommandSpecTest, RoomOverlapAllowedByDefaultAndSurvivesMove)
 
     room.setOverlappingAllowed(false);
     room.setClientRoomRemovalAllowed(true);
+    room.setLegacyClientMovementAllowed(true);
     server::Room movedRoom(std::move(room));
     EXPECT_FALSE(movedRoom.isOverlappingAllowed());
     EXPECT_TRUE(movedRoom.isClientRoomRemovalAllowed());
+    EXPECT_TRUE(movedRoom.isLegacyClientMovementAllowed());
 
     movedRoom.setOverlappingAllowed(true);
     server::Room assignedRoom(makeOverlapRoom());
     assignedRoom = std::move(movedRoom);
     EXPECT_TRUE(assignedRoom.isOverlappingAllowed());
     EXPECT_TRUE(assignedRoom.isClientRoomRemovalAllowed());
+    EXPECT_TRUE(assignedRoom.isLegacyClientMovementAllowed());
 }
 
 TEST_F(CommandSpecTest, SetOverlapRequiresRoomMembership)
@@ -535,6 +538,7 @@ TEST_F(CommandSpecTest, SetOverlapWireFormatFromPacketApi)
 TEST_F(CommandSpecTest, Player3DMovementBlockedWhenOverlappingDisabled)
 {
     auto room = makeOverlapRoom();
+    room.setLegacyClientMovementAllowed(true);
     room.joinRoom(spec.user.getId());
 
     auto otherPtr = std::make_unique<server::User>(2, "127.0.0.2");

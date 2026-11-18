@@ -43,8 +43,10 @@ constexpr auto kWriteDeadline = std::chrono::seconds(5);
 // Cancellation handlers are drained before references to local buffers expire.
 template <typename Initiate>
 bool runUntil(boost::asio::io_context& io, boost::asio::ip::tcp::socket& socket,
-              Clock::time_point deadline, Initiate initiate)
+              Clock::time_point deadline, Initiate initiate, bool* expiredOut = nullptr)
 {
+    if (expiredOut)
+        *expiredOut = false;
     io.restart();
     boost::asio::steady_timer timer(io, deadline);
     boost::system::error_code result = boost::asio::error::operation_aborted;
@@ -73,6 +75,8 @@ bool runUntil(boost::asio::io_context& io, boost::asio::ip::tcp::socket& socket,
         return false;
     }
     io.run();
+    if (expiredOut)
+        *expiredOut = expired;
     return !expired && !result;
 }
 } // namespace
@@ -232,41 +236,38 @@ bool Socket::ensureHandshakeInternal()
 
 bool Socket::send(const nx_data& data)
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
-
-    if (!m_connected)
+    // Let an idle receive poll yield the socket lock to a waiting sender.
+    m_sendWaiters.fetch_add(1);
+    bool sent = false;
     {
-        return false;
-    }
-
-    if (m_tls && !ensureHandshakeInternal())
-    {
-        return false;
-    }
-
-    try
-    {
-        const bool sent = runUntil(*m_io, m_stream->next_layer(), Clock::now() + kWriteDeadline,
-                                   [&](auto handler)
-                                   {
-                                       if (m_tls)
-                                           boost::asio::async_write(*m_stream,
-                                                                    boost::asio::buffer(data),
-                                                                    std::move(handler));
-                                       else
-                                           boost::asio::async_write(m_stream->next_layer(),
-                                                                    boost::asio::buffer(data),
-                                                                    std::move(handler));
-                                   });
-        if (!sent)
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_connected && (!m_tls || ensureHandshakeInternal()))
+        {
+            try
+            {
+                sent = runUntil(*m_io, m_stream->next_layer(), Clock::now() + kWriteDeadline,
+                                [&](auto handler)
+                                {
+                                    if (m_tls)
+                                        boost::asio::async_write(*m_stream,
+                                                                 boost::asio::buffer(data),
+                                                                 std::move(handler));
+                                    else
+                                        boost::asio::async_write(m_stream->next_layer(),
+                                                                 boost::asio::buffer(data),
+                                                                 std::move(handler));
+                                });
+            }
+            catch (...)
+            {
+            }
+        }
+        if (!sent && m_connected)
             closeInternal();
-        return sent;
     }
-    catch (...)
-    {
-        closeInternal();
-        return false;
-    }
+    m_sendWaiters.fetch_sub(1);
+    m_sendCompleted.notify_all();
+    return sent;
 }
 
 bool Socket::receive(nx_data& data, size_t timeout_ms)
@@ -294,17 +295,10 @@ bool Socket::receive(nx_data& data, size_t timeout_ms)
         }
     }
 
-    // Plaintext data buffered inside the TLS record layer must be consumed
-    // even when the kernel socket has nothing further to deliver; otherwise
-    // two messages coalesced into one TLS record would stall until new
-    // network traffic arrived.
-    bool pending = false;
-    if (m_tls)
-    {
-        pending = SSL_pending(m_stream->native_handle()) > 0;
-    }
-
-    if (!pending)
+    // A TLS stream can hold encrypted bytes inside Asio as well as OpenSSL.
+    // Polling only the underlying socket would miss those bytes, so TLS reads
+    // wait for the first byte through the stream itself below.
+    if (!m_tls)
     {
         fd_set read_fds;
         FD_ZERO(&read_fds);
@@ -325,7 +319,9 @@ bool Socket::receive(nx_data& data, size_t timeout_ms)
 
     try
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_sendCompleted.wait(lock, [this]
+                             { return m_sendWaiters.load() == 0; });
         if (!m_connected)
         {
             return false;
@@ -333,7 +329,7 @@ bool Socket::receive(nx_data& data, size_t timeout_ms)
 
         // One deadline covers the complete prefix and body, so a peer cannot
         // extend it indefinitely by trickling bytes.
-        const auto deadline = Clock::now() + kReadDeadline;
+        auto deadline = Clock::now() + kReadDeadline;
         auto readExact = [&](auto buffer)
         {
             return runUntil(*m_io, m_stream->next_layer(), deadline, [&](auto handler)
@@ -344,7 +340,26 @@ bool Socket::receive(nx_data& data, size_t timeout_ms)
                     boost::asio::async_read(m_stream->next_layer(), buffer, std::move(handler)); });
         };
         uint8_t len_buf[4];
-        if (!readExact(boost::asio::buffer(len_buf)))
+        if (m_tls)
+        {
+            bool idleTimedOut = false;
+            const auto pollDeadline = timeout_ms > 0
+                                              ? Clock::now() + std::chrono::milliseconds(timeout_ms)
+                                              : Clock::time_point::max();
+            const bool gotFirstByte = runUntil(*m_io, m_stream->next_layer(), pollDeadline, [&](auto handler)
+                                               { boost::asio::async_read(*m_stream,
+                                                                         boost::asio::buffer(len_buf, 1),
+                                                                         std::move(handler)); }, &idleTimedOut);
+            if (!gotFirstByte)
+            {
+                if (!idleTimedOut)
+                    closeInternal();
+                return false;
+            }
+            deadline = Clock::now() + kReadDeadline;
+        }
+        if (!readExact(m_tls ? boost::asio::buffer(len_buf + 1, 3)
+                             : boost::asio::buffer(len_buf)))
         {
             closeInternal();
             return false;

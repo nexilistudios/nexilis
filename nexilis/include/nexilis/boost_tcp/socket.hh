@@ -23,6 +23,8 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl/stream.hpp>
 
+#include <atomic>
+#include <condition_variable>
 #include <memory>
 
 namespace nexilis::boost_tcp
@@ -94,6 +96,8 @@ private:
     std::shared_ptr<boost::asio::ssl::context> m_context;
     std::shared_ptr<TlsStream> m_stream;
     mutable std::mutex m_mutex;
+    std::condition_variable m_sendCompleted;
+    std::atomic<unsigned> m_sendWaiters{0};
     std::atomic<bool> m_connected{false};
     std::atomic<bool> m_tls{false};
     std::atomic<bool> m_tlsHandshaken{false};
