@@ -66,7 +66,11 @@ CommandResult ServerImpl::room_player3d_movement(const DefaultArgs& args)
         return CommandResult::failure;
     if (room->hasMovementInputHandler())
     {
-        if (std::abs(vec_x) > 1.0f || std::abs(vec_y) > 1.0f || std::abs(vec_z) > 1.0f)
+        // Games may use the Y input as a compact button mask (up to three
+        // bits) while X and Z remain unit movement directions.
+        const bool validY = std::abs(vec_y) <= 1.0f ||
+                            (vec_y >= 0.0f && vec_y <= 7.0f && std::floor(vec_y) == vec_y);
+        if (std::abs(vec_x) > 1.0f || !validY || std::abs(vec_z) > 1.0f)
             return CommandResult::invalid_input;
         return room->onMovementInput(user.getId(), Vector3f(vec_x, vec_y, vec_z), yaw)
                        ? CommandResult::success

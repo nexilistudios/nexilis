@@ -1781,6 +1781,7 @@ TEST_F(GameplaySpecTest, InputHandlersReceiveBoundedDirectionWithoutApplyingClie
                                   {
         EXPECT_EQ(id, SENDER_ID);
         EXPECT_FLOAT_EQ(input.x, 0.5f);
+        EXPECT_FLOAT_EQ(input.y, threeDCalls == 0 ? 0.0f : 7.0f);
         EXPECT_FLOAT_EQ(yaw, 0.0f);
         ++threeDCalls;
         return true; });
@@ -1793,13 +1794,19 @@ TEST_F(GameplaySpecTest, InputHandlersReceiveBoundedDirectionWithoutApplyingClie
 
     EXPECT_EQ(read(player3DMovementBytes({0.5f, 0.0f, 0.0f}, 1000.0f), *m_sender),
               server::CommandResult::success);
+    EXPECT_EQ(read(player3DMovementBytes({0.5f, 7.0f, 0.0f}, 0.0f), *m_sender),
+              server::CommandResult::success);
+    EXPECT_EQ(read(player3DMovementBytes({0.5f, 1.5f, 0.0f}, 0.0f), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(read(player3DMovementBytes({0.5f, 8.0f, 0.0f}, 0.0f), *m_sender),
+              server::CommandResult::invalid_input);
     EXPECT_EQ(read(player2DMovementBytes({0.5f, 0.0f}, 1000.0f), *m_sender),
               server::CommandResult::success);
     EXPECT_EQ(read(player3DMovementBytes({2.0f, 0.0f, 0.0f}, 0.1f), *m_sender),
               server::CommandResult::invalid_input);
     EXPECT_EQ(read(player2DMovementBytes({2.0f, 0.0f}, 0.1f), *m_sender),
               server::CommandResult::invalid_input);
-    EXPECT_EQ(threeDCalls, 1);
+    EXPECT_EQ(threeDCalls, 2);
     EXPECT_EQ(twoDCalls, 1);
     EXPECT_FLOAT_EQ(m_sender->getObject3D().getPosition().x, 0.0f);
     EXPECT_FLOAT_EQ(m_sender->getObject2D().getPosition().x, 0.0f);

@@ -161,7 +161,9 @@ movement speed for its duration; the 3D velocity is scaled to that speed.
 
 An application room can install a 3D movement input handler with
 `Room::setMovementInputHandler`. In that room, the three movement floats are
-input direction and jump intent, each limited to [-1, 1]. A 2D room can install
+input direction and jump intent. X and Z are limited to [-1, 1]; Y accepts
+[-1, 1] or an integer bit mask from 0 through 7 for game-specific buttons.
+A 2D room can install
 `Room::setMovement2DInputHandler`; its two movement floats then represent input
 components, also limited to [-1, 1], rather than displacement. In both modes,
 the client delta time is ignored. The application should record arrival time,
