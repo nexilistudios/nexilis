@@ -77,6 +77,8 @@ CommandResult ServerImpl::room_player3d_position(const DefaultArgs& args)
     }
     if (!currentRoom->isClientPositionAllowed())
         return CommandResult::invalid_input;
+    if (!currentRoom->canSetPosition3D(user.getId(), position, yaw))
+        return CommandResult::unauthorized;
 
     user.getObject3D().setPosition(position);
     user.getObject3D().setYaw(yaw);

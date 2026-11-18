@@ -45,6 +45,8 @@ Room::Room(Room&& other)
       m_teamSelectionHandler(std::move(other.m_teamSelectionHandler)),
       m_movementInputHandler(std::move(other.m_movementInputHandler)),
       m_movement2DInputHandler(std::move(other.m_movement2DInputHandler)),
+      m_position3DHandler(std::move(other.m_position3DHandler)),
+      m_position2DHandler(std::move(other.m_position2DHandler)),
       m_shotHandler(std::move(other.m_shotHandler)),
       m_spawnHandler(std::move(other.m_spawnHandler)),
       m_gameItemPickupHandler(std::move(other.m_gameItemPickupHandler)),
@@ -76,6 +78,8 @@ Room& Room::operator=(Room&& other)
         m_teamSelectionHandler = std::move(other.m_teamSelectionHandler);
         m_movementInputHandler = std::move(other.m_movementInputHandler);
         m_movement2DInputHandler = std::move(other.m_movement2DInputHandler);
+        m_position3DHandler = std::move(other.m_position3DHandler);
+        m_position2DHandler = std::move(other.m_position2DHandler);
         m_shotHandler = std::move(other.m_shotHandler);
         m_spawnHandler = std::move(other.m_spawnHandler);
         m_gameItemPickupHandler = std::move(other.m_gameItemPickupHandler);
@@ -304,6 +308,22 @@ void Room::setClientPositionAllowed(bool allowed)
 bool Room::isClientPositionAllowed() const
 {
     return m_clientPositionAllowed;
+}
+void Room::setPosition3DHandler(Position3DHandler handler)
+{
+    m_position3DHandler = std::move(handler);
+}
+bool Room::canSetPosition3D(uint64_t playerId, const Vector3f& position, float yaw) const
+{
+    return m_position3DHandler && m_position3DHandler(playerId, position, yaw);
+}
+void Room::setPosition2DHandler(Position2DHandler handler)
+{
+    m_position2DHandler = std::move(handler);
+}
+bool Room::canSetPosition2D(uint64_t playerId, const Vector2f& position) const
+{
+    return m_position2DHandler && m_position2DHandler(playerId, position);
 }
 void Room::setMovementInputHandler(MovementInputHandler handler)
 {

@@ -462,8 +462,12 @@ protected:
         m_target->setBoostTCPSend([](const nx_data&) {});
 
         // Client position requests are disabled by default, so the legacy
-        // position tests must opt in explicitly.
+        // position tests must opt in and accept their requested positions.
         room->setClientPositionAllowed(true);
+        room->setPosition3DHandler([](uint64_t, const Vector3f&, float)
+                                   { return true; });
+        room->setPosition2DHandler([](uint64_t, const Vector2f&)
+                                   { return true; });
         // These legacy movement tests intentionally exercise client-declared motion.
         if (allowLegacyMovement)
             room->setLegacyClientMovementAllowed(true);
@@ -1530,6 +1534,26 @@ TEST_F(GameplaySpecTest, Player3DPositionNotInRoomFails)
     EXPECT_EQ(read(player3DPositionBytes({1.0f, 2.0f, 3.0f}), *m_sender), server::CommandResult::error);
 }
 
+TEST_F(GameplaySpecTest, Player3DPositionRequiresServerApproval)
+{
+    setUpRoom();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto targetMessages = receivedMessages(*m_target);
+    room->setPosition3DHandler({});
+
+    EXPECT_EQ(read(player3DPositionBytes({10.0f, 0.0f, 0.0f}), *m_sender),
+              server::CommandResult::unauthorized);
+    room->setPosition3DHandler([](uint64_t, const Vector3f& position, float)
+                               { return position.x <= 5.0f; });
+    EXPECT_EQ(read(player3DPositionBytes({10.0f, 0.0f, 0.0f}), *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_FLOAT_EQ(m_sender->getObject3D().getPosition().x, 0.0f);
+    EXPECT_TRUE(targetMessages.empty());
+    EXPECT_EQ(read(player3DPositionBytes({4.0f, 0.0f, 0.0f}), *m_sender),
+              server::CommandResult::success);
+    EXPECT_EQ(targetMessages.size(), 1);
+}
+
 TEST_F(GameplaySpecTest, Player3DPositionUpdatesServerAndBroadcasts)
 {
     setUpRoom();
@@ -1735,6 +1759,26 @@ TEST_F(GameplaySpecTest, Player3DMovementWithYawUpdatesServerAndBroadcasts)
 TEST_F(GameplaySpecTest, Player2DPositionNotInRoomFails)
 {
     EXPECT_EQ(read(player2DPositionBytes({1.0f, 2.0f}), *m_sender), server::CommandResult::error);
+}
+
+TEST_F(GameplaySpecTest, Player2DPositionRequiresServerApproval)
+{
+    setUpRoom();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto targetMessages = receivedMessages(*m_target);
+    room->setPosition2DHandler({});
+
+    EXPECT_EQ(read(player2DPositionBytes({10.0f, 0.0f}), *m_sender),
+              server::CommandResult::unauthorized);
+    room->setPosition2DHandler([](uint64_t, const Vector2f& position)
+                               { return position.x <= 5.0f; });
+    EXPECT_EQ(read(player2DPositionBytes({10.0f, 0.0f}), *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_FLOAT_EQ(m_sender->getObject2D().getPosition().x, 0.0f);
+    EXPECT_TRUE(targetMessages.empty());
+    EXPECT_EQ(read(player2DPositionBytes({4.0f, 0.0f}), *m_sender),
+              server::CommandResult::success);
+    EXPECT_EQ(targetMessages.size(), 1);
 }
 
 TEST_F(GameplaySpecTest, Player2DPositionRequiresRoomOptIn)

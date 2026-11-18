@@ -142,7 +142,13 @@ rules, and broadcast positions computed from server state. The input handler
 takes precedence over the legacy opt-in. Client position requests
 (`room/player_3D/position` and `room/player_2D/position`) are disabled by default;
 a room that wants direct client positions must separately call
-`setClientPositionAllowed(true)`.
+`setClientPositionAllowed(true)` and install `Room::setPosition3DHandler` or
+`Room::setPosition2DHandler` for the dimensions it accepts. The server calls the
+handler with the bounded position (and normalized 3D yaw) before changing the
+player state or broadcasting. A missing handler or one that returns false rejects
+the request. The application must check travel distance, collision, and any
+other game rules using server-owned state; the library cannot infer game
+geometry. Configure these handlers before serving room traffic.
 
 The same room setting gates `room/player_2D/position`. This request requires
 exactly two finite floats; the server clamps both 2D coordinates to the

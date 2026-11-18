@@ -51,6 +51,8 @@ public:
     using TeamSelectionHandler = std::function<bool(uint64_t playerId)>;
     using MovementInputHandler = std::function<bool(uint64_t playerId, const Vector3f& input, float yaw)>;
     using Movement2DInputHandler = std::function<bool(uint64_t playerId, const Vector2f& input)>;
+    using Position3DHandler = std::function<bool(uint64_t playerId, const Vector3f& position, float yaw)>;
+    using Position2DHandler = std::function<bool(uint64_t playerId, const Vector2f& position)>;
     struct ShotHit
     {
         uint64_t targetId;
@@ -182,10 +184,17 @@ public:
     bool canSelectTeam(uint64_t playerId) const;
     /// Allow or disallow direct client position requests
     /// (`room/player_2D/position` and `room/player_3D/position`). Disallowed by default: a game must
-    /// explicitly opt in to client-authoritative position, or install a
-    /// movement input handler for server-authoritative movement.
+    /// explicitly opt in and install a position handler to validate each
+    /// request against server-owned game state.
     void setClientPositionAllowed(bool allowed);
     bool isClientPositionAllowed() const;
+    /// Called with the bounded position before it is stored or broadcast.
+    /// Missing handlers reject requests even when client positions are enabled.
+    /// Configure handlers before serving room traffic.
+    void setPosition3DHandler(Position3DHandler handler);
+    bool canSetPosition3D(uint64_t playerId, const Vector3f& position, float yaw) const;
+    void setPosition2DHandler(Position2DHandler handler);
+    bool canSetPosition2D(uint64_t playerId, const Vector2f& position) const;
     void setMovementInputHandler(MovementInputHandler handler);
     bool onMovementInput(uint64_t playerId, const Vector3f& input, float yaw);
     bool hasMovementInputHandler() const;
@@ -263,6 +272,8 @@ private:
     TeamSelectionHandler m_teamSelectionHandler;
     MovementInputHandler m_movementInputHandler;
     Movement2DInputHandler m_movement2DInputHandler;
+    Position3DHandler m_position3DHandler;
+    Position2DHandler m_position2DHandler;
     ShotHandler m_shotHandler;
     SpawnHandler m_spawnHandler;
     GameItemPickupHandler m_gameItemPickupHandler;

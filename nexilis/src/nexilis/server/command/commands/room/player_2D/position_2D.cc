@@ -58,6 +58,8 @@ CommandResult ServerImpl::room_player2d_position(const DefaultArgs& args)
 
     if (!currentRoom->isClientPositionAllowed())
         return CommandResult::invalid_input;
+    if (!currentRoom->canSetPosition2D(user.getId(), position))
+        return CommandResult::unauthorized;
 
     user.getObject2D().setPosition(position);
 
