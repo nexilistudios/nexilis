@@ -55,6 +55,8 @@ CommandResult ServerImpl::room_player3d_audioEvent(const DefaultArgs& args)
         Log::error("AudioEvent: Room not found");
         return CommandResult::failure;
     }
+    if (!room->canEmitAudioEvent(user.getId(), sound, position))
+        return CommandResult::unauthorized;
 
     // Relay the event to the whole room; the emitting client ignores its own
     // event (it already plays the sound itself, spatially centered).

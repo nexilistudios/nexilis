@@ -18,8 +18,10 @@
 #include <nexilis/server/client_storage.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
+#include <nexilis/server/gameplay_limits.hh>
 #include <nexilis/server/room_storage.hh>
 
+#include <chrono>
 #include <cmath>
 
 namespace nexilis::server
@@ -31,6 +33,8 @@ CommandResult ServerImpl::room_player2d_shoot(const DefaultArgs& args)
     auto data = args.getData();
     auto& protocol = args.getProtocol();
     auto messageId = args.getMessageId();
+    if (user.getRoomId() == 0)
+        return CommandResult::error;
 
     // Get messagedata: direction vector (x, y)
     auto payload = Util::removeAmountOfBytesFromVector(data, 3);
@@ -50,14 +54,24 @@ CommandResult ServerImpl::room_player2d_shoot(const DefaultArgs& args)
     direction.x = static_cast<float>(dirX / length);
     direction.y = static_cast<float>(dirY / length);
 
+    auto room = RoomStorage::getRoomById(user.getRoomId());
+    if (!room)
+        return CommandResult::failure;
+    const auto interval = GameplayLimits::get().shotInterval();
+    if (interval.count() > 0.0f &&
+        !user.acceptShot(std::chrono::steady_clock::now(), interval))
+        return CommandResult::invalid_input;
+    if (!room->canShoot2D(user.getId(), direction))
+        return CommandResult::unauthorized;
+
     // Clients simulate one visual projectile per shoot event. Broadcast its direction.
     std::map<std::string, boost::json::value> params{
             {"x", boost::json::value(direction.x)},
             {"y", boost::json::value(direction.y)}};
     auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, data, params, messageId);
-    Command::sendRoomCommand(roomCommand, user, protocol);
-
-    return CommandResult::success;
+    return Command::sendRoomCommand(roomCommand, user, protocol)
+                   ? CommandResult::success
+                   : CommandResult::failed_room_send;
 }
 
 } // namespace nexilis::server

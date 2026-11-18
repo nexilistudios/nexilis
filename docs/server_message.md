@@ -579,13 +579,22 @@ Applications must synchronize concurrent access to mutable room contents.
 
 Player dimension requests require exactly two floats in 2D or three in 3D.
 Every dimension must be finite, positive, and at most the configured maximum
-horizontal position. Rejected requests neither change dimensions nor broadcast.
+horizontal position. The room must install `setDimension2DHandler` or
+`setDimension3DHandler` to approve each client dimension change against its
+server-owned character state. Missing or rejecting handlers leave dimensions
+unchanged and send no broadcast.
 
 2D visual shot requests require exactly two finite direction floats; zero
 vectors are rejected. The server normalizes accepted directions using a wider
-length calculation to handle extreme finite float values safely. Audio-event
-payloads require exactly one sound byte and three finite position floats within
-the configured world bounds; trailing bytes are rejected.
+length calculation to handle extreme finite float values safely. The room must
+install `setShot2DHandler` to authorize each visual shot against its weapon and
+ammo state. The server also applies the configured shooting rate limit. This
+visual command does not resolve hits or damage. Audio-event payloads require
+exactly one sound byte and three finite position floats within the configured
+world bounds; trailing bytes are rejected. The room must install
+`setAudioEventHandler` to approve the sound and position against server-owned
+game state before relay. Missing or rejecting handlers suppress those events.
 
-These checks bound numerical inputs. Applications still decide whether clients
-may select collider dimensions and enforce authoritative collision/game rules.
+These checks bound numerical inputs. Applications must decide which client
+requests represent legitimate character, weapon, and sound events. Configure
+handlers before serving room traffic.

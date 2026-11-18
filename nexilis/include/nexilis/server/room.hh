@@ -53,6 +53,11 @@ public:
     using Movement2DInputHandler = std::function<bool(uint64_t playerId, const Vector2f& input)>;
     using Position3DHandler = std::function<bool(uint64_t playerId, const Vector3f& position, float yaw)>;
     using Position2DHandler = std::function<bool(uint64_t playerId, const Vector2f& position)>;
+    using Dimension3DHandler = std::function<bool(uint64_t playerId, const Vector3f& dimensions)>;
+    using Dimension2DHandler = std::function<bool(uint64_t playerId, const Vector2f& dimensions)>;
+    using Shot2DHandler = std::function<bool(uint64_t playerId, const Vector2f& direction)>;
+    using AudioEventHandler = std::function<bool(uint64_t playerId, uint8_t sound,
+                                                 const Vector3f& position)>;
     struct ShotHit
     {
         uint64_t targetId;
@@ -195,6 +200,12 @@ public:
     bool canSetPosition3D(uint64_t playerId, const Vector3f& position, float yaw) const;
     void setPosition2DHandler(Position2DHandler handler);
     bool canSetPosition2D(uint64_t playerId, const Vector2f& position) const;
+    /// Client collider changes require application approval before mutation or broadcast.
+    /// Validate against server-owned character and match state.
+    void setDimension3DHandler(Dimension3DHandler handler);
+    bool canSetDimensions3D(uint64_t playerId, const Vector3f& dimensions) const;
+    void setDimension2DHandler(Dimension2DHandler handler);
+    bool canSetDimensions2D(uint64_t playerId, const Vector2f& dimensions) const;
     void setMovementInputHandler(MovementInputHandler handler);
     bool onMovementInput(uint64_t playerId, const Vector3f& input, float yaw);
     bool hasMovementInputHandler() const;
@@ -212,6 +223,14 @@ public:
     bool hasShotHandler() const;
     std::optional<ShotHit> resolveShot(uint64_t shooterId, const Vector3f& direction,
                                        uint8_t slot, uint8_t action);
+    /// Approve a 2D visual shot using server-owned weapon, ammo, and match state.
+    /// The direction is normalized; a missing handler rejects the request.
+    void setShot2DHandler(Shot2DHandler handler);
+    bool canShoot2D(uint64_t playerId, const Vector2f& direction) const;
+    /// Approve a 3D audio event using server-owned action and position state.
+    /// A missing handler rejects the request.
+    void setAudioEventHandler(AudioEventHandler handler);
+    bool canEmitAudioEvent(uint64_t playerId, uint8_t sound, const Vector3f& position) const;
     void setSpawnHandler(SpawnHandler handler);
     void spawnPlayer(uint64_t playerId);
     /// Allow clients to create, move, and delete room objects. Disabled by
@@ -274,7 +293,11 @@ private:
     Movement2DInputHandler m_movement2DInputHandler;
     Position3DHandler m_position3DHandler;
     Position2DHandler m_position2DHandler;
+    Dimension3DHandler m_dimension3DHandler;
+    Dimension2DHandler m_dimension2DHandler;
     ShotHandler m_shotHandler;
+    Shot2DHandler m_shot2DHandler;
+    AudioEventHandler m_audioEventHandler;
     SpawnHandler m_spawnHandler;
     GameItemPickupHandler m_gameItemPickupHandler;
     bool m_clientPositionAllowed = false;

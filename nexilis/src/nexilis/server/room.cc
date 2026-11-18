@@ -47,7 +47,11 @@ Room::Room(Room&& other)
       m_movement2DInputHandler(std::move(other.m_movement2DInputHandler)),
       m_position3DHandler(std::move(other.m_position3DHandler)),
       m_position2DHandler(std::move(other.m_position2DHandler)),
+      m_dimension3DHandler(std::move(other.m_dimension3DHandler)),
+      m_dimension2DHandler(std::move(other.m_dimension2DHandler)),
       m_shotHandler(std::move(other.m_shotHandler)),
+      m_shot2DHandler(std::move(other.m_shot2DHandler)),
+      m_audioEventHandler(std::move(other.m_audioEventHandler)),
       m_spawnHandler(std::move(other.m_spawnHandler)),
       m_gameItemPickupHandler(std::move(other.m_gameItemPickupHandler)),
       m_clientPositionAllowed(other.m_clientPositionAllowed),
@@ -80,7 +84,11 @@ Room& Room::operator=(Room&& other)
         m_movement2DInputHandler = std::move(other.m_movement2DInputHandler);
         m_position3DHandler = std::move(other.m_position3DHandler);
         m_position2DHandler = std::move(other.m_position2DHandler);
+        m_dimension3DHandler = std::move(other.m_dimension3DHandler);
+        m_dimension2DHandler = std::move(other.m_dimension2DHandler);
         m_shotHandler = std::move(other.m_shotHandler);
+        m_shot2DHandler = std::move(other.m_shot2DHandler);
+        m_audioEventHandler = std::move(other.m_audioEventHandler);
         m_spawnHandler = std::move(other.m_spawnHandler);
         m_gameItemPickupHandler = std::move(other.m_gameItemPickupHandler);
         m_clientPositionAllowed = other.m_clientPositionAllowed;
@@ -325,6 +333,22 @@ bool Room::canSetPosition2D(uint64_t playerId, const Vector2f& position) const
 {
     return m_position2DHandler && m_position2DHandler(playerId, position);
 }
+void Room::setDimension3DHandler(Dimension3DHandler handler)
+{
+    m_dimension3DHandler = std::move(handler);
+}
+bool Room::canSetDimensions3D(uint64_t playerId, const Vector3f& dimensions) const
+{
+    return m_dimension3DHandler && m_dimension3DHandler(playerId, dimensions);
+}
+void Room::setDimension2DHandler(Dimension2DHandler handler)
+{
+    m_dimension2DHandler = std::move(handler);
+}
+bool Room::canSetDimensions2D(uint64_t playerId, const Vector2f& dimensions) const
+{
+    return m_dimension2DHandler && m_dimension2DHandler(playerId, dimensions);
+}
 void Room::setMovementInputHandler(MovementInputHandler handler)
 {
     m_movementInputHandler = std::move(handler);
@@ -370,6 +394,22 @@ std::optional<Room::ShotHit> Room::resolveShot(uint64_t shooterId,
                                                uint8_t slot, uint8_t action)
 {
     return m_shotHandler ? m_shotHandler(shooterId, direction, slot, action) : std::nullopt;
+}
+void Room::setShot2DHandler(Shot2DHandler handler)
+{
+    m_shot2DHandler = std::move(handler);
+}
+bool Room::canShoot2D(uint64_t playerId, const Vector2f& direction) const
+{
+    return m_shot2DHandler && m_shot2DHandler(playerId, direction);
+}
+void Room::setAudioEventHandler(AudioEventHandler handler)
+{
+    m_audioEventHandler = std::move(handler);
+}
+bool Room::canEmitAudioEvent(uint64_t playerId, uint8_t sound, const Vector3f& position) const
+{
+    return m_audioEventHandler && m_audioEventHandler(playerId, sound, position);
 }
 void Room::setSpawnHandler(SpawnHandler handler)
 {

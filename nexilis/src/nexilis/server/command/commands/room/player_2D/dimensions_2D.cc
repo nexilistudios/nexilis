@@ -39,6 +39,8 @@ CommandResult ServerImpl::room_player2d_dimension(const DefaultArgs& args)
         Log::error("Client not currently in room.");
         return CommandResult::failure;
     }
+    if (!currentRoom->canSetDimensions2D(user.getId(), vector))
+        return CommandResult::unauthorized;
 
     std::map<std::string, boost::json::value> params{
             {"x", boost::json::value(vector.x)},

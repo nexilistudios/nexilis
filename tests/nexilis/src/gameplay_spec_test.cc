@@ -468,6 +468,12 @@ protected:
                                    { return true; });
         room->setPosition2DHandler([](uint64_t, const Vector2f&)
                                    { return true; });
+        room->setDimension3DHandler([](uint64_t, const Vector3f&)
+                                    { return true; });
+        room->setDimension2DHandler([](uint64_t, const Vector2f&)
+                                    { return true; });
+        room->setShot2DHandler([](uint64_t, const Vector2f&)
+                               { return true; });
         // These legacy movement tests intentionally exercise client-declared motion.
         if (allowLegacyMovement)
             room->setLegacyClientMovementAllowed(true);
@@ -1643,6 +1649,36 @@ TEST_F(GameplaySpecTest, Player3DDimensionUpdatesServerAndBroadcasts)
     EXPECT_DOUBLE_EQ(msg.at("z").as_double(), dimensions.z);
 }
 
+TEST_F(GameplaySpecTest, PlayerDimensionsRequireServerApproval)
+{
+    setUpRoom();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto messages = receivedMessages(*m_target);
+    room->setDimension2DHandler({});
+    room->setDimension3DHandler({});
+    EXPECT_EQ(read(player2DDimensionBytes({2.0f, 3.0f}), *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(read(player3DDimensionBytes({2.0f, 3.0f, 4.0f}), *m_sender),
+              server::CommandResult::unauthorized);
+
+    room->setDimension2DHandler([](uint64_t, const Vector2f& dimensions)
+                                { return dimensions.x <= 2.0f; });
+    room->setDimension3DHandler([](uint64_t, const Vector3f& dimensions)
+                                { return dimensions.x <= 2.0f; });
+    EXPECT_EQ(read(player2DDimensionBytes({3.0f, 3.0f}), *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(read(player3DDimensionBytes({3.0f, 3.0f, 4.0f}), *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_FLOAT_EQ(m_sender->getObject2D().getDimensions().x, 1.0f);
+    EXPECT_FLOAT_EQ(m_sender->getObject3D().getDimensions().x, 1.0f);
+    EXPECT_TRUE(messages.empty());
+    EXPECT_EQ(read(player2DDimensionBytes({2.0f, 3.0f}), *m_sender),
+              server::CommandResult::success);
+    EXPECT_EQ(read(player3DDimensionBytes({2.0f, 3.0f, 4.0f}), *m_sender),
+              server::CommandResult::success);
+    EXPECT_EQ(messages.size(), 2);
+}
+
 TEST_F(GameplaySpecTest, Player3DMovementAppliesDisplacementAndBroadcasts)
 {
     setUpRoom();
@@ -1908,6 +1944,44 @@ TEST_F(GameplaySpecTest, Player2DShootRejectsMalformedAndNonFiniteDirections)
         EXPECT_NEAR(message.at("x").as_double(), std::sqrt(0.5), 0.00001);
         EXPECT_NEAR(message.at("y").as_double(), std::sqrt(0.5), 0.00001);
     }
+}
+
+TEST_F(GameplaySpecTest, Player2DShootRequiresServerApproval)
+{
+    setUpRoom();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto messages = receivedMessages(*m_target);
+    nx_data bytes{static_cast<uint8_t>(CommandType::room),
+                  static_cast<uint8_t>(RoomCommandType::Root::player_2D),
+                  static_cast<uint8_t>(RoomCommandType::PlayerType::shoot)};
+    auto payload = Util::convertToByteVector(Vector2f{3.0f, 4.0f});
+    bytes.insert(bytes.end(), payload.begin(), payload.end());
+    room->setShot2DHandler({});
+    EXPECT_EQ(read(bytes, *m_sender), server::CommandResult::unauthorized);
+    room->setShot2DHandler([](uint64_t, const Vector2f&)
+                           { return false; });
+    EXPECT_EQ(read(bytes, *m_sender), server::CommandResult::unauthorized);
+    EXPECT_TRUE(messages.empty());
+    room->setShot2DHandler([](uint64_t, const Vector2f& direction)
+                           { return direction.x > 0.59f && direction.x < 0.61f &&
+                                    direction.y > 0.79f && direction.y < 0.81f; });
+    EXPECT_EQ(read(bytes, *m_sender), server::CommandResult::success);
+    EXPECT_EQ(messages.size(), 1);
+}
+
+TEST_F(GameplaySpecTest, Player2DShootEnforcesServerRateLimit)
+{
+    setUpRoom();
+    command.getServerConfig().getGameplayLimits().setMaxShootingRate(1.0f);
+    auto messages = receivedMessages(*m_target);
+    nx_data bytes{static_cast<uint8_t>(CommandType::room),
+                  static_cast<uint8_t>(RoomCommandType::Root::player_2D),
+                  static_cast<uint8_t>(RoomCommandType::PlayerType::shoot)};
+    auto payload = Util::convertToByteVector(Vector2f{1.0f, 0.0f});
+    bytes.insert(bytes.end(), payload.begin(), payload.end());
+    EXPECT_EQ(read(bytes, *m_sender), server::CommandResult::success);
+    EXPECT_EQ(read(bytes, *m_sender), server::CommandResult::invalid_input);
+    EXPECT_EQ(messages.size(), 1);
 }
 
 TEST_F(GameplaySpecTest, Player2DDimensionUpdatesServerAndBroadcasts)

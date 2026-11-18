@@ -167,6 +167,9 @@ TEST_F(AudioEventSpecTest, RoomNotFoundFails)
 TEST_F(AudioEventSpecTest, RelaysAudioEventToRoomMembers)
 {
     setUpRoom();
+    server::RoomStorage::getRoomById(ROOM_ID)->setAudioEventHandler(
+            [](uint64_t, uint8_t, const Vector3f&)
+            { return true; });
     auto messages = receivedMessages(*m_other);
 
     const Vector3f position(4.0f, 5.0f, 6.0f);
@@ -185,6 +188,25 @@ TEST_F(AudioEventSpecTest, RelaysAudioEventToRoomMembers)
     EXPECT_DOUBLE_EQ(msg.at("y").as_double(), 5.0);
     EXPECT_DOUBLE_EQ(msg.at("z").as_double(), 6.0);
     EXPECT_EQ(Util::toUint64(msg.at("callback")), 7);
+}
+
+TEST_F(AudioEventSpecTest, RequiresServerApproval)
+{
+    setUpRoom();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto messages = receivedMessages(*m_other);
+    const auto request = audioEventBytes(SOUND, {4.0f, 5.0f, 6.0f});
+    EXPECT_EQ(command.read(request, *m_sender, protocol, 1),
+              server::CommandResult::unauthorized);
+    room->setAudioEventHandler([](uint64_t, uint8_t sound, const Vector3f& position)
+                               { return sound == SOUND && position.x < 2.0f; });
+    EXPECT_EQ(command.read(request, *m_sender, protocol, 2),
+              server::CommandResult::unauthorized);
+    EXPECT_TRUE(messages.empty());
+    EXPECT_EQ(command.read(audioEventBytes(SOUND, {1.0f, 0.0f, 0.0f}),
+                           *m_sender, protocol, 3),
+              server::CommandResult::success);
+    EXPECT_EQ(messages.size(), 1);
 }
 
 TEST_F(AudioEventSpecTest, PacketWireFormat)
