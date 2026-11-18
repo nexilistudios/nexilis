@@ -16,6 +16,24 @@ Each TCP and Unix stream request is prefixed with a **4-byte big-endian uint32_t
 
 The receiver reads exactly 4 bytes for the length, then exactly that many bytes for the payload. The tag authenticates the client ID, message ID, and complete command using the random per-session `udp_token` key delivered in the initial `client_id` response. The key is never included in later requests. Initial password or `skip` authentication has no session key yet and is the only unsigned request. The server rejects unsigned or incorrectly signed commands before dispatch.
 
+Password mode can require a stable account identity. Configure
+`ServerConfig::setAccountAuthenticator` with an application callback that
+validates an account ID and private credential against a persistent account
+store. Once configured, the server rejects legacy password-only handshakes.
+The callback may run concurrently for separate connections and must be thread-safe.
+Set both fields on `ClientConfig::setAccountCredentials`. The initial TLS
+frame then contains eight zero bytes, `NXAC`, one-byte lengths for the shared
+password, account ID, and credential, followed by those three byte strings in
+that order. Each field is at most 255 bytes; the account ID and credential must
+be nonempty. The server calls the account authenticator only after the shared
+password succeeds. It publishes the validated account ID as `User::getAccountId`
+and limits concurrent sessions for that ID to one by default; configure this
+with `ServerConfig::setMaxSessionsPerAccount`. Applications should use the
+stable account ID for bans, permissions, and account quotas, and can reject
+banned or revoked credentials in the authenticator. The numeric client ID and
+session tokens remain ephemeral. Password-only mode continues to work when no
+authenticator is configured and does not identify a player account.
+
 The Boost TCP server also reads requests already buffered by OpenSSL, including
 an unprocessed TLS record after a previous request, without waiting for new
 socket activity.

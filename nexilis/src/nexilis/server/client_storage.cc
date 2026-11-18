@@ -39,6 +39,27 @@ bool ClientStorage::add(std::shared_ptr<User> client)
     return true;
 }
 
+bool ClientStorage::addWithAccountLimit(std::shared_ptr<User> client, std::size_t maximum)
+{
+    if (!client || client->getAccountId().empty() || maximum == 0)
+        return false;
+    std::lock_guard lock(m_mutex);
+    if (m_clients.size() >= maximumClients)
+        return false;
+    std::size_t sessions = 0;
+    for (const auto& existing : m_clients)
+    {
+        if (existing->getId() == client->getId())
+            return false;
+        if (existing->getAccountId() == client->getAccountId())
+            ++sessions;
+    }
+    if (sessions >= maximum)
+        return false;
+    m_clients.emplace_back(std::move(client));
+    return true;
+}
+
 bool ClientStorage::contains(uint64_t id)
 {
     return getClientById(id) != nullptr;

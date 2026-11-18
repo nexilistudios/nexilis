@@ -120,6 +120,27 @@ TEST(ClientHandshake, DoesNotSendBeforeTransportIsReady)
     EXPECT_TRUE(protocol.sent.empty());
 }
 
+TEST(ClientHandshake, SendsAccountCredentialsInInitialBoostTcpFrame)
+{
+    client::ClientConfig config;
+    config.setMode(AuthenticationMode::password_protected);
+    config.setPassword("secret");
+    config.setAccountCredentials("alice", "alice-token");
+    client::ClientAPI api(config);
+    HandshakeProbe protocol(api);
+    protocol.updateProtocolStatus(client::ProtocolStatus::connected);
+    protocol.startHandshake(NXProtocol::Type::BOOST_TCP_CLIENT);
+
+    ASSERT_EQ(protocol.sent.size(), 1u);
+    const auto& frame = protocol.sent.front();
+    ASSERT_EQ(frame.size(), 15u + 6 + 5 + 11);
+    EXPECT_TRUE(std::all_of(frame.begin(), frame.begin() + 8,
+                            [](uint8_t byte)
+                            { return byte == 0; }));
+    EXPECT_EQ(std::string(frame.begin() + 8, frame.begin() + 12), "NXAC");
+    EXPECT_EQ(std::string(frame.begin() + 15, frame.end()), "secretalicealice-token");
+}
+
 TEST(ConstantTimeEquals, MatchesIdenticalStrings)
 {
     EXPECT_TRUE(Util::constantTimeEquals("secret", "secret"));
@@ -425,7 +446,53 @@ protected:
     {
         return handler.readMessage("test_address", Util::convertToByteVector(password), &config);
     }
+
+    std::unique_ptr<server::BaseMessage> sendAccount(
+            const std::string& password, const std::string& account,
+            const std::string& credential)
+    {
+        nx_data payload(8, 0);
+        payload.insert(payload.end(), {'N', 'X', 'A', 'C',
+                                       static_cast<uint8_t>(password.size()),
+                                       static_cast<uint8_t>(account.size()),
+                                       static_cast<uint8_t>(credential.size())});
+        payload.insert(payload.end(), password.begin(), password.end());
+        payload.insert(payload.end(), account.begin(), account.end());
+        payload.insert(payload.end(), credential.begin(), credential.end());
+        return handler.readMessage("test_address", payload, &config);
+    }
 };
+
+TEST_F(MessageHandlerPasswordProtectedTest, AccountModeRejectsLegacyAndInvalidCredentials)
+{
+    config.setAccountAuthenticator([](std::string_view account, std::string_view credential)
+                                   { return account == "alice" && credential == "alice-secret"; });
+    EXPECT_EQ(sendPassword("secret")->getType(), server::BaseMessage::Type::error_message);
+    EXPECT_EQ(sendAccount("secret", "alice", "wrong")->getType(),
+              server::BaseMessage::Type::error_message);
+    EXPECT_EQ(sendAccount("wrong", "alice", "alice-secret")->getType(),
+              server::BaseMessage::Type::error_message);
+    EXPECT_TRUE(server::ClientStorage::getAllClients().empty());
+}
+
+TEST_F(MessageHandlerPasswordProtectedTest, AccountModeBindsIdentityAndLimitsSessions)
+{
+    config.setAccountAuthenticator([](std::string_view account, std::string_view credential)
+                                   { return account == "alice" && credential == "alice-secret"; });
+    auto first = sendAccount("secret", "alice", "alice-secret");
+    ASSERT_NE(first, nullptr);
+    EXPECT_EQ(first->getType(), server::BaseMessage::Type::auth_message);
+    auto users = server::ClientStorage::getAllClients();
+    ASSERT_EQ(users.size(), 1u);
+    EXPECT_EQ(users.front()->getAccountId(), "alice");
+
+    EXPECT_EQ(sendAccount("secret", "alice", "alice-secret")->getType(),
+              server::BaseMessage::Type::error_message);
+    ASSERT_TRUE(server::ClientStorage::remove(users.front()->getId()));
+    auto next = sendAccount("secret", "alice", "alice-secret");
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ(next->getType(), server::BaseMessage::Type::auth_message);
+}
 
 TEST_F(MessageHandlerPasswordProtectedTest, CorrectShortPasswordAuthenticates)
 {

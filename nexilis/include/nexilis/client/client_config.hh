@@ -32,6 +32,22 @@ public:
 
     using AuthConfig::AuthConfig;
 
+    /// Optional stable account credentials for a server with an account
+    /// authenticator. Both fields are sent only over pinned TLS Boost TCP.
+    void setAccountCredentials(std::string accountId, std::string credential)
+    {
+        m_accountId = std::move(accountId);
+        m_accountCredential = std::move(credential);
+    }
+    const std::string& getAccountId() const
+    {
+        return m_accountId;
+    }
+    const std::string& getAccountCredential() const
+    {
+        return m_accountCredential;
+    }
+
     /// af_inet UDP
     const std::string& getInetUDPServerAddress() const
     {
@@ -187,6 +203,8 @@ public:
     }
 
 private:
+    std::string m_accountId;
+    std::string m_accountCredential;
     /// af_inet UDP
     std::string m_inetUDPServerAddress;
     uint16_t m_inetUDPServerPort = 0;

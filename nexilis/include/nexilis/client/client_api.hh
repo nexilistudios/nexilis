@@ -645,6 +645,16 @@ public:
         return m_serverData.getPassword();
     }
 
+    const std::string& getAccountId() const
+    {
+        return m_serverData.getAccountId();
+    }
+
+    const std::string& getAccountCredential() const
+    {
+        return m_serverData.getAccountCredential();
+    }
+
     /// Whether new room broadcasts use password-derived encryption.
     bool isMessageEncryptionEnabled() const
     {

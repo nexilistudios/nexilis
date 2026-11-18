@@ -65,6 +65,12 @@ namespace Nexilis.Util
         /// <summary>Server password. Set before <see cref="ConnectAsync"/>.</summary>
         public string Password { get; set; } = "password";
 
+        /// <summary>Stable account ID for a server that validates account credentials.</summary>
+        public string AccountId { get; set; } = "";
+
+        /// <summary>Private credential for the account.</summary>
+        public string AccountCredential { get; set; } = "";
+
         /// <summary>Expected SHA-256 of the intended server's public key (64 hex digits).</summary>
         public string ServerPublicKeySha256 { get; set; } = "";
 
@@ -181,6 +187,8 @@ namespace Nexilis.Util
             clientConfig.SetBoostTCPAddress(ServerAddress);
             clientConfig.SetBoostUDP(ServerAddress);
             clientConfig.SetPassword(Password);
+            if (!string.IsNullOrEmpty(AccountId) || !string.IsNullOrEmpty(AccountCredential))
+                clientConfig.SetAccountCredentials(AccountId, AccountCredential);
             clientConfig.SetMode(AuthenticationMode);
             clientConfig.SetServerPublicKeySha256(ServerPublicKeySha256);
 

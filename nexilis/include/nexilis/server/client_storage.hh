@@ -35,6 +35,9 @@ public:
     /// A unique_ptr may be moved in and converted to shared ownership.
     static bool add(std::shared_ptr<User> client);
 
+    /// Publish an account user only while its session quota has room.
+    static bool addWithAccountLimit(std::shared_ptr<User> client, std::size_t maximum);
+
     static bool contains(uint64_t id);
 
     /// Snapshot of owning handles. This does not lock mutable user fields.

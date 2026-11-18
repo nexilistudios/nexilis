@@ -32,6 +32,8 @@ nexilis_ClientConfigC* nexilis_client_config_create();
 void nexilis_client_config_destroy(nexilis_ClientConfigC* config);
 
 void nexilis_client_config_set_password(nexilis_ClientConfigC* config, const char* password);
+void nexilis_client_config_set_account_credentials(nexilis_ClientConfigC* config,
+                                                    const char* account_id, const char* credential);
 const char* nexilis_client_config_get_password(const nexilis_ClientConfigC* config);
 
 void nexilis_client_config_set_mode(nexilis_ClientConfigC* config, int mode);

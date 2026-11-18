@@ -45,6 +45,13 @@ void nexilis_client_config_set_password(nexilis_ClientConfigC* config, const cha
     }
 }
 
+void nexilis_client_config_set_account_credentials(nexilis_ClientConfigC* config,
+                                                   const char* account_id, const char* credential)
+{
+    if (config && config->data && account_id && credential)
+        config->data->setAccountCredentials(account_id, credential);
+}
+
 const char* nexilis_client_config_get_password(const nexilis_ClientConfigC* config)
 {
     if (config && config->data)

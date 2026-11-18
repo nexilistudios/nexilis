@@ -32,6 +32,9 @@ namespace Nexilis.Client
         public static extern void nexilis_client_config_set_password(IntPtr config, string password);
 
         [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void nexilis_client_config_set_account_credentials(IntPtr config, string accountId, string credential);
+
+        [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
         public static extern string nexilis_client_config_get_password(IntPtr config);
 
         [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]

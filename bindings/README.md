@@ -33,6 +33,8 @@ server. See [TLS transport setup](../docs/server_message.md#tls-transport-and-se
 Password-protected mode requires pinned TLS Boost TCP. The high-level C# client
 sends packets selected for UDP over TCP in that mode. UDP and other plaintext
 transports are available only in skip mode.
+For servers with account authentication, set `ClientConfig.SetAccountCredentials`
+or `NexilisClient.AccountId` and `AccountCredential` before connecting.
 
 For server-authoritative 3D shots, use `NexilisClient.Fire(x, y, z, slot)`.
 The former `Shoot(targetId, damage)` request is rejected by servers.

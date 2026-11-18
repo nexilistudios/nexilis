@@ -203,6 +203,26 @@ void ClientProtocol::start(NXProtocol::Type type)
             auto password = m_api->getClientPassword();
             Log::debug(header(), "Authenticating with server password");
             auto message = Util::convertToByteVector(password.c_str(), password.size());
+            const auto& accountId = m_api->getAccountId();
+            const auto& credential = m_api->getAccountCredential();
+            if (!accountId.empty() || !credential.empty())
+            {
+                if (type != NXProtocol::Type::BOOST_TCP_CLIENT || accountId.empty() ||
+                    credential.empty() || password.size() > 255 || accountId.size() > 255 ||
+                    credential.size() > 255)
+                {
+                    Log::error(header(), "Invalid account credentials or transport");
+                    return;
+                }
+                message.assign(8, 0); // Initial client ID.
+                message.insert(message.end(), {'N', 'X', 'A', 'C',
+                                               static_cast<uint8_t>(password.size()),
+                                               static_cast<uint8_t>(accountId.size()),
+                                               static_cast<uint8_t>(credential.size())});
+                message.insert(message.end(), password.begin(), password.end());
+                message.insert(message.end(), accountId.begin(), accountId.end());
+                message.insert(message.end(), credential.begin(), credential.end());
+            }
             sendMessage(message);
             break;
         }

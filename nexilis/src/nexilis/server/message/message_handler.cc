@@ -121,12 +121,13 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
     // Unknown identifiers are not users until their handshake succeeds.
     auto user = ClientStorage::getClientById(clientId);
     const bool newUser = !user;
+    std::string accountId;
     auto createUser = [&]() -> bool
     {
         if (!acceptRegistration(address))
             return false;
         uint64_t newId = Util::getRandomUint64();
-        user = std::make_shared<User>(newId, address);
+        user = std::make_shared<User>(newId, address, accountId);
         Log::info(header(), "Created new user: ", newId);
         auto username = Util::getRandomString(10);
         user->setUsername(username);
@@ -268,24 +269,68 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                     return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::authentication_error);
                 }
 
-                // The comparison runs over the stored password length only, so the
-                // response does not reveal the length of the correct password.
-                if (Util::constantTimeEquals(authentication->getPassphrase(), payload))
+                // Account mode requires a distinct private credential for each
+                // stable account. The 8-byte zero ID and NXAC marker distinguish
+                // this first frame from the legacy raw passphrase.
+                bool accepted = false;
+                const auto& authenticator = authentication->getAccountAuthenticator();
+                if (authenticator)
+                {
+                    if (payload.size() >= 15 &&
+                        std::all_of(payload.begin(), payload.begin() + 8,
+                                    [](uint8_t byte)
+                                    { return byte == 0; }) &&
+                        std::equal(payload.begin() + 8, payload.begin() + 12, "NXAC"))
+                    {
+                        const std::size_t passwordLength = payload[12];
+                        const std::size_t accountLength = payload[13];
+                        const std::size_t credentialLength = payload[14];
+                        if (accountLength > 0 && credentialLength > 0 &&
+                            payload.size() == 15 + passwordLength + accountLength + credentialLength)
+                        {
+                            const auto passwordEnd = payload.begin() + 15 + passwordLength;
+                            const nx_data password(payload.begin() + 15, passwordEnd);
+                            accountId.assign(passwordEnd, passwordEnd + accountLength);
+                            const std::string credential(passwordEnd + accountLength, payload.end());
+                            if (Util::constantTimeEquals(authentication->getPassphrase(), password))
+                            {
+                                try
+                                {
+                                    accepted = authenticator(accountId, credential);
+                                }
+                                catch (...)
+                                {
+                                    Log::error(header(), "Account authenticator failed");
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // The comparison runs over the stored password length only.
+                    accepted = Util::constantTimeEquals(authentication->getPassphrase(), payload);
+                }
+
+                if (accepted)
                 {
                     if (!createUser())
                         return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::authentication_error);
                     Log::info(header(), "Correct password by user ", user->getId());
 
+                    user->setCommonAccess(true);
+
+                    const bool published = authenticator
+                                                   ? ClientStorage::addWithAccountLimit(
+                                                             user, authentication->getMaxSessionsPerAccount())
+                                                   : ClientStorage::add(user);
+                    if (!published)
+                        return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::authentication_error);
+
                     {
                         std::lock_guard lock(m_passphraseAuthState->mutex);
                         m_passphraseAuthState->byAddress.erase(address);
                     }
-
-                    user->setCommonAccess(true);
-
-                    // Add to storage only if this was a new user.
-                    if (!ClientStorage::add(user))
-                        return nullptr;
 
                     // This message is equal to Packet::getId (without client id).
                     // The session port is negotiated separately by the

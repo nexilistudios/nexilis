@@ -134,6 +134,12 @@ namespace Nexilis.Client
             ClientConfigNative.nexilis_client_config_set_password(_configPtr, password);
         }
 
+        /// <summary>Sets the stable account ID and private credential for account authentication.</summary>
+        public void SetAccountCredentials(string accountId, string credential)
+        {
+            ClientConfigNative.nexilis_client_config_set_account_credentials(_configPtr, accountId, credential);
+        }
+
         /// <summary>
         /// Sets the password for the config.
         /// </summary>

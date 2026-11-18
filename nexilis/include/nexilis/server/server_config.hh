@@ -24,7 +24,9 @@
 #include <cassert>
 #include <chrono>
 #include <cstddef>
+#include <functional>
 #include <string>
+#include <string_view>
 
 namespace nexilis::server
 {
@@ -52,6 +54,28 @@ public:
     const std::string& getPassphrase() const
     {
         return getPassword();
+    }
+
+    /// Validate a stable account ID and private credential after the shared
+    /// passphrase. Configure before starting the server. When set, legacy
+    /// password-only handshakes are refused.
+    using AccountAuthenticator = std::function<bool(std::string_view, std::string_view)>;
+    void setAccountAuthenticator(AccountAuthenticator authenticator)
+    {
+        m_accountAuthenticator = std::move(authenticator);
+    }
+    const AccountAuthenticator& getAccountAuthenticator() const
+    {
+        return m_accountAuthenticator;
+    }
+    /// Maximum concurrent sessions for one authenticated account.
+    void setMaxSessionsPerAccount(std::size_t maximum)
+    {
+        m_maxSessionsPerAccount = maximum;
+    }
+    std::size_t getMaxSessionsPerAccount() const
+    {
+        return m_maxSessionsPerAccount;
     }
 
     // Root password.
@@ -166,6 +190,8 @@ public:
 
 private:
     std::string m_rootPassword;
+    AccountAuthenticator m_accountAuthenticator;
+    std::size_t m_maxSessionsPerAccount = 1;
     float m_tickrate = 60.f;
     float m_maxCommandRate = NEXILIS_DEFAULT_MAX_COMMAND_RATE;
     std::size_t m_maxPendingBoostTcpConnections = 64;

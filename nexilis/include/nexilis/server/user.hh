@@ -40,7 +40,7 @@ class User : public BaseClient
 {
 public:
     /// Constructor.
-    User(uint64_t id, std::string ip_address);
+    User(uint64_t id, std::string ip_address, std::string accountId = {});
 
     /// Move constructor.
     User(User&& other) noexcept;
@@ -65,6 +65,12 @@ public:
     const std::string& getIPAddress() const
     {
         return m_ip_address;
+    }
+
+    /// Stable application-validated account identity; empty for legacy users.
+    const std::string& getAccountId() const
+    {
+        return m_accountId;
     }
 
     /// Random per-session capability used to authenticate UDP datagrams.
@@ -388,6 +394,7 @@ private:
 
     // General
     std::string m_ip_address;
+    std::string m_accountId;
     std::string m_udpToken;
     std::atomic<bool> m_udpTokenSent{false};
     std::atomic<uint64_t> m_nextUdpResponseId{1};

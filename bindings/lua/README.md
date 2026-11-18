@@ -98,6 +98,8 @@ through a trusted channel, and set `password` to the server's application
 passphrase. Set `tls = false` only in skip mode when connecting to a server
 that explicitly disables TLS. Password-protected mode requires pinned TLS Boost TCP; the
 high-level Lua client sends packets selected for UDP over TCP in that mode.
+For servers with account authentication, also pass `account_id` and
+`account_credential` to `nexilis.new`.
 UDP traffic is available only in skip mode and does not use TLS.
 
 Run the smoke and live server tests with `make test-lua`. This target is part of

@@ -30,6 +30,7 @@ void nexilis_set_boost_udp_port(uint16_t);
 nexilis_ClientConfigC *nexilis_client_config_create(void);
 void nexilis_client_config_destroy(nexilis_ClientConfigC *);
 void nexilis_client_config_set_password(nexilis_ClientConfigC *, const char *);
+void nexilis_client_config_set_account_credentials(nexilis_ClientConfigC *, const char *, const char *);
 void nexilis_client_config_set_mode(nexilis_ClientConfigC *, int);
 void nexilis_client_config_set_message_encryption(nexilis_ClientConfigC *, int);
 void nexilis_client_config_set_tls(nexilis_ClientConfigC *, int);
@@ -208,6 +209,10 @@ function Client.new(options)
     local ok, err = pcall(function()
         state.config = check_ptr(native.nexilis_client_config_create(), "client config creation")
         native.nexilis_client_config_set_password(state.config, options.password or "password")
+        if options.account_id or options.account_credential then
+            native.nexilis_client_config_set_account_credentials(state.config,
+                options.account_id or "", options.account_credential or "")
+        end
         native.nexilis_client_config_set_mode(state.config, options.authentication_mode or 2)
         if options.tls ~= nil then
             native.nexilis_client_config_set_tls(state.config, options.tls and 1 or 0)
