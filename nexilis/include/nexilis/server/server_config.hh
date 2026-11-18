@@ -23,6 +23,7 @@
 
 #include <cassert>
 #include <chrono>
+#include <cstddef>
 #include <string>
 
 namespace nexilis::server
@@ -80,6 +81,29 @@ public:
     float getMaxCommandRate() const
     {
         return m_maxCommandRate;
+    }
+
+    /// Maximum simultaneous Boost TCP workers waiting for initial authentication
+    /// or a session switch proof. Zero refuses new pending connections.
+    /// Configure before starting the server.
+    void setMaxPendingBoostTcpConnections(std::size_t maximum)
+    {
+        m_maxPendingBoostTcpConnections = maximum;
+    }
+    std::size_t getMaxPendingBoostTcpConnections() const
+    {
+        return m_maxPendingBoostTcpConnections;
+    }
+
+    /// Maximum total Boost TCP connection workers, including active sessions.
+    /// Zero refuses all new connections. Configure before starting the server.
+    void setMaxBoostTcpConnections(std::size_t maximum)
+    {
+        m_maxBoostTcpConnections = maximum;
+    }
+    std::size_t getMaxBoostTcpConnections() const
+    {
+        return m_maxBoostTcpConnections;
     }
 
     /// How long a datagram transport may stay idle before the user is
@@ -144,6 +168,8 @@ private:
     std::string m_rootPassword;
     float m_tickrate = 60.f;
     float m_maxCommandRate = NEXILIS_DEFAULT_MAX_COMMAND_RATE;
+    std::size_t m_maxPendingBoostTcpConnections = 64;
+    std::size_t m_maxBoostTcpConnections = 512;
     std::chrono::milliseconds m_datagramIdleTimeout = std::chrono::seconds(120);
     bool m_tls = true;
     std::string m_tlsCertificatePem;

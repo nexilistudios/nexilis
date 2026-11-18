@@ -29,8 +29,15 @@
 #include <boost/asio/streambuf.hpp>
 #include <boost/asio/write.hpp>
 
+#include <chrono>
+
 namespace nexilis::server::nxboost
 {
+
+namespace
+{
+constexpr auto kPendingWorkerDeadline = std::chrono::seconds(10);
+}
 
 TCPServer::TCPServer(const ServerConfig& settings) noexcept
     : ServerProtocol(settings),
@@ -53,8 +60,8 @@ TCPServer& TCPServer::movable(TCPServer& server)
     if (server.m_listenThread.joinable() || server.m_ioContextThread.joinable() ||
         server.m_switchedAcceptThread.joinable() ||
         std::any_of(server.m_clientThreads.begin(), server.m_clientThreads.end(),
-                    [](const auto& thread)
-                    { return thread.joinable(); }))
+                    [](const auto& worker)
+                    { return worker.thread.joinable(); }))
         throw std::logic_error("Stop a Boost TCP server before moving it");
     return server;
 }
@@ -195,13 +202,14 @@ void TCPServer::stop()
     {
         std::lock_guard<std::mutex> lock(*m_mutex);
         if (std::any_of(m_clientThreads.begin(), m_clientThreads.end(),
-                        [](const auto& thread)
-                        { return thread.joinable() && thread.get_id() == std::this_thread::get_id(); }))
+                        [](const auto& worker)
+                        { return worker.thread.joinable() &&
+                                 worker.thread.get_id() == std::this_thread::get_id(); }))
             return;
     }
-    for (auto& thread : m_clientThreads)
-        if (thread.joinable())
-            thread.join();
+    for (auto& worker : m_clientThreads)
+        if (worker.thread.joinable())
+            worker.thread.join();
     m_clientThreads.clear();
 
     cleanupPendingHandshakes(*this);
@@ -222,6 +230,84 @@ void TCPServer::stop()
     }
 
     Log::debug(header(), "stop complete.");
+}
+
+std::size_t TCPServer::workerCount() const
+{
+    std::lock_guard lock(*m_mutex);
+    return m_clientThreads.size();
+}
+
+bool TCPServer::hasWorkerCapacityLocked()
+{
+    std::size_t active = 0;
+    std::size_t pending = 0;
+    for (const auto& worker : m_clientThreads)
+    {
+        if (worker.state->finished.load())
+            continue;
+        ++active;
+        if (worker.state->pending.load())
+            ++pending;
+    }
+    return active < getSettings().getMaxBoostTcpConnections() &&
+           pending < getSettings().getMaxPendingBoostTcpConnections();
+}
+
+void TCPServer::reapFinishedWorkers()
+{
+    std::list<Worker> finished;
+    {
+        std::lock_guard lock(*m_mutex);
+        for (auto it = m_clientThreads.begin(); it != m_clientThreads.end();)
+        {
+            if (it->state->finished.load())
+            {
+                auto current = it++;
+                finished.splice(finished.end(), m_clientThreads, current);
+            }
+            else
+                ++it;
+        }
+    }
+    for (auto& worker : finished)
+        if (worker.thread.joinable())
+            worker.thread.join();
+}
+
+bool TCPServer::launchWorker(
+        std::function<void(const std::shared_ptr<WorkerState>&)> task)
+{
+    auto state = std::make_shared<WorkerState>();
+    std::lock_guard lock(*m_mutex);
+    if (m_stopped->load() || !hasWorkerCapacityLocked())
+        return false;
+
+    auto it = m_clientThreads.emplace(m_clientThreads.end());
+    it->state = state;
+    ServerProtocol::connectionEstablished();
+    try
+    {
+        it->thread = std::thread([this, state, task = std::move(task)]() mutable
+                                 {
+            WorkerCompletion completion{state};
+            try
+            {
+                task(state);
+            }
+            catch (...)
+            {
+                Log::error(header(), "Unhandled Boost TCP worker exception");
+            }
+            ServerProtocol::connectionClosed(); });
+    }
+    catch (...)
+    {
+        m_clientThreads.erase(it);
+        ServerProtocol::connectionClosed();
+        return false;
+    }
+    return true;
 }
 
 void TCPServer::startSwitchedAccepting()
@@ -297,6 +383,7 @@ void TCPServer::startSwitchedAccepting()
                     Log::error(header(), "Error in switched accept");
                 }
             }
+            reapFinishedWorkers();
         }
     });
     // clang-format on
@@ -330,7 +417,6 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
     if (getSettings().getMode() == AuthenticationMode::password_protected &&
         !getSettings().isTlsEnabled())
         return;
-    ServerProtocol::connectionEstablished();
     try
     {
         auto socket_wrapper = std::make_shared<nexilis::boost_tcp::Socket>(*m_ioContext);
@@ -339,7 +425,6 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
             if (!m_tlsContext)
             {
                 Log::error(header(), "TLS requested but no TLS context is available, refusing connection");
-                ServerProtocol::connectionClosed();
                 return;
             }
             socket_wrapper->enableTls(m_tlsContext);
@@ -347,14 +432,17 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
         socket_wrapper->assign(std::move(socket));
 
         // clang-format off
-        auto thread = std::thread([this, socket_wrapper, cb = std::move(onCompleted)]() mutable
+        if (!launchWorker([this, socket_wrapper, cb = std::move(onCompleted)](const auto& workerState) mutable
         {
             std::shared_ptr<User> handshakeUser;
             bool sessionAdvertised = false;
+            const auto deadline = std::chrono::steady_clock::now() + kPendingWorkerDeadline;
             try
             {
                 while (!m_stopped->load() && socket_wrapper->isOpen())
                 {
+                    if (std::chrono::steady_clock::now() >= deadline)
+                        break;
                     nx_data data;
                     bool got_data = socket_wrapper->receive(data);
                     if (m_stopped->load())
@@ -362,6 +450,9 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
                         socket_wrapper->forceClose();
                         break;
                     }
+
+                    if (std::chrono::steady_clock::now() >= deadline)
+                        break;
 
                     if (!got_data)
                     {
@@ -457,6 +548,7 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
                             {
                                 Log::info(header(), "Auth fully complete");
                                 sessionAdvertised = true;
+                                workerState->pending.store(false);
                                 socket_wrapper->close();
                                 cb();
                                 break;
@@ -485,22 +577,15 @@ void TCPServer::handleHandshake(boost::asio::ip::tcp::socket socket, std::functi
             if (handshakeUser && !sessionAdvertised)
                 abandonPendingHandshake(*handshakeUser, *this);
 
-            ServerProtocol::connectionClosed();
-        });
-
-        {
-            std::lock_guard<std::mutex> lock(*m_mutex);
-            m_clientThreads.emplace_back(std::move(thread));
-        }
+        }))
+            socket_wrapper->forceClose();
     }
     catch (const std::exception& e)
     {
-        ServerProtocol::connectionClosed();
         Log::error(header(), "Failed to create handshake thread: ", e.what());
     }
     catch (...)
     {
-        ServerProtocol::connectionClosed();
         Log::error(header(), "Other failure in handshake thread");
     }
     // clang-format on
@@ -524,23 +609,21 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
     }
     socket_wrapper->assign(std::move(socket));
 
-    ServerProtocol::connectionEstablished();
-
     // clang-format off
-    auto client_thread = std::thread([this, socket_wrapper, client_address]() mutable
+    if (!launchWorker([this, socket_wrapper, client_address](const auto& workerState) mutable
     {
         if (!socket_wrapper->isOpen())
-        {
-            ServerProtocol::connectionClosed();
             return;
-        }
 
         std::shared_ptr<User> connectedUser;
+        const auto proofDeadline = std::chrono::steady_clock::now() + kPendingWorkerDeadline;
 
         try
         {
             while (!m_stopped->load() && socket_wrapper->isOpen())
             {
+                if (!connectedUser && std::chrono::steady_clock::now() >= proofDeadline)
+                    break;
                 nx_data data;
                 bool got_data = socket_wrapper->receive(data);
 
@@ -549,6 +632,9 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
                     socket_wrapper->forceClose();
                     break;
                 }
+
+                if (!connectedUser && std::chrono::steady_clock::now() >= proofDeadline)
+                    break;
 
                 if (!got_data)
                 {
@@ -575,6 +661,7 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
                                 client_address, std::string(data.begin() + 12, data.end())))
                         break;
                     connectedUser = std::move(candidate);
+                    workerState->pending.store(false);
                     connectedUser->setBoostTCPSend([socket_wrapper](const nx_data& bytes)
                     {
                         socket_wrapper->send(bytes);
@@ -640,23 +727,8 @@ void TCPServer::handleClient(boost::asio::ip::tcp::socket socket)
         {
             socket_wrapper->close();
         }
-        ServerProtocol::connectionClosed();
-    });
-
-    try
-    {
-        std::lock_guard<std::mutex> lock(*m_mutex);
-        m_clientThreads.emplace_back(std::move(client_thread));
-    }
-    catch (...)
-    {
-        Log::critical(header(), "Failed to launch client thread");
-        ServerProtocol::connectionClosed();
-        if (socket_wrapper->isOpen())
-        {
-            socket_wrapper->close();
-        }
-    }
+    }))
+        socket_wrapper->forceClose();
     // clang-format on
 }
 
@@ -721,6 +793,7 @@ bool TCPServer::acceptClients()
                 Log::error(header(), "Select error: ", strerror(errno));
             }
 
+            reapFinishedWorkers();
             expirePendingHandshakes(*this);
 
             if (m_stopped->load())

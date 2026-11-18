@@ -101,6 +101,53 @@ protected:
         std::this_thread::sleep_for(std::chrono::seconds(3));
     }
 
+    void restartWithWorkerLimits(std::size_t pending, std::size_t total)
+    {
+        client->stop();
+        server->stop();
+        server.reset();
+        nexilis::server::ClientStorage::clear();
+        settings.setMode(nexilis::server::AuthenticationMode::skip);
+        settings.setTls(false);
+        settings.setMaxPendingBoostTcpConnections(pending);
+        settings.setMaxBoostTcpConnections(total);
+        server = std::make_shared<nexilis::server::nxboost::TCPServer>(
+                protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings));
+        server->start();
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+
+    bool waitForWorkers(uint64_t active, std::size_t retained)
+    {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            if (server->activeConnectionsCount() == active && server->workerCount() == retained)
+                return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return server->activeConnectionsCount() == active && server->workerCount() == retained;
+    }
+
+    bool waitForPeerClose(boost::asio::ip::tcp::socket& socket)
+    {
+        socket.non_blocking(true);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            char byte;
+            boost::system::error_code ec;
+            socket.read_some(boost::asio::buffer(&byte, 1), ec);
+            if (ec == boost::asio::error::eof || ec == boost::asio::error::connection_reset)
+                return true;
+            if (ec && ec != boost::asio::error::would_block &&
+                ec != boost::asio::error::try_again)
+                return false;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return false;
+    }
+
     nexilis::ProtocolManager protocol_manager;
     nexilis::server::ServerConfig settings;
     std::unique_ptr<nexilis::client::ClientAPI> api;
@@ -136,6 +183,50 @@ TEST_F(BoostTCPTest, BoostTCPSuccessfulConnection)
     EXPECT_TRUE(client->isConnected());
     EXPECT_TRUE(server->hasActiveConnections());
     EXPECT_EQ(server->activeConnectionsCount(), 1);
+}
+
+TEST_F(BoostTCPTest, PendingWorkerLimitRejectsAndReapsIdleHandshakes)
+{
+    restartWithWorkerLimits(1, 2);
+    boost::asio::io_context io;
+    const boost::asio::ip::tcp::endpoint endpoint(
+            boost::asio::ip::make_address("127.0.0.1"), nexilis::Ports::getBoostTCPPort());
+    boost::asio::ip::tcp::socket first(io);
+    first.connect(endpoint);
+    ASSERT_TRUE(waitForWorkers(1, 1));
+
+    boost::asio::ip::tcp::socket rejected(io);
+    rejected.connect(endpoint);
+    EXPECT_TRUE(waitForPeerClose(rejected));
+    EXPECT_TRUE(waitForWorkers(1, 1));
+    rejected.close();
+    first.close();
+    ASSERT_TRUE(waitForWorkers(0, 0));
+
+    boost::asio::ip::tcp::socket next(io);
+    next.connect(endpoint);
+    EXPECT_TRUE(waitForWorkers(1, 1));
+    next.close();
+    EXPECT_TRUE(waitForWorkers(0, 0));
+}
+
+TEST_F(BoostTCPTest, TotalWorkerLimitRejectsAdditionalHandshakes)
+{
+    restartWithWorkerLimits(2, 1);
+    boost::asio::io_context io;
+    const boost::asio::ip::tcp::endpoint endpoint(
+            boost::asio::ip::make_address("127.0.0.1"), nexilis::Ports::getBoostTCPPort());
+    boost::asio::ip::tcp::socket first(io);
+    first.connect(endpoint);
+    ASSERT_TRUE(waitForWorkers(1, 1));
+
+    boost::asio::ip::tcp::socket rejected(io);
+    rejected.connect(endpoint);
+    EXPECT_TRUE(waitForPeerClose(rejected));
+    EXPECT_TRUE(waitForWorkers(1, 1));
+    rejected.close();
+    first.close();
+    EXPECT_TRUE(waitForWorkers(0, 0));
 }
 
 TEST_F(BoostTCPTest, BackToBackTlsRequestsReceiveBothResponses)

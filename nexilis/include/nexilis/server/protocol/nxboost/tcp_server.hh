@@ -28,6 +28,11 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
+#include <atomic>
+#include <cstddef>
+#include <functional>
+#include <list>
+#include <memory>
 #include <thread>
 
 namespace nexilis::server::nxboost
@@ -70,6 +75,8 @@ public:
 
     /// Get the port where the server is running.
     uint16_t getPort() const;
+    /// Diagnostic count of worker thread objects retained by this server.
+    std::size_t workerCount() const;
 
 private:
     bool sendToClient(const nx_data& data, boost::asio::ip::tcp::socket& clientSocket);
@@ -80,7 +87,29 @@ private:
     std::string getClientAddress(boost::asio::ip::tcp::socket& socket);
     void startSwitchedAccepting();
     uint16_t switchToSessionPort();
+    void reapFinishedWorkers();
+    bool hasWorkerCapacityLocked();
     static TCPServer& movable(TCPServer& server);
+
+    struct WorkerState
+    {
+        std::atomic<bool> pending{true};
+        std::atomic<bool> finished{false};
+    };
+    struct Worker
+    {
+        std::thread thread;
+        std::shared_ptr<WorkerState> state;
+    };
+    struct WorkerCompletion
+    {
+        std::shared_ptr<WorkerState> state;
+        ~WorkerCompletion()
+        {
+            state->finished.store(true);
+        }
+    };
+    bool launchWorker(std::function<void(const std::shared_ptr<WorkerState>&)> task);
 
 private:
     const uint16_t m_defaultServerPort = Ports::getBoostTCPPort();
@@ -96,7 +125,7 @@ private:
     std::thread m_listenThread;
     std::thread m_ioContextThread;
     std::thread m_switchedAcceptThread;
-    std::vector<std::thread> m_clientThreads;
+    std::list<Worker> m_clientThreads;
 };
 
 } // namespace nexilis::server::nxboost

@@ -50,6 +50,16 @@ server requests. Client JSON responses are limited to 16 MiB per message
 (excluding the newline delimiter); the Boost TCP receive buffer enforces this
 limit before parsing, and the parser caps nesting at 32 levels.
 
+Boost TCP accepts at most 64 workers waiting for initial authentication or a
+session switch proof, and at most 512 connection workers overall by default.
+Configure these limits before starting the server with
+`ServerConfig::setMaxPendingBoostTcpConnections` and
+`ServerConfig::setMaxBoostTcpConnections`; zero refuses new connections in the
+corresponding category. Connections above a limit are closed. Completed worker
+threads are joined and removed during normal accept-loop operation, including
+when no new clients arrive. A connection has 10 seconds to complete its initial
+authentication or session switch proof; established sessions have no such deadline.
+
 UDP messages do not use a length prefix — each datagram is a single message.
 The Boost UDP and af_inet UDP transports add an authentication envelope. A
 new client sends a 20-byte `NXUH` hello and receives a 20-byte `NXUC` cookie
