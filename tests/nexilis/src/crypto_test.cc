@@ -16,10 +16,14 @@
 
 #include <gtest/gtest.h>
 
+#include <nexilis/client/client_api.hh>
 #include <nexilis/client/client_config.hh>
+#include <nexilis/client/command/room/communication.hh>
+#include <nexilis/client/packet.hh>
 #include <nexilis/crypto.hh>
 
 #include <string>
+#include <vector>
 
 using namespace nexilis;
 
@@ -39,6 +43,33 @@ TEST(MessageEncryption, ToggleFlipsState)
     EXPECT_TRUE(config.isMessageEncryptionEnabled());
     config.setMessageEncryption(false);
     EXPECT_FALSE(config.isMessageEncryptionEnabled());
+}
+
+TEST(MessageEncryption, EnabledBroadcastWithoutPasswordFailsClosed)
+{
+    client::ClientConfig config;
+    client::ClientAPI api(config);
+    api.setClientId(1);
+    api.setRoomId(42);
+    api.setMessageEncryption(true);
+
+    EXPECT_TRUE(client::Packet::Room::Communicate::broadcast(api, "secret").empty());
+    api.setMessageEncryption(false);
+    EXPECT_FALSE(client::Packet::Room::Communicate::broadcast(api, "chat").empty());
+}
+
+TEST(MessageEncryption, InvalidEncryptedBroadcastIsNotDelivered)
+{
+    client::ClientConfig config;
+    config.setPassword("salasana");
+    client::ClientAPI api(config);
+    client::ClientAPI::ClientAPIData data;
+    data.getCurrentlyActiveRooms().emplace_back(
+            RoomData(1, "room", 42), std::vector<client::ClientSession>{});
+    client::RoomCommunicationCommand command("broadcast_encrypted", 42, 7, "not base64!");
+
+    EXPECT_EQ(command.execute(api, data), client::ReadResult::failure);
+    EXPECT_TRUE(data.getCurrentlyActiveRooms()[0].getMessages().empty());
 }
 
 TEST(MessageEncryption, DeriveKeyIsStableForSameRoom)

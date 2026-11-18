@@ -28,7 +28,8 @@ namespace nexilis::client
 class Room : public BaseRoom
 {
 public:
-    /// Communication type for communications in a room.
+    /// Player-authored room content. Treat the payload as untrusted data;
+    /// authoritative game events use separate server-authored message types.
     class Communication
     {
     public:

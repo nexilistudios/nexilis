@@ -71,6 +71,7 @@ Every program uses the same four pieces: a `ProtocolManager`, a config, a
 #include <nexilis/client/protocol/nxboost/tcp_client.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/protocol/nxboost/tcp_server.hh>
+#include <nexilis/server/room_storage.hh>
 
 nexilis::ProtocolManager protocol_manager;
 
@@ -94,7 +95,12 @@ client.start();
 client.sendMessage(nexilis::client::Packet::Set::General::username(api, "Alice"));
 client.sendMessage(nexilis::client::Packet::Room::Management::create(api, "chat"));
 
-// ...wait for api.getActiveRooms(), then join and broadcast:
+// ...wait for api.getActiveRooms(), then approve chat as player content:
+auto room = nexilis::server::RoomStorage::getRoomById(room_id);
+room->setBroadcastHandler([](uint64_t, const std::string& message, bool)
+                          { return !message.empty(); });
+
+// Join and broadcast:
 client.sendMessage(nexilis::client::Packet::Room::Management::join(api, room_id));
 client.sendMessage(nexilis::client::Packet::Room::Communicate::broadcast(api, "hello"));
 

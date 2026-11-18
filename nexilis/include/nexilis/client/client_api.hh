@@ -645,13 +645,13 @@ public:
         return m_serverData.getPassword();
     }
 
-    /// Whether new room messages are encrypted end-to-end.
+    /// Whether new room broadcasts use password-derived encryption.
     bool isMessageEncryptionEnabled() const
     {
         return m_serverData.isMessageEncryptionEnabled();
     }
 
-    /// Toggle end-to-end encryption of room messages on/off at runtime.
+    /// Toggle password-derived encryption of room broadcasts at runtime.
     /// \note Off by default; encryption only kicks in when enabled.
     void setMessageEncryption(bool enabled)
     {

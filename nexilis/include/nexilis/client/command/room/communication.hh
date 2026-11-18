@@ -42,21 +42,17 @@ public:
 
         if (m_action == "broadcast" || m_action == "broadcast_encrypted")
         {
-            // End-to-end encrypted messages are relayed by the server as an
-            // opaque base64 ciphertext blob. Only the receiving client can
-            // turn that back into the original message.
+            // Encrypted messages are relayed as base64 ciphertext. Invalid
+            // ciphertext must not become an application message.
             std::string payload = m_message;
             if (m_action == "broadcast_encrypted")
             {
                 const auto key = crypto::deriveMessageKey(api.getClientPassword(), m_room_id);
                 const auto sealed = crypto::fromBase64(m_message);
-                if (!key.empty() && !sealed.empty() && crypto::decrypt(key, sealed, payload))
+                if (key.empty() || sealed.empty() || !crypto::decrypt(key, sealed, payload))
                 {
-                    // Successfully decrypted into payload.
-                }
-                else
-                {
-                    Log::error("broadcast_encrypted: failed to decrypt message, keeping the raw ciphertext");
+                    Log::error("broadcast_encrypted: failed to decrypt message");
+                    return ReadResult::failure;
                 }
             }
 

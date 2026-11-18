@@ -150,7 +150,8 @@ public:
             m_inetUDPServerPort = port;
     }
 
-    /// Whether room messages are encrypted end-to-end between the clients.
+    /// Whether room broadcasts use a password-derived encryption key.
+    /// The server knows the password and can derive the same key.
     /// \note Off by default so plaintext traffic stays plaintext unless the
     ///       developer explicitly opts in.
     bool isMessageEncryptionEnabled() const
@@ -208,7 +209,7 @@ private:
     /// af_unix STREAM
     std::string m_unixStreamServerPath;
 
-    /// End-to-end encryption toggle for room messages.
+    /// Password-derived encryption toggle for room broadcasts.
     bool m_messageEncryption = false;
 
     /// TLS transport encryption toggle for TCP connections.

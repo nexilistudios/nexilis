@@ -21,6 +21,7 @@
 #include <nexilis/logger/log.hh>
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/protocol/nxboost/tcp_server.hh>
+#include <nexilis/server/room_storage.hh>
 
 #include <chrono>
 #include <cstdlib>
@@ -105,6 +106,12 @@ int main(int argc, char** argv)
     }
 
     const uint64_t room_id = alice_api.getActiveRooms()[0].getId();
+    // This demo displays broadcasts as chat text and never treats them as game commands.
+    auto serverRoom = nexilis::server::RoomStorage::getRoomById(room_id);
+    if (!serverRoom)
+        return EXIT_FAILURE;
+    serverRoom->setBroadcastHandler([](uint64_t, const std::string& message, bool)
+                                    { return !message.empty(); });
     alice.sendMessage(nexilis::client::Packet::Room::Management::join(alice_api, room_id));
 
     if (!waitFor([&]()

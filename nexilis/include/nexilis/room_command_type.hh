@@ -55,8 +55,7 @@ public:
         broadcast,
         othercast,
         unicast,
-        /// Like broadcast, but the payload is an opaque base64 ciphertext blob
-        /// that the server relays without being able to read it.
+        /// Like broadcast, but the payload is a base64 ciphertext blob.
         broadcast_encrypted
     };
 

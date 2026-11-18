@@ -128,9 +128,10 @@ CommandResult ServerImpl::room_management_join(const DefaultArgs& args)
     for (const auto& broadcast : room->getBroadcasts())
     {
         std::map<std::string, boost::json::value> broadcastParams{
-                {"action", boost::json::value("broadcast")},
+                {"action", boost::json::value(broadcast.encrypted ? "broadcast_encrypted" : "broadcast")},
                 {"room_id", boost::json::value(roomId)},
                 {"client_id", boost::json::value(broadcast.clientId)},
+                {"player_authored", boost::json::value(true)},
                 {"message", boost::json::value(broadcast.message)}};
         auto broadcastMsg = Command::clientMessageData(CommandType::room, "communication", 0, broadcastParams);
         Command::sendMessageToClient(broadcastMsg, user, protocol);

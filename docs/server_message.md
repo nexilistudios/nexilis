@@ -252,10 +252,19 @@ misses. Reload requests do not consume this cooldown.
 arriving faster than the configured broadcast rate, are rejected as invalid
 input before they are stored or relayed. The per-client rate limit applies to
 the encrypted broadcast form as well, since both forms use the same handler.
+Rooms reject client broadcasts until the application installs
+`Room::setBroadcastHandler` and approves the sender, payload, and encryption
+mode. For encrypted broadcasts, the handler receives base64 ciphertext; an
+application that must inspect content should reject that mode or decrypt with
+its configured password. Approved broadcasts have `player_authored: true` at the top level of
+their JSON messages. Applications must treat the payload as player content;
+authoritative game events should use separate server-authored message types.
 Each room retains at most the 100 most recent broadcasts and replays only those
 to joining clients; this history bound is currently fixed in
-`nexilis_constants.hh`. Broadcasts still reach every member of the room,
-including the sender, and the server does not moderate their contents.
+`nexilis_constants.hh`. Encrypted history retains its
+`broadcast_encrypted` action so clients decrypt it on replay. Approved
+broadcasts reach every member of the room, including the sender. The server
+does not interpret the payload.
 
 `Packet::Room::Player3D::matchAction(api, action)` sends room/player_3D action byte `8` followed by exactly one byte: `0` cancels, `1` begins planting, and `2` begins defusing. The room's application-installed action handler validates the request; rooms without a handler reject it. The server's combat callback can also deny hits by participants who are outside an active round. These callbacks are optional and do not change normal rooms.
 
@@ -377,9 +386,14 @@ requests do not allocate a user. The shared client registry admits at most
 `NEXILIS_DEFAULT_MAX_CLIENTS` live users (currently 1024); further handshakes
 are rejected until users disconnect or expire.
 
-`ClientAPI::setMessageEncryption(true)` affects room broadcasts when the client has a nonempty password. It does not encrypt othercast or unicast messages. The message key is derived from that same password and the room ID; the server holds the password, so this feature does **not** hide message contents from the server.
+`ClientAPI::setMessageEncryption(true)` affects room broadcasts. It does not encrypt othercast or unicast messages. The message key is derived from the password and the room ID; the server holds the password, so this feature does **not** hide message contents from the server.
 
-The current broadcast implementation also falls back to the plaintext payload if key derivation or encryption fails. Treat this option as experimental and do not rely on it for confidentiality until that behavior is changed and tested. Password-protected sessions require pinned TLS Boost TCP.
+If encryption is enabled but the password is missing, key derivation fails, or
+encryption fails, the client packet builder returns no packet. Receivers reject
+encrypted broadcasts that cannot be decrypted instead of exposing ciphertext
+as application content. This option does not grant server authority to player
+messages or confidentiality from the server. Password-protected sessions
+require pinned TLS Boost TCP.
 
 ## Server room storage ownership
 

@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <nexilis/crypto.hh>
 #include <nexilis/json.hh>
 #include <nexilis/nexilis_constants.hh>
 #include <nexilis/room_command_type.hh>
@@ -71,6 +72,9 @@ protected:
         server::ClientStorage::clear();
 
         server::RoomStorage::add(server::Room(RoomData(SENDER_ID, "history_room", ROOM_ID)));
+        server::RoomStorage::getRoomById(ROOM_ID)->setBroadcastHandler(
+                [](uint64_t, const std::string&, bool)
+                { return true; });
 
         auto sender = std::make_unique<server::User>(SENDER_ID, "127.0.0.1");
         server::ClientStorage::add(std::move(sender));
@@ -100,11 +104,13 @@ protected:
     }
 
     /// Build broadcast command bytes: room / communication / broadcast / message.
-    nx_data broadcastBytes(const std::string& message) const
+    nx_data broadcastBytes(const std::string& message, bool encrypted = false) const
     {
         nx_data bytes{static_cast<uint8_t>(CommandType::room),
                       static_cast<uint8_t>(RoomCommandType::Root::communication),
-                      static_cast<uint8_t>(RoomCommandType::Communication::broadcast)};
+                      static_cast<uint8_t>(encrypted
+                                                   ? RoomCommandType::Communication::broadcast_encrypted
+                                                   : RoomCommandType::Communication::broadcast)};
         bytes.insert(bytes.end(), message.begin(), message.end());
         return bytes;
     }
@@ -150,6 +156,59 @@ TEST_F(RoomHistorySpecTest, BroadcastIsStoredInRoom)
     ASSERT_EQ(broadcasts.size(), 1);
     EXPECT_EQ(broadcasts[0].clientId, SENDER_ID);
     EXPECT_EQ(broadcasts[0].message, message);
+}
+
+TEST_F(RoomHistorySpecTest, BroadcastRequiresRoomApproval)
+{
+    room()->joinRoom(SENDER_ID);
+    user(SENDER_ID)->setRoomId(ROOM_ID);
+    command.getServerConfig().getGameplayLimits().setMaxBroadcastRate(0.0f);
+    auto messages = receivedMessages(SENDER_ID);
+    room()->setBroadcastHandler({});
+    EXPECT_EQ(command.read(broadcastBytes("server: win"), *user(SENDER_ID), protocol, 1),
+              server::CommandResult::unauthorized);
+    room()->setBroadcastHandler([](uint64_t playerId, const std::string& message, bool)
+                                { return playerId == SENDER_ID && message == "chat: hello"; });
+    EXPECT_EQ(command.read(broadcastBytes("server: win"), *user(SENDER_ID), protocol, 2),
+              server::CommandResult::unauthorized);
+    EXPECT_TRUE(room()->getBroadcasts().empty());
+    EXPECT_TRUE(messages.empty());
+    EXPECT_EQ(command.read(broadcastBytes("chat: hello"), *user(SENDER_ID), protocol, 3),
+              server::CommandResult::success);
+    ASSERT_EQ(room()->getBroadcasts().size(), 1);
+    ASSERT_EQ(messages.size(), 1);
+    EXPECT_TRUE(messages[0].at("player_authored").as_bool());
+}
+
+TEST_F(RoomHistorySpecTest, EncryptedBroadcastRetainsActionInHistory)
+{
+    room()->joinRoom(SENDER_ID);
+    user(SENDER_ID)->setRoomId(ROOM_ID);
+    room()->setBroadcastHandler([](uint64_t, const std::string&, bool encrypted)
+                                { return encrypted; });
+    auto liveMessages = receivedMessages(SENDER_ID);
+    const auto key = crypto::deriveMessageKey("salasana", ROOM_ID);
+    std::string sealed;
+    ASSERT_TRUE(crypto::encrypt(key, "secret chat", sealed));
+    const std::string ciphertext = crypto::toBase64(sealed);
+    EXPECT_EQ(command.read(broadcastBytes(ciphertext, true), *user(SENDER_ID), protocol, 1),
+              server::CommandResult::success);
+    ASSERT_EQ(room()->getBroadcasts().size(), 1);
+    EXPECT_TRUE(room()->getBroadcasts()[0].encrypted);
+    ASSERT_EQ(liveMessages.size(), 1);
+    EXPECT_EQ(liveMessages[0].at("action").as_string(), "broadcast_encrypted");
+    EXPECT_TRUE(liveMessages[0].at("player_authored").as_bool());
+
+    auto replayMessages = receivedMessages(JOINER_ID);
+    EXPECT_EQ(command.read(joinBytes(), *user(JOINER_ID), protocol, 2),
+              server::CommandResult::success);
+    auto replay = std::find_if(replayMessages.begin(), replayMessages.end(),
+                               [](const auto& message)
+                               { return message.contains("action") &&
+                                        message.at("action").as_string() == "broadcast_encrypted"; });
+    ASSERT_NE(replay, replayMessages.end());
+    EXPECT_EQ(replay->at("message").as_string(), ciphertext);
+    EXPECT_TRUE(replay->at("player_authored").as_bool());
 }
 
 TEST_F(RoomHistorySpecTest, BroadcastWithoutRoomFails)

@@ -77,6 +77,8 @@ public:
     using GameItemMutationHandler = std::function<bool(uint64_t playerId, uint64_t itemId,
                                                        GameItemMutation action,
                                                        const std::string& status)>;
+    using BroadcastHandler = std::function<bool(uint64_t playerId,
+                                                const std::string& message, bool encrypted)>;
     struct ShotHit
     {
         uint64_t targetId;
@@ -95,6 +97,8 @@ public:
         uint64_t clientId = 0;
         /// The payload of the message.
         std::string message = "";
+        /// Whether the payload is encrypted and must be decrypted by clients.
+        bool encrypted = false;
     };
 
     /// Constructor.
@@ -157,10 +161,15 @@ public:
     /// NEXILIS_MAX_BROADCAST_HISTORY messages are retained.
     /// \param clientId The id of the user that sent the message.
     /// \param message The payload of the message.
-    void addBroadcast(uint64_t clientId, const std::string& message);
+    void addBroadcast(uint64_t clientId, const std::string& message, bool encrypted = false);
 
     /// Get a snapshot of the broadcast messages retained in the room.
     std::vector<Broadcast> getBroadcasts() const;
+    /// Client broadcasts are denied until an application accepts player-authored
+    /// content. The callback must not treat its payload as a server command.
+    /// Configure before serving room traffic.
+    void setBroadcastHandler(BroadcastHandler handler);
+    bool canBroadcast(uint64_t playerId, const std::string& message, bool encrypted) const;
 
     /// Get the health of a player. Returns default health if not yet tracked.
     float getPlayerHealth(uint64_t clientId) const;
@@ -336,6 +345,7 @@ private:
     Object2DMutationHandler m_object2DMutationHandler;
     Object3DMutationHandler m_object3DMutationHandler;
     GameItemMutationHandler m_gameItemMutationHandler;
+    BroadcastHandler m_broadcastHandler;
     bool m_clientPositionAllowed = false;
     std::atomic<bool> m_legacyClientMovementAllowed{false};
     bool m_clientObjectCreationAllowed = false;

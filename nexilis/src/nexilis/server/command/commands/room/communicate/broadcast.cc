@@ -14,6 +14,7 @@
    You should have received a copy of the GNU Lesser General Public License
    along with this file.  If not, see <https://gnu.org>. */
 
+#include <nexilis/room_command_type.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
 #include <nexilis/server/gameplay_limits.hh>
@@ -52,7 +53,6 @@ CommandResult ServerImpl::room_communicate_broadcast(const DefaultArgs& args)
         Log::error("Cannot find room for broadcast!");
         return CommandResult::error;
     }
-
     const auto interval = limits.broadcastInterval();
     if (interval.count() > 0.0f &&
         !user.acceptBroadcast(std::chrono::steady_clock::now(), interval))
@@ -63,11 +63,17 @@ CommandResult ServerImpl::room_communicate_broadcast(const DefaultArgs& args)
         return CommandResult::invalid_input;
     }
 
-    room->addBroadcast(user.getId(), messageData);
+    const bool encrypted = args.getData()[2] ==
+                           static_cast<uint8_t>(RoomCommandType::Communication::broadcast_encrypted);
+    if (!room->canBroadcast(user.getId(), messageData, encrypted))
+        return CommandResult::unauthorized;
+
+    room->addBroadcast(user.getId(), messageData, encrypted);
 
     std::map<std::string, boost::json::value> params{
             {"id", boost::json::value(user.getId())},
             {"room_id", boost::json::value(user.getRoomId())},
+            {"player_authored", boost::json::value(true)},
             {"message", boost::json::value(messageData)}};
 
     auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, args.getData(), params, args.getMessageId());

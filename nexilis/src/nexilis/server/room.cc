@@ -57,6 +57,7 @@ Room::Room(Room&& other)
       m_object2DMutationHandler(std::move(other.m_object2DMutationHandler)),
       m_object3DMutationHandler(std::move(other.m_object3DMutationHandler)),
       m_gameItemMutationHandler(std::move(other.m_gameItemMutationHandler)),
+      m_broadcastHandler(std::move(other.m_broadcastHandler)),
       m_clientPositionAllowed(other.m_clientPositionAllowed),
       m_legacyClientMovementAllowed(other.m_legacyClientMovementAllowed.load()),
       m_clientObjectCreationAllowed(other.m_clientObjectCreationAllowed),
@@ -97,6 +98,7 @@ Room& Room::operator=(Room&& other)
         m_object2DMutationHandler = std::move(other.m_object2DMutationHandler);
         m_object3DMutationHandler = std::move(other.m_object3DMutationHandler);
         m_gameItemMutationHandler = std::move(other.m_gameItemMutationHandler);
+        m_broadcastHandler = std::move(other.m_broadcastHandler);
         m_clientPositionAllowed = other.m_clientPositionAllowed;
         m_legacyClientMovementAllowed.store(other.m_legacyClientMovementAllowed.load());
         m_clientObjectCreationAllowed = other.m_clientObjectCreationAllowed;
@@ -176,18 +178,28 @@ void Room::leaveRoom(uint64_t userId)
     m_playerTeams.erase(userId);
 }
 
-void Room::addBroadcast(uint64_t clientId, const std::string& message)
+void Room::addBroadcast(uint64_t clientId, const std::string& message, bool encrypted)
 {
     std::lock_guard<std::mutex> lock(m_broadcastMutex);
     if (m_broadcasts.size() >= NEXILIS_MAX_BROADCAST_HISTORY)
         m_broadcasts.pop_front();
-    m_broadcasts.emplace_back(Broadcast{clientId, message});
+    m_broadcasts.emplace_back(Broadcast{clientId, message, encrypted});
 }
 
 std::vector<Room::Broadcast> Room::getBroadcasts() const
 {
     std::lock_guard<std::mutex> lock(m_broadcastMutex);
     return std::vector<Broadcast>(m_broadcasts.begin(), m_broadcasts.end());
+}
+
+void Room::setBroadcastHandler(BroadcastHandler handler)
+{
+    m_broadcastHandler = std::move(handler);
+}
+
+bool Room::canBroadcast(uint64_t playerId, const std::string& message, bool encrypted) const
+{
+    return m_broadcastHandler && m_broadcastHandler(playerId, message, encrypted);
 }
 
 float Room::getPlayerHealth(uint64_t clientId) const

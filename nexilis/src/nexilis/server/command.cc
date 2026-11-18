@@ -289,9 +289,9 @@ try
                             return ServerImpl::room_communicate_broadcast(args);
                         }
 
-                        // broadcast with an end-to-end encrypted payload.
-                        // The ciphertext is relayed verbatim; the server can
-                        // not read it, only forward it to the room.
+                        // broadcast with a password-derived encrypted payload.
+                        // The server relays the ciphertext; the password holder
+                        // can derive the same key.
                         case 3:
                         {
                             return ServerImpl::room_communicate_broadcast(args);
