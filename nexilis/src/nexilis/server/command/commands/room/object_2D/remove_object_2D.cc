@@ -35,6 +35,9 @@ CommandResult ServerImpl::room_object2d_destroy(const DefaultArgs& args)
     auto objectId = Util::uint64FromFront(payload);
     if (!room->hasObject2D(objectId))
         return CommandResult::invalid_input;
+    if (!room->canMutateObject2D(user.getId(), objectId,
+                                 Room::ObjectMutation::destroy, std::nullopt))
+        return CommandResult::unauthorized;
 
     // Remove from storage.
     room->deleteObject2D(objectId);

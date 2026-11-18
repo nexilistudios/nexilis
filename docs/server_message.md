@@ -168,7 +168,11 @@ on match state. The server accepts only the `Terrorist` and `Counter Terrorist`
 team names from clients. An application can set teams directly on the server.
 
 Client game item creation, status changes, and deletion are disabled by default.
-A room can call `setClientGameItemCreationAllowed(true)` to allow them. Creation
+A room can call `setClientGameItemCreationAllowed(true)` to allow creation.
+Status changes and deletion additionally require a
+`Room::setGameItemMutationHandler` that approves the actor, item ID, action, and
+requested status against server-owned ownership and game state. A missing or
+rejecting handler leaves the item unchanged and sends no broadcast. Creation
 requires finite positions within the configured world bounds, positive finite
 dimensions no larger than the horizontal world bound, a type of 1–64 characters,
 a status of 1–32 characters, and a relative asset path of 1–256 characters.
@@ -182,11 +186,19 @@ must validate ownership, status, and proximity before the status is broadcast.
 The nx-3D handler consumes the item on pickup and follows the status message
 with a destroy message so all clients remove it.
 
+When a pickup handler is installed, it continues to govern the pickup path;
+the general item mutation handler does not replace it.
+
 Client room object creation, movement, and deletion are disabled by default.
-A room can call `setClientObjectCreationAllowed(true)` to allow
-`room/object_2D` and `room/object_3D` create, create_moving, move, and destroy
-requests. Creation requires finite positions within the configured world bounds,
-positive finite dimensions no larger than the horizontal world bound, and an
+A room can call `setClientObjectCreationAllowed(true)` to allow creation.
+Moving or deleting an existing object additionally requires the matching
+`Room::setObject2DMutationHandler` or `Room::setObject3DMutationHandler` to
+approve the actor, object ID, action, and bounded destination for moves. A
+missing or rejecting handler leaves the object unchanged and sends no
+broadcast. Applications must check ownership and game rules in these handlers.
+Move handlers run while the room resource lock is held and must not call room
+resource accessors. Creation requires finite positions within the configured
+world bounds, positive finite dimensions no larger than the horizontal bound, and an
 optional relative asset path of at most 256 characters. Asset paths reject
 absolute paths and `.` or `..` segments. Moving object requests also require
 finite movement values and a duration in (0, 0.25] seconds. Move offsets must be

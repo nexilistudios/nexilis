@@ -35,6 +35,9 @@ CommandResult ServerImpl::room_gameitem_destroy(const DefaultArgs& args)
         return CommandResult::failure;
     if (!room->hasGameItem(itemId))
         return CommandResult::invalid_input;
+    if (!room->canMutateGameItem(user.getId(), itemId,
+                                 Room::GameItemMutation::destroy, ""))
+        return CommandResult::unauthorized;
     room->deleteGameItem(itemId);
 
     std::map<std::string, boost::json::value> params{

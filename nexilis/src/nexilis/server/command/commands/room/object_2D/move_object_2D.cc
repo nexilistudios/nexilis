@@ -42,6 +42,7 @@ CommandResult ServerImpl::room_object2d_move(const DefaultArgs& args)
     const auto& limits = GameplayLimits::get();
     Vector2f clampedPosition;
     bool validPosition = false;
+    bool authorized = false;
     const bool found = room->withObject2D(objectId, [&](Object2D& object)
                                           {
         const auto newPosition = object.getPosition() + position;
@@ -49,12 +50,18 @@ CommandResult ServerImpl::room_object2d_move(const DefaultArgs& args)
             return;
         clampedPosition = Vector2f(limits.clampHorizontal(newPosition.x),
                                    limits.clampHorizontal(newPosition.y));
-        object.setPosition(clampedPosition);
-        validPosition = true; });
+        validPosition = true;
+        authorized = room->canMutateObject2D(user.getId(), objectId,
+                                             Room::ObjectMutation::move, clampedPosition);
+        if (!authorized)
+            return;
+        object.setPosition(clampedPosition); });
     if (!found)
         return CommandResult::failure;
     if (!validPosition)
         return CommandResult::invalid_input;
+    if (!authorized)
+        return CommandResult::unauthorized;
 
     std::map<std::string, boost::json::value> params{
             {"id", boost::json::value(objectId)},

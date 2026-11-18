@@ -58,7 +58,12 @@ CommandResult ServerImpl::room_gameitem_update(const DefaultArgs& args)
         return CommandResult::failure;
 
     if (!handledPickup)
+    {
+        if (!room->canMutateGameItem(user.getId(), itemId,
+                                     Room::GameItemMutation::update, status))
+            return CommandResult::unauthorized;
         room->updateGameItemStatus(itemId, status);
+    }
 
     std::map<std::string, boost::json::value> params{
             {"id", boost::json::value(itemId)},

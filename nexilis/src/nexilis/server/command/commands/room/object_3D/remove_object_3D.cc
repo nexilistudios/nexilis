@@ -35,6 +35,9 @@ CommandResult ServerImpl::room_object3d_destroy(const DefaultArgs& args)
     auto objectId = Util::uint64FromFront(payload);
     if (!room->hasObject3D(objectId))
         return CommandResult::invalid_input;
+    if (!room->canMutateObject3D(user.getId(), objectId,
+                                 Room::ObjectMutation::destroy, std::nullopt))
+        return CommandResult::unauthorized;
 
     // Remove from storage.
     room->deleteObject3D(objectId);

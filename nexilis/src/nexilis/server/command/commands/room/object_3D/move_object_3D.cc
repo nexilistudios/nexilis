@@ -42,6 +42,7 @@ CommandResult ServerImpl::room_object3d_move(const DefaultArgs& args)
     const auto& limits = GameplayLimits::get();
     Vector3f clampedPosition;
     bool validPosition = false;
+    bool authorized = false;
     const bool found = room->withObject3D(objectId, [&](Object3D& object)
                                           {
         const auto newPosition = object.getPosition() + position;
@@ -50,12 +51,18 @@ CommandResult ServerImpl::room_object3d_move(const DefaultArgs& args)
         clampedPosition = Vector3f(limits.clampHorizontal(newPosition.x),
                                    limits.clampHeight(newPosition.y),
                                    limits.clampHorizontal(newPosition.z));
-        object.setPosition(clampedPosition);
-        validPosition = true; });
+        validPosition = true;
+        authorized = room->canMutateObject3D(user.getId(), objectId,
+                                             Room::ObjectMutation::move, clampedPosition);
+        if (!authorized)
+            return;
+        object.setPosition(clampedPosition); });
     if (!found)
         return CommandResult::failure;
     if (!validPosition)
         return CommandResult::invalid_input;
+    if (!authorized)
+        return CommandResult::unauthorized;
 
     std::map<std::string, boost::json::value> params{
             {"id", boost::json::value(objectId)},

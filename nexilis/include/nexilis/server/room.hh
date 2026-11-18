@@ -58,6 +58,25 @@ public:
     using Shot2DHandler = std::function<bool(uint64_t playerId, const Vector2f& direction)>;
     using AudioEventHandler = std::function<bool(uint64_t playerId, uint8_t sound,
                                                  const Vector3f& position)>;
+    enum class ObjectMutation
+    {
+        move,
+        destroy
+    };
+    enum class GameItemMutation
+    {
+        update,
+        destroy
+    };
+    using Object2DMutationHandler = std::function<bool(uint64_t playerId, uint64_t objectId,
+                                                       ObjectMutation action,
+                                                       const std::optional<Vector2f>& position)>;
+    using Object3DMutationHandler = std::function<bool(uint64_t playerId, uint64_t objectId,
+                                                       ObjectMutation action,
+                                                       const std::optional<Vector3f>& position)>;
+    using GameItemMutationHandler = std::function<bool(uint64_t playerId, uint64_t itemId,
+                                                       GameItemMutation action,
+                                                       const std::string& status)>;
     struct ShotHit
     {
         uint64_t targetId;
@@ -238,10 +257,24 @@ public:
     /// object changes are intended.
     void setClientObjectCreationAllowed(bool allowed);
     bool isClientObjectCreationAllowed() const;
+    /// Authorize client moves and deletes of existing objects. Position is the
+    /// bounded destination for moves and absent for deletes. Missing handlers deny.
+    /// Handlers called during a move must not reenter room resource accessors.
+    void setObject2DMutationHandler(Object2DMutationHandler handler);
+    bool canMutateObject2D(uint64_t playerId, uint64_t objectId, ObjectMutation action,
+                           const std::optional<Vector2f>& position) const;
+    void setObject3DMutationHandler(Object3DMutationHandler handler);
+    bool canMutateObject3D(uint64_t playerId, uint64_t objectId, ObjectMutation action,
+                           const std::optional<Vector3f>& position) const;
     /// Allow clients to create, change, and delete game items. Disabled by default.
     /// A pickup handler can separately authorize pickup updates.
     void setClientGameItemCreationAllowed(bool allowed);
     bool isClientGameItemCreationAllowed() const;
+    /// Authorize client status changes and deletes of existing game items.
+    /// Status is empty for deletes. Missing handlers deny.
+    void setGameItemMutationHandler(GameItemMutationHandler handler);
+    bool canMutateGameItem(uint64_t playerId, uint64_t itemId, GameItemMutation action,
+                           const std::string& status) const;
     /// Allow the room creator to remove this room through a client request.
     /// Disabled by default. Server-side removal is still available directly.
     void setClientRoomRemovalAllowed(bool allowed);
@@ -300,6 +333,9 @@ private:
     AudioEventHandler m_audioEventHandler;
     SpawnHandler m_spawnHandler;
     GameItemPickupHandler m_gameItemPickupHandler;
+    Object2DMutationHandler m_object2DMutationHandler;
+    Object3DMutationHandler m_object3DMutationHandler;
+    GameItemMutationHandler m_gameItemMutationHandler;
     bool m_clientPositionAllowed = false;
     std::atomic<bool> m_legacyClientMovementAllowed{false};
     bool m_clientObjectCreationAllowed = false;

@@ -484,7 +484,26 @@ protected:
     /// Object mutations are disabled by default, so object tests opt in.
     void allowClientObjects()
     {
-        server::RoomStorage::getRoomById(ROOM_ID)->setClientObjectCreationAllowed(true);
+        auto room = server::RoomStorage::getRoomById(ROOM_ID);
+        room->setClientObjectCreationAllowed(true);
+        room->setObject2DMutationHandler([](uint64_t, uint64_t,
+                                            server::Room::ObjectMutation,
+                                            const std::optional<Vector2f>&)
+                                         { return true; });
+        room->setObject3DMutationHandler([](uint64_t, uint64_t,
+                                            server::Room::ObjectMutation,
+                                            const std::optional<Vector3f>&)
+                                         { return true; });
+    }
+
+    void allowClientGameItems()
+    {
+        auto room = server::RoomStorage::getRoomById(ROOM_ID);
+        room->setClientGameItemCreationAllowed(true);
+        room->setGameItemMutationHandler([](uint64_t, uint64_t,
+                                            server::Room::GameItemMutation,
+                                            const std::string&)
+                                         { return true; });
     }
 
     /// Put the shooter and the target on opposing teams. The shoot command only
@@ -953,6 +972,37 @@ TEST_F(GameplaySpecTest, GameItemMutationsRequireRoomOptIn)
     EXPECT_EQ(room->getGameItems()[0].getStatus(), "ready");
 }
 
+TEST_F(GameplaySpecTest, GameItemMutationsRequirePerItemAuthorization)
+{
+    setUpRoom();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->setClientGameItemCreationAllowed(true);
+    room->addGameItem(GameItem(OBJECT_ID, "health", {1, 2, 3}, {1, 1, 1},
+                               "ready", "items/health.png"));
+    auto messages = receivedMessages(*m_target);
+    const auto update = gameItemActionBytes(RoomCommandType::GameItemAction::update,
+                                            OBJECT_ID, "used");
+    const auto destroy = gameItemActionBytes(RoomCommandType::GameItemAction::destroy,
+                                             OBJECT_ID);
+    EXPECT_EQ(read(update, *m_sender), server::CommandResult::unauthorized);
+    EXPECT_EQ(read(destroy, *m_sender), server::CommandResult::unauthorized);
+    room->setGameItemMutationHandler(
+            [](uint64_t playerId, uint64_t itemId, server::Room::GameItemMutation action,
+               const std::string& status)
+            {
+                return playerId == SENDER_ID && itemId == OBJECT_ID &&
+                       (action != server::Room::GameItemMutation::update || status == "used");
+            });
+    EXPECT_EQ(read(update, *m_target), server::CommandResult::unauthorized);
+    EXPECT_EQ(read(destroy, *m_target), server::CommandResult::unauthorized);
+    EXPECT_EQ(room->getGameItems()[0].getStatus(), "ready");
+    EXPECT_TRUE(messages.empty());
+    EXPECT_EQ(read(update, *m_sender), server::CommandResult::success);
+    EXPECT_EQ(room->getGameItems()[0].getStatus(), "used");
+    EXPECT_EQ(read(destroy, *m_sender), server::CommandResult::success);
+    EXPECT_TRUE(room->getGameItems().empty());
+}
+
 TEST_F(GameplaySpecTest, GameItemPickupHandlerAuthorizesOnlyPickup)
 {
     setUpRoom();
@@ -985,7 +1035,7 @@ TEST_F(GameplaySpecTest, GameItemOptInValidatesPayloadAndAllowsValidItem)
 {
     setUpRoom();
     auto room = server::RoomStorage::getRoomById(ROOM_ID);
-    room->setClientGameItemCreationAllowed(true);
+    allowClientGameItems();
     const Vector3f position{1.0f, 2.0f, 3.0f};
     const Vector3f dimensions{1.0f, 1.0f, 1.0f};
     const auto valid = createGameItemBytes(position, dimensions);
@@ -2295,7 +2345,7 @@ TEST_F(GameplaySpecTest, ItemCreationCapRecoversAfterDeletion)
 {
     setUpRoom();
     auto room = server::RoomStorage::getRoomById(ROOM_ID);
-    room->setClientGameItemCreationAllowed(true);
+    allowClientGameItems();
     command.getServerConfig().getRoomLimits().setMaxGameItemsPerRoom(1);
     const auto bytes = createGameItemBytes({1, 2, 3}, {1, 1, 1});
     ASSERT_EQ(read(bytes, *m_sender), server::CommandResult::success);
@@ -2340,6 +2390,45 @@ TEST_F(GameplaySpecTest, ObjectMutationsRequireRoomOptIn)
     EXPECT_TRUE(room->getObjects2D().empty());
     EXPECT_TRUE(room->getObjects3D().empty());
     EXPECT_TRUE(targetMessages.empty());
+}
+
+TEST_F(GameplaySpecTest, ObjectMutationsRequirePerObjectAuthorization)
+{
+    setUpRoom();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->setClientObjectCreationAllowed(true);
+    room->addObject(Object2D(OBJECT_ID, {1, 2}, {1, 1}));
+    room->addObject(Object3D(OBJECT_ID + 1, {1, 2, 3}, {1, 1, 1}));
+    auto messages = receivedMessages(*m_target);
+    const auto move2D = moveObject2DBytes(OBJECT_ID, {2, 0});
+    const auto move3D = moveObject3DBytes(OBJECT_ID + 1, {2, 0, 0});
+    const auto destroy2D = destroyObject2DBytes(OBJECT_ID);
+    const auto destroy3D = destroyObject3DBytes(OBJECT_ID + 1);
+    EXPECT_EQ(read(move2D, *m_sender), server::CommandResult::unauthorized);
+    EXPECT_EQ(read(move3D, *m_sender), server::CommandResult::unauthorized);
+    EXPECT_EQ(read(destroy2D, *m_sender), server::CommandResult::unauthorized);
+    EXPECT_EQ(read(destroy3D, *m_sender), server::CommandResult::unauthorized);
+    room->setObject2DMutationHandler(
+            [](uint64_t playerId, uint64_t objectId, server::Room::ObjectMutation,
+               const std::optional<Vector2f>&)
+            { return playerId == SENDER_ID && objectId == OBJECT_ID; });
+    room->setObject3DMutationHandler(
+            [](uint64_t playerId, uint64_t objectId, server::Room::ObjectMutation,
+               const std::optional<Vector3f>&)
+            { return playerId == SENDER_ID && objectId == OBJECT_ID + 1; });
+    EXPECT_EQ(read(move2D, *m_target), server::CommandResult::unauthorized);
+    EXPECT_EQ(read(move3D, *m_target), server::CommandResult::unauthorized);
+    EXPECT_EQ(read(destroy2D, *m_target), server::CommandResult::unauthorized);
+    EXPECT_EQ(read(destroy3D, *m_target), server::CommandResult::unauthorized);
+    EXPECT_FLOAT_EQ(room->getObjects2D()[0].getPosition().x, 1.0f);
+    EXPECT_FLOAT_EQ(room->getObjects3D()[0].getPosition().x, 1.0f);
+    EXPECT_TRUE(messages.empty());
+    EXPECT_EQ(read(move2D, *m_sender), server::CommandResult::success);
+    EXPECT_EQ(read(move3D, *m_sender), server::CommandResult::success);
+    EXPECT_EQ(read(destroy2D, *m_sender), server::CommandResult::success);
+    EXPECT_EQ(read(destroy3D, *m_sender), server::CommandResult::success);
+    EXPECT_TRUE(room->getObjects2D().empty());
+    EXPECT_TRUE(room->getObjects3D().empty());
 }
 
 TEST_F(GameplaySpecTest, ObjectCreationValidatesPayloadAndAllowsValidObjects)

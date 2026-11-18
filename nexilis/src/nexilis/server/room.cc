@@ -54,6 +54,9 @@ Room::Room(Room&& other)
       m_audioEventHandler(std::move(other.m_audioEventHandler)),
       m_spawnHandler(std::move(other.m_spawnHandler)),
       m_gameItemPickupHandler(std::move(other.m_gameItemPickupHandler)),
+      m_object2DMutationHandler(std::move(other.m_object2DMutationHandler)),
+      m_object3DMutationHandler(std::move(other.m_object3DMutationHandler)),
+      m_gameItemMutationHandler(std::move(other.m_gameItemMutationHandler)),
       m_clientPositionAllowed(other.m_clientPositionAllowed),
       m_legacyClientMovementAllowed(other.m_legacyClientMovementAllowed.load()),
       m_clientObjectCreationAllowed(other.m_clientObjectCreationAllowed),
@@ -91,6 +94,9 @@ Room& Room::operator=(Room&& other)
         m_audioEventHandler = std::move(other.m_audioEventHandler);
         m_spawnHandler = std::move(other.m_spawnHandler);
         m_gameItemPickupHandler = std::move(other.m_gameItemPickupHandler);
+        m_object2DMutationHandler = std::move(other.m_object2DMutationHandler);
+        m_object3DMutationHandler = std::move(other.m_object3DMutationHandler);
+        m_gameItemMutationHandler = std::move(other.m_gameItemMutationHandler);
         m_clientPositionAllowed = other.m_clientPositionAllowed;
         m_legacyClientMovementAllowed.store(other.m_legacyClientMovementAllowed.load());
         m_clientObjectCreationAllowed = other.m_clientObjectCreationAllowed;
@@ -428,6 +434,26 @@ bool Room::isClientObjectCreationAllowed() const
 {
     return m_clientObjectCreationAllowed;
 }
+void Room::setObject2DMutationHandler(Object2DMutationHandler handler)
+{
+    m_object2DMutationHandler = std::move(handler);
+}
+bool Room::canMutateObject2D(uint64_t playerId, uint64_t objectId, ObjectMutation action,
+                             const std::optional<Vector2f>& position) const
+{
+    return m_object2DMutationHandler &&
+           m_object2DMutationHandler(playerId, objectId, action, position);
+}
+void Room::setObject3DMutationHandler(Object3DMutationHandler handler)
+{
+    m_object3DMutationHandler = std::move(handler);
+}
+bool Room::canMutateObject3D(uint64_t playerId, uint64_t objectId, ObjectMutation action,
+                             const std::optional<Vector3f>& position) const
+{
+    return m_object3DMutationHandler &&
+           m_object3DMutationHandler(playerId, objectId, action, position);
+}
 void Room::setClientGameItemCreationAllowed(bool allowed)
 {
     m_clientGameItemCreationAllowed = allowed;
@@ -435,6 +461,16 @@ void Room::setClientGameItemCreationAllowed(bool allowed)
 bool Room::isClientGameItemCreationAllowed() const
 {
     return m_clientGameItemCreationAllowed;
+}
+void Room::setGameItemMutationHandler(GameItemMutationHandler handler)
+{
+    m_gameItemMutationHandler = std::move(handler);
+}
+bool Room::canMutateGameItem(uint64_t playerId, uint64_t itemId, GameItemMutation action,
+                             const std::string& status) const
+{
+    return m_gameItemMutationHandler &&
+           m_gameItemMutationHandler(playerId, itemId, action, status);
 }
 void Room::setClientRoomRemovalAllowed(bool allowed)
 {
