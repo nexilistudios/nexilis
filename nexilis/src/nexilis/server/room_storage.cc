@@ -24,7 +24,36 @@ namespace nexilis::server
 
 std::vector<std::shared_ptr<Room>> RoomStorage::m_rooms;
 std::mutex RoomStorage::m_mutex;
+RoomStorage::ClientCreationHandler RoomStorage::m_clientCreationHandler;
 std::function<void(Room&)> RoomStorage::m_createHandler;
+
+void RoomStorage::setClientCreationHandler(ClientCreationHandler handler)
+{
+    // Destroy the old callable outside the storage lock.
+    {
+        std::lock_guard lock(m_mutex);
+        m_clientCreationHandler.swap(handler);
+    }
+}
+
+bool RoomStorage::allowsClientCreation(const User& user, const RoomData& roomData)
+{
+    ClientCreationHandler handler;
+    {
+        std::lock_guard lock(m_mutex);
+        handler = m_clientCreationHandler;
+    }
+    if (!handler)
+        return false;
+    try
+    {
+        return handler(user, roomData);
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
 
 void RoomStorage::setCreateHandler(std::function<void(Room&)> handler)
 {

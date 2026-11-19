@@ -52,6 +52,9 @@ CommandResult ServerImpl::room_management_create(const DefaultArgs& args)
     }
 
     auto room_data = RoomData(creatorId, roomName, Util::getRandomUint64(), static_cast<RoomData::Context>(context), maxSize);
+    if (!RoomStorage::allowsClientCreation(args.getUser(), room_data))
+        return CommandResult::unauthorized;
+
     auto newRoom = nexilis::server::Room(room_data);
 
     auto newRoomId = newRoom.getId();

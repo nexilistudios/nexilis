@@ -42,6 +42,14 @@ public:
     static bool add(Room&& room,
                     std::size_t maxRooms = std::numeric_limits<std::size_t>::max(),
                     std::size_t maxRoomsPerCreator = std::numeric_limits<std::size_t>::max());
+    /// Authorizes a client room creation request. Unset denies all client
+    /// creation, so the application must opt in before serving such requests.
+    /// Install this and `Room::setAdmissionHandler` before serving room traffic.
+    using ClientCreationHandler = std::function<bool(const User&, const RoomData&)>;
+    static void setClientCreationHandler(ClientCreationHandler handler);
+    /// Returns false when no handler is installed or the handler rejects/throws.
+    static bool allowsClientCreation(const User& user, const RoomData& roomData);
+
     /// Called for each room after it is stored, before creation is acknowledged.
     static void setCreateHandler(std::function<void(Room&)> handler);
 
@@ -71,6 +79,7 @@ public:
 private:
     static std::vector<std::shared_ptr<Room>> m_rooms;
     static std::mutex m_mutex;
+    static ClientCreationHandler m_clientCreationHandler;
     static std::function<void(Room&)> m_createHandler;
 };
 

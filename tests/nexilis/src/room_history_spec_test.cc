@@ -72,6 +72,9 @@ protected:
         server::ClientStorage::clear();
 
         server::RoomStorage::add(server::Room(RoomData(SENDER_ID, "history_room", ROOM_ID)));
+        server::RoomStorage::getRoomById(ROOM_ID)->setAdmissionHandler(
+                [](const server::User&)
+                { return true; });
         server::RoomStorage::getRoomById(ROOM_ID)->setBroadcastHandler(
                 [](uint64_t, const std::string&, bool)
                 { return true; });
@@ -116,12 +119,12 @@ protected:
     }
 
     /// Build join command bytes: room / management / join / room id.
-    nx_data joinBytes() const
+    nx_data joinBytes(uint64_t targetRoomId = ROOM_ID) const
     {
         nx_data bytes{static_cast<uint8_t>(CommandType::room),
                       static_cast<uint8_t>(RoomCommandType::Root::management),
                       static_cast<uint8_t>(RoomCommandType::Management::join)};
-        auto idBytes = Util::convertToByteVector(ROOM_ID);
+        auto idBytes = Util::convertToByteVector(targetRoomId);
         bytes.insert(bytes.end(), idBytes.begin(), idBytes.end());
         return bytes;
     }
@@ -247,6 +250,33 @@ TEST_F(RoomHistorySpecTest, JoiningAnotherRoomRequiresLeavingFirst)
     EXPECT_EQ(joiner->getRoomId(), 0);
     EXPECT_FALSE(room()->contains(JOINER_ID));
     EXPECT_FALSE(server::RoomStorage::getRoomById(otherRoomId)->contains(JOINER_ID));
+}
+
+TEST_F(RoomHistorySpecTest, RoomsArePrivateWithoutAdmissionHandler)
+{
+    constexpr uint64_t privateRoomId = ROOM_ID + 10;
+    server::RoomStorage::add(server::Room(RoomData(SENDER_ID, "private", privateRoomId)));
+    auto privateRoom = server::RoomStorage::getRoomById(privateRoomId);
+    ASSERT_NE(privateRoom, nullptr);
+
+    auto creator = user(SENDER_ID);
+    auto outsider = user(JOINER_ID);
+    EXPECT_TRUE(privateRoom->allowsUser(*creator));
+    EXPECT_FALSE(privateRoom->allowsUser(*outsider));
+
+    EXPECT_EQ(command.read(joinBytes(privateRoomId), *creator, protocol, 6),
+              server::CommandResult::success);
+    EXPECT_TRUE(privateRoom->contains(SENDER_ID));
+    EXPECT_EQ(command.read(joinBytes(privateRoomId), *outsider, protocol, 7),
+              server::CommandResult::invalid_input);
+    EXPECT_FALSE(privateRoom->contains(JOINER_ID));
+
+    auto visibleRooms = server::ServerJson::getRoomData(outsider.get());
+    ASSERT_EQ(visibleRooms.at("room_amount").as_uint64(), 1);
+    EXPECT_EQ(visibleRooms.at("rooms").as_array()[0].at("room_id").as_uint64(), ROOM_ID);
+
+    auto visibleClients = server::ServerJson::getClientData(outsider.get());
+    EXPECT_EQ(visibleClients.at("client_amount").as_uint64(), 1);
 }
 
 TEST_F(RoomHistorySpecTest, AdmissionPolicyHidesRoomAndRejectsJoin)

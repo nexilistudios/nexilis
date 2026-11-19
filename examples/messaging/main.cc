@@ -104,6 +104,21 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     settings.setTlsIdentity(identity.certificatePem, identity.privateKeyPem);
 
+    // Rooms are private by default. This demo explicitly allows authenticated
+    // clients to create public chat rooms and accepts non-empty chat messages.
+    // Broadcasts stay player-authored text, never server commands.
+    nexilis::server::RoomStorage::setClientCreationHandler(
+            [](const nexilis::server::User&, const nexilis::RoomData&)
+            { return true; });
+    nexilis::server::RoomStorage::setCreateHandler(
+            [](nexilis::server::Room& room)
+            {
+                room.setAdmissionHandler([](const nexilis::server::User&)
+                                         { return true; });
+                room.setBroadcastHandler([](uint64_t, const std::string& message, bool)
+                                         { return !message.empty(); });
+            });
+
     auto server = protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
     server.start();
 
@@ -131,12 +146,6 @@ int main(int argc, char** argv)
     }
 
     const uint64_t room_id = alice_api.getActiveRooms()[0].getId();
-    // This demo displays broadcasts as chat text and never treats them as game commands.
-    auto serverRoom = nexilis::server::RoomStorage::getRoomById(room_id);
-    if (!serverRoom)
-        return EXIT_FAILURE;
-    serverRoom->setBroadcastHandler([](uint64_t, const std::string& message, bool)
-                                    { return !message.empty(); });
     alice.sendMessage(nexilis::client::Packet::Room::Management::join(alice_api, room_id));
 
     if (!waitFor([&]()

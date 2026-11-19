@@ -9,6 +9,7 @@
 #include <nexilis/protocol_manager.hh>
 #include <nexilis/server/client_storage.hh>
 #include <nexilis/server/protocol/nxboost/tcp_server.hh>
+#include <nexilis/server/room_storage.hh>
 #include <nexilis/tls.hh>
 
 #include <fstream>
@@ -29,6 +30,18 @@ int main()
         return 1;
     config.setTlsIdentity(identity.certificatePem, identity.privateKeyPem);
     std::ofstream("tests/lua/build/server.pin") << identity.publicKeySha256;
+
+    // The Lua integration test creates a public room and joins it.
+    nexilis::server::RoomStorage::setClientCreationHandler(
+            [](const nexilis::server::User&, const nexilis::RoomData&)
+            { return true; });
+    nexilis::server::RoomStorage::setCreateHandler(
+            [](nexilis::server::Room& room)
+            {
+                room.setAdmissionHandler([](const nexilis::server::User&)
+                                         { return true; });
+            });
+
     auto server = manager.createProtocol<nexilis::server::nxboost::TCPServer>(config);
     server.start();
     std::cout << "ready" << std::endl;

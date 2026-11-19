@@ -35,6 +35,17 @@ protected:
     {
         nexilis::Log::startConsoleDebugging();
 
+        // These integration tests intentionally use public demo rooms.
+        nexilis::server::RoomStorage::setClientCreationHandler(
+                [](const nexilis::server::User&, const nexilis::RoomData&)
+                { return true; });
+        nexilis::server::RoomStorage::setCreateHandler(
+                [](nexilis::server::Room& room)
+                {
+                    room.setAdmissionHandler([](const nexilis::server::User&)
+                                             { return true; });
+                });
+
         settings.setMode(nexilis::server::AuthenticationMode::skip);
         settings.setPassphrase("salasana");
         settings.setRootPassword("root");
@@ -67,6 +78,8 @@ protected:
         }
         nexilis::Log::stopLogging();
         nexilis::server::ClientStorage::clear();
+        nexilis::server::RoomStorage::setClientCreationHandler({});
+        nexilis::server::RoomStorage::setCreateHandler({});
         nexilis::server::RoomStorage::clear();
     }
 

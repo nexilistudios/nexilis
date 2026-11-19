@@ -116,7 +116,7 @@ Room& Room::operator=(Room&& other)
     return *this;
 }
 
-bool Room::contains(uint64_t userId)
+bool Room::contains(uint64_t userId) const
 {
     std::lock_guard lock(m_membershipMutex);
     return std::any_of(m_clientIds.begin(), m_clientIds.end(),
@@ -157,7 +157,12 @@ bool Room::allowsUser(const User& user) const
     }
     try
     {
-        return !handler || handler(user);
+        // Without an application policy the room stays private. The creator and
+        // users who already joined can still see and rejoin their own room;
+        // every other client must be admitted by an explicit handler.
+        if (!handler)
+            return user.getId() == getCreatorId() || contains(user.getId());
+        return handler(user);
     }
     catch (...)
     {

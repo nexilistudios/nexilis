@@ -156,7 +156,10 @@ public:
     void joinRoom(uint64_t userId);
     /// Atomically enforce the room capacity and insert a new member.
     bool tryJoinRoom(uint64_t userId);
-    /// A server policy for joining and discovering this room. Unset means public.
+    /// A server policy for joining and discovering this room. An unset handler
+    /// makes the room private: only its creator and current members may join or
+    /// discover it. Install an explicitly permissive handler for a public room,
+    /// or a policy handler for invite/permission-based access.
     void setAdmissionHandler(AdmissionHandler handler);
     bool allowsUser(const User& user) const;
 
@@ -166,7 +169,7 @@ public:
 
     /// If the room contains certain user.
     /// \param userId The id of the user we are checking.
-    bool contains(uint64_t userId);
+    bool contains(uint64_t userId) const;
 
     /// Return a stable snapshot of member IDs.
     std::vector<uint64_t> getClients() const;

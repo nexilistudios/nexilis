@@ -61,6 +61,13 @@ protected:
 
     void SetUp() override
     {
+        // These tests exercise the rest of the room command path, so opt in to
+        // client room creation explicitly. Dedicated tests below cover the
+        // default-deny behavior.
+        server::RoomStorage::setClientCreationHandler(
+                [](const server::User&, const RoomData&)
+                { return true; });
+
         // Room creation acknowledges the action by sending a message back to
         // the client; give the test user a no-op send callback so the dispatch
         // does not fail with failed_room_send.
@@ -73,6 +80,7 @@ protected:
     void TearDown() override
     {
         server::ClientStorage::clear();
+        server::RoomStorage::setClientCreationHandler({});
         server::RoomStorage::clear();
     }
 };
@@ -436,6 +444,26 @@ TEST_F(CommandSpecTest, RoomCreationValidatesContextAndCapacity)
     }
     EXPECT_EQ(spec.read(roomCreateBytes(" ")), server::CommandResult::invalid_input);
     EXPECT_EQ(server::RoomStorage::getRoomCount(), 0);
+}
+
+TEST_F(CommandSpecTest, RoomCreationRequiresApplicationAuthorization)
+{
+    server::RoomStorage::setClientCreationHandler({});
+    EXPECT_EQ(spec.read(roomCreateBytes("denied")), server::CommandResult::unauthorized);
+    EXPECT_EQ(server::RoomStorage::getRoomCount(), 0);
+
+    server::RoomStorage::setClientCreationHandler(
+            [](const server::User&, const RoomData& data)
+            { return data.getName() == "allowed"; });
+    EXPECT_EQ(spec.read(roomCreateBytes("denied")), server::CommandResult::unauthorized);
+    EXPECT_EQ(spec.read(roomCreateBytes("allowed")), server::CommandResult::success);
+    EXPECT_EQ(server::RoomStorage::getRoomCount(), 1);
+
+    server::RoomStorage::setClientCreationHandler(
+            [](const server::User&, const RoomData&) -> bool
+            { throw std::runtime_error("policy failure"); });
+    EXPECT_EQ(spec.read(roomCreateBytes("throws")), server::CommandResult::unauthorized);
+    EXPECT_EQ(server::RoomStorage::getRoomCount(), 1);
 }
 
 TEST_F(CommandSpecTest, RoomCreationAcceptsNameAndCapacityBoundaries)

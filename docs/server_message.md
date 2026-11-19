@@ -261,12 +261,14 @@ and applications can still remove rooms directly on the server. Only the room
 creator may change the room-wide overlap setting through
 `room/management/set_overlap`; other members receive an unauthorized result.
 
-Client-requested room creation is capped at 1024 rooms per server and 64 rooms
-per client by default. The limits are configurable through
+Client-requested room creation is denied until the application installs
+`RoomStorage::setClientCreationHandler`. The handler receives the authenticated
+`User` and proposed `RoomData`; a missing handler, a rejection, or an exception
+denies the request. Creation is also capped at 1024 rooms per server and 64
+rooms per client by default. The limits are configurable through
 `nexilis::server::ServerConfig::getRoomLimits()` as `setMaxRooms` and
-`setMaxRoomsPerClient`; requests beyond either limit are rejected. Room creation
-remains available to authenticated clients, so applications that need stricter
-authorization should enforce it before dispatching the command.
+`setMaxRoomsPerClient`; requests beyond either limit are rejected. Server-side
+`RoomStorage::add` calls are not client requests and bypass this policy.
 
 The server enforces gameplay limits on `room/player_3D/position`,
 `room/player_3D/movement` and `room/player_3D/shoot`. Every limit has a
@@ -328,9 +330,9 @@ triggered by a client request; a room member must be reachable on that
 transport to receive the event. In particular, a failed TLS send cannot
 deliver the response over plaintext UDP or TCP.
 
-`Get::Info::clients` replies as `info_general` with `client_amount`, the
-server-wide connected client count. C++ clients expose the latest value through
-`ClientAPI::getServerClientCount()`. Joining a room also sends a full leaderboard
+`Get::Info::clients` replies as `info_general` with `client_amount`, the number
+of connected clients visible to the requesting user. C++ clients expose the
+latest value through `ClientAPI::getServerClientCount()`. Joining a room also sends a full leaderboard
 seed so team selection screens can show the existing team roster.
 
 The Boost TCP server sends JSON responses terminated by a newline character (`\n`); its client reads until `\n`. The POSIX `af_inet` TCP transport instead prefixes server responses with a 4-byte length. These transports should not be assumed to have interchangeable response framing.
@@ -385,17 +387,22 @@ wire byte order, and a room name of 1–64 bytes (a single space is rejected).
 The server checks the complete payload length before indexing or copying its
 fields, rejecting truncated and oversized requests. It accepts capacities from 1 to 64,
 includes `max_size` in the creation response and room listing, and rejects joins
-when the room is full. Applications can install a `RoomStorage::setCreateHandler`
-callback to configure each new room before the server acknowledges creation.
-Each client may belong to one room at a time. A join while already in a room is
-rejected; the client must leave before joining another room.
-Servers can set `Room::setAdmissionHandler` to decide which authenticated users
-may discover and join a room. The handler receives the server-side `User` and
-returns `true` to allow access. An unset handler leaves the room public. A
-denied user cannot join or see that room in `info_rooms`, `info_general`, or
-`info_clients`; an exception in the handler denies access. Set the handler in
+when the room is full. Applications must install a
+`RoomStorage::setClientCreationHandler` to permit client creation at all, and
+can install a `RoomStorage::setCreateHandler` callback to configure each new
+room before the server acknowledges creation. Each client may belong to one
+room at a time. A join while already in a room is rejected; the client must
+leave before joining another room.
+Rooms are private by default. Without `Room::setAdmissionHandler`, only the
+creator and users who already joined may discover and join a room. Servers can
+install an admission handler to implement any other policy; the handler
+receives the server-side `User` and returns `true` to allow access. An
+explicitly permissive handler makes a room public. A denied user cannot join or
+see that room in `info_rooms`, `info_general`, or `info_clients`; an exception
+in the handler denies access. Set the admission handler in
 `RoomStorage::setCreateHandler` before room creation is acknowledged. Changing
-the handler later does not evict users who already joined.
+the handler later does not evict users who already joined, and handlers are not
+called for server-side `RoomStorage::add` calls.
 
 ## Security notes
 
