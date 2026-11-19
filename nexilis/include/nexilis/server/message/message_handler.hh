@@ -23,6 +23,7 @@
 #include <nexilis/server/message/message.hh>
 
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -81,11 +82,13 @@ private:
         };
         std::mutex mutex;
         std::unordered_map<std::string, Attempt> byAddress;
+        std::size_t evictions = 0;
     };
     std::shared_ptr<RegistrationState> m_registrationState =
             std::make_shared<RegistrationState>();
 
-    bool acceptRegistration(const std::string& address);
+    bool acceptRegistration(const std::string& address,
+                            const std::function<bool()>& publish);
 };
 
 } // namespace nexilis::server

@@ -424,11 +424,20 @@ scoped to the server protocol instance and resets when that instance is
 replaced.
 
 New registrations in both `skip` and `password_protected` modes are limited to
-20 successful handshakes per source address per minute. A new `skip` user must
-send the canonical 19-byte `getting/client_id` handshake. Unknown or malformed
-requests do not allocate a user. The shared client registry admits at most
-`NEXILIS_DEFAULT_MAX_CLIENTS` live users (currently 1024); further handshakes
-are rejected until users disconnect or expire.
+20 successful handshakes per source address per minute. Only published clients
+count toward this limit; rejected admissions do not consume registration table
+entries. The table tracks at most 4096 addresses and evicts its oldest entry
+when full. A new `skip` user must send the canonical 19-byte
+`getting/client_id` handshake. Unknown or malformed requests do not allocate a
+user. The shared client registry admits at most `NEXILIS_DEFAULT_MAX_CLIENTS`
+live users (currently 1024) and limits each source address to eight live
+sessions by default. Configure lower deployment limits with
+`ServerConfig::setMaxClients` and `ServerConfig::setMaxSessionsPerAddress`;
+zero refuses new clients. The compile-time client maximum still applies.
+Admission limits are checked together under the registry lock, so concurrent
+handshakes cannot exceed them. Slots are released when users disconnect, a
+pending handshake expires, or an idle datagram transport expires. Connected
+stream clients remain registered while their connection stays open.
 
 `ClientAPI::setMessageEncryption(true)` affects room broadcasts. It does not encrypt othercast or unicast messages. The message key is derived from the password and the room ID; the server holds the password, so this feature does **not** hide message contents from the server.
 

@@ -78,6 +78,28 @@ public:
         return m_maxSessionsPerAccount;
     }
 
+    /// Maximum live clients admitted by this server. The registry's compile-time
+    /// maximum remains an upper bound. Zero refuses new clients.
+    void setMaxClients(std::size_t maximum)
+    {
+        m_maxClients = maximum;
+    }
+    std::size_t getMaxClients() const
+    {
+        return m_maxClients;
+    }
+
+    /// Maximum live sessions from one source address. Zero refuses new clients.
+    /// Address limits also apply when account authentication is configured.
+    void setMaxSessionsPerAddress(std::size_t maximum)
+    {
+        m_maxSessionsPerAddress = maximum;
+    }
+    std::size_t getMaxSessionsPerAddress() const
+    {
+        return m_maxSessionsPerAddress;
+    }
+
     // Root password.
     void setRootPassword(const std::string& password);
     bool isRootPassword(const std::string& password);
@@ -192,6 +214,8 @@ private:
     std::string m_rootPassword;
     AccountAuthenticator m_accountAuthenticator;
     std::size_t m_maxSessionsPerAccount = 1;
+    std::size_t m_maxClients = NEXILIS_DEFAULT_MAX_CLIENTS;
+    std::size_t m_maxSessionsPerAddress = 8;
     float m_tickrate = 60.f;
     float m_maxCommandRate = NEXILIS_DEFAULT_MAX_COMMAND_RATE;
     std::size_t m_maxPendingBoostTcpConnections = 64;

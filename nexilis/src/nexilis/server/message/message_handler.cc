@@ -52,7 +52,8 @@ MessageHandler::MessageHandler()
 {
 }
 
-bool MessageHandler::acceptRegistration(const std::string& address)
+bool MessageHandler::acceptRegistration(const std::string& address,
+                                        const std::function<bool()>& publish)
 {
     const auto now = std::chrono::steady_clock::now();
     std::lock_guard lock(m_registrationState->mutex);
@@ -63,14 +64,29 @@ bool MessageHandler::acceptRegistration(const std::string& address)
         attempts.erase(it);
         it = attempts.end();
     }
+    if (it != attempts.end() && it->second.count >= kMaxRegistrationsPerAddress)
+        return false;
+    if (!publish())
+        return false;
     if (it != attempts.end())
-        return ++it->second.count <= kMaxRegistrationsPerAddress;
+    {
+        ++it->second.count;
+        return true;
+    }
     if (attempts.size() >= kMaxTrackedRegistrationAddresses)
     {
         std::erase_if(attempts, [now](const auto& entry)
                       { return now - entry.second.windowStart >= kRegistrationWindow; });
         if (attempts.size() >= kMaxTrackedRegistrationAddresses)
-            return false;
+        {
+            auto oldest = std::min_element(
+                    attempts.begin(), attempts.end(),
+                    [](const auto& left, const auto& right)
+                    { return left.second.windowStart < right.second.windowStart; });
+            attempts.erase(oldest);
+            if (++m_registrationState->evictions % 256 == 1)
+                Log::warning(header(), "Registration address table saturated; evicted oldest entry");
+        }
     }
     attempts.emplace(address, RegistrationState::Attempt{now, 1});
     return true;
@@ -124,14 +140,25 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
     std::string accountId;
     auto createUser = [&]() -> bool
     {
-        if (!acceptRegistration(address))
-            return false;
         uint64_t newId = Util::getRandomUint64();
         user = std::make_shared<User>(newId, address, accountId);
         Log::info(header(), "Created new user: ", newId);
         auto username = Util::getRandomString(10);
         user->setUsername(username);
         return true;
+    };
+    auto publishUser = [&](bool accountMode) -> bool
+    {
+        return acceptRegistration(address, [&]()
+                                  {
+                                      if (accountMode)
+                                          return ClientStorage::addWithAccountLimit(
+                                                  user, authentication->getMaxSessionsPerAccount(),
+                                                  authentication->getMaxClients(),
+                                                  authentication->getMaxSessionsPerAddress());
+                                      return ClientStorage::add(
+                                              user, authentication->getMaxClients(),
+                                              authentication->getMaxSessionsPerAddress()); });
     };
 
     auto authenticatedMessage = [&]() -> std::unique_ptr<BaseMessage>
@@ -186,7 +213,7 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
             // Brand new client. Register it so its client id stays stable and
             // hand its id back through the same AuthMessage handshake used by
             // password_protected mode (no credentials are verified here).
-            if (!createUser() || !ClientStorage::add(user))
+            if (!createUser() || !publishUser(false))
                 return nullptr;
 
             // This message is equal to Packet::getId (without client id):
@@ -320,10 +347,7 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
 
                     user->setCommonAccess(true);
 
-                    const bool published = authenticator
-                                                   ? ClientStorage::addWithAccountLimit(
-                                                             user, authentication->getMaxSessionsPerAccount())
-                                                   : ClientStorage::add(user);
+                    const bool published = publishUser(static_cast<bool>(authenticator));
                     if (!published)
                         return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::authentication_error);
 

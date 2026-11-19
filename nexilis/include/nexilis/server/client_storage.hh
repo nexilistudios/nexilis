@@ -33,10 +33,14 @@ public:
     static constexpr std::size_t maximumClients = NEXILIS_DEFAULT_MAX_CLIENTS;
     /// Publish a user; reject null handles and duplicate IDs.
     /// A unique_ptr may be moved in and converted to shared ownership.
-    static bool add(std::shared_ptr<User> client);
+    static bool add(std::shared_ptr<User> client,
+                    std::size_t maximum = maximumClients,
+                    std::size_t maximumPerAddress = maximumClients);
 
     /// Publish an account user only while its session quota has room.
-    static bool addWithAccountLimit(std::shared_ptr<User> client, std::size_t maximum);
+    static bool addWithAccountLimit(std::shared_ptr<User> client, std::size_t maximumPerAccount,
+                                    std::size_t maximum = maximumClients,
+                                    std::size_t maximumPerAddress = maximumClients);
 
     static bool contains(uint64_t id);
 

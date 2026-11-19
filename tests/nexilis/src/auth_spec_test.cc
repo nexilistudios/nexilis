@@ -531,6 +531,21 @@ TEST_F(MessageHandlerPasswordProtectedTest, AccountModeBindsIdentityAndLimitsSes
     EXPECT_EQ(next->getType(), server::BaseMessage::Type::auth_message);
 }
 
+TEST_F(MessageHandlerPasswordProtectedTest, AccountModeAlsoLimitsSessionsPerAddress)
+{
+    config.setAccountAuthenticator([](std::string_view account, std::string_view credential)
+                                   { return account == "alice" && credential == "alice-secret"; });
+    config.setMaxSessionsPerAccount(4);
+    config.setMaxSessionsPerAddress(2);
+    EXPECT_EQ(sendAccount("secret", "alice", "alice-secret")->getType(),
+              server::BaseMessage::Type::auth_message);
+    EXPECT_EQ(sendAccount("secret", "alice", "alice-secret")->getType(),
+              server::BaseMessage::Type::auth_message);
+    EXPECT_EQ(sendAccount("secret", "alice", "alice-secret")->getType(),
+              server::BaseMessage::Type::error_message);
+    EXPECT_EQ(server::ClientStorage::getAllClients().size(), 2u);
+}
+
 TEST_F(MessageHandlerPasswordProtectedTest, CorrectShortPasswordAuthenticates)
 {
     auto result = sendPassword("secret");
@@ -632,7 +647,7 @@ protected:
     // Build a framed command payload exactly as the skip-mode client sends it:
     // 8 byte client id (0 for a brand new client) + 8 byte message id +
     // the "getting" / "client_id" command bytes.
-    std::unique_ptr<server::BaseMessage> sendHandshake()
+    std::unique_ptr<server::BaseMessage> sendHandshake(const std::string& address = "test_address")
     {
         nx_data payload;
         auto clientIdBytes = Util::convertToByteVector(static_cast<uint64_t>(0));
@@ -642,7 +657,7 @@ protected:
         payload.emplace_back(static_cast<uint8_t>(CommandType::getting));
         payload.emplace_back(0);
         payload.emplace_back(0);
-        return handler.readMessage("test_address", payload, &config);
+        return handler.readMessage(address, payload, &config);
     }
 };
 
@@ -660,10 +675,66 @@ TEST_F(MessageHandlerSkipTest, NewClientReceivesAuthMessageWithId)
 
 TEST_F(MessageHandlerSkipTest, RegistrationIsLimitedPerAddress)
 {
+    config.setMaxSessionsPerAddress(20);
     for (unsigned attempt = 0; attempt < 20; ++attempt)
         ASSERT_NE(sendHandshake(), nullptr);
     EXPECT_EQ(sendHandshake(), nullptr);
     EXPECT_EQ(server::ClientStorage::getAllClients().size(), 20);
+}
+
+TEST_F(MessageHandlerSkipTest, LiveSessionsAreLimitedPerAddressAndRecoverAfterRemoval)
+{
+    EXPECT_EQ(config.getMaxSessionsPerAddress(), 8u);
+    for (unsigned attempt = 0; attempt < 8; ++attempt)
+        ASSERT_NE(sendHandshake(), nullptr);
+    EXPECT_EQ(sendHandshake(), nullptr);
+    EXPECT_EQ(server::ClientStorage::getAllClients().size(), 8u);
+
+    const auto users = server::ClientStorage::getClientsByIpAddress("test_address");
+    ASSERT_EQ(users.size(), 8u);
+    ASSERT_TRUE(server::ClientStorage::remove(users.front()->getId()));
+    EXPECT_NE(sendHandshake(), nullptr);
+    EXPECT_EQ(server::ClientStorage::getAllClients().size(), 8u);
+}
+
+TEST_F(MessageHandlerSkipTest, ConfiguredTotalClientLimitAppliesAcrossAddresses)
+{
+    config.setMaxClients(2);
+    config.setMaxSessionsPerAddress(1);
+    EXPECT_NE(sendHandshake("address-a"), nullptr);
+    EXPECT_EQ(sendHandshake("address-a"), nullptr);
+    EXPECT_NE(sendHandshake("address-b"), nullptr);
+    EXPECT_EQ(sendHandshake("address-c"), nullptr);
+    EXPECT_EQ(server::ClientStorage::getAllClients().size(), 2u);
+
+    const auto users = server::ClientStorage::getClientsByIpAddress("address-a");
+    ASSERT_EQ(users.size(), 1u);
+    ASSERT_TRUE(server::ClientStorage::remove(users.front()->getId()));
+    EXPECT_NE(sendHandshake("address-c"), nullptr);
+    EXPECT_EQ(server::ClientStorage::getAllClients().size(), 2u);
+}
+
+TEST_F(MessageHandlerSkipTest, RejectedAdmissionsDoNotFillRegistrationAddressTable)
+{
+    config.setMaxClients(0);
+    for (unsigned index = 0; index < 4096; ++index)
+        ASSERT_EQ(sendHandshake("rejected-" + std::to_string(index)), nullptr);
+
+    config.setMaxClients(1);
+    EXPECT_NE(sendHandshake("new-address"), nullptr);
+    EXPECT_EQ(server::ClientStorage::getAllClients().size(), 1u);
+}
+
+TEST_F(MessageHandlerSkipTest, RegistrationAddressTableEvictsOldestEntry)
+{
+    config.setMaxClients(1);
+    for (unsigned index = 0; index < 4096; ++index)
+    {
+        ASSERT_NE(sendHandshake("address-" + std::to_string(index)), nullptr);
+        server::ClientStorage::clear();
+    }
+    EXPECT_NE(sendHandshake("fresh-address"), nullptr);
+    EXPECT_EQ(server::ClientStorage::getAllClients().size(), 1u);
 }
 
 TEST_F(MessageHandlerSkipTest, InvalidHandshakeDoesNotAllocateUser)
@@ -857,5 +928,20 @@ TEST_F(ClientStorageSpecTest, ConcurrentLookupEnumerationAndRemovalKeepUsersAliv
     for (auto& worker : workers)
         worker.join();
     EXPECT_TRUE(server::ClientStorage::getAllClients().empty());
+}
+
+TEST_F(ClientStorageSpecTest, ConcurrentAdmissionsRespectAddressAndTotalLimits)
+{
+    std::vector<std::thread> workers;
+    for (uint64_t index = 0; index < 32; ++index)
+    {
+        workers.emplace_back([index]
+                             { server::ClientStorage::add(
+                                       std::make_shared<server::User>(index + 1, "same-address"),
+                                       12, 8); });
+    }
+    for (auto& worker : workers)
+        worker.join();
+    EXPECT_EQ(server::ClientStorage::getAllClients().size(), 8u);
 }
 } // namespace
