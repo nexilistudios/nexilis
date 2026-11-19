@@ -431,6 +431,43 @@ TEST(AuthCommand, RootFailuresLockOutAddressAcrossSessions)
     EXPECT_TRUE(otherAddress.hasRootAccess());
 }
 
+TEST(AuthCommand, RootFailureTableSaturationDoesNotBlockNewAdministrator)
+{
+    server::Command command(rootAuthSettings());
+    AuthTestProtocol tcp(NXProtocol::Type::BOOST_TCP_SERVER);
+    const auto wrong = authCommand(1, "wrong");
+    const auto correct = authCommand(1, "root-secret");
+    server::User locked(1, "locked-address");
+    locked.setCommonAccess(true);
+
+    for (uint64_t messageId = 1; messageId <= 5; ++messageId)
+    {
+        EXPECT_EQ(command.read(wrong, locked, tcp, messageId),
+                  server::CommandResult::unauthorized);
+    }
+    for (uint64_t index = 0; index < 4095; ++index)
+    {
+        server::User user(index + 2, "failed-address-" + std::to_string(index));
+        user.setCommonAccess(true);
+        ASSERT_EQ(command.read(wrong, user, tcp, index + 6),
+                  server::CommandResult::unauthorized);
+    }
+
+    server::User administrator(5000, "new-admin-address");
+    administrator.setCommonAccess(true);
+    EXPECT_EQ(command.read(correct, administrator, tcp, 5001),
+              server::CommandResult::success);
+    EXPECT_TRUE(administrator.hasRootAccess());
+
+    server::User attacker(5001, "new-failed-address");
+    attacker.setCommonAccess(true);
+    EXPECT_EQ(command.read(wrong, attacker, tcp, 5002),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(command.read(correct, locked, tcp, 5003),
+              server::CommandResult::unauthorized);
+    EXPECT_FALSE(locked.hasRootAccess());
+}
+
 class MessageHandlerPasswordProtectedTest : public ::testing::Test
 {
 protected:

@@ -406,8 +406,13 @@ authentication (`authentication`, action `1`) requires an established
 configured root password. Five failed root attempts from one source address
 block further attempts from that address for ten minutes, including after a
 reconnect. The attempt state is scoped to the server protocol instance and
-resets when that instance is replaced. At most 4096 source addresses are tracked;
-new addresses are denied root attempts while that limit is full.
+resets when that instance is replaced. At most 4096 source addresses with failed
+attempts are tracked. A correct root password from a new address can still
+authenticate when the table is full. A new failed attempt evicts the oldest
+non-blocked failure record, or the oldest blocked record if all are blocked.
+The server logs when the table reaches 75% capacity and during sustained
+eviction. Distributed guessing and traffic floods still require external
+controls at the deployment boundary.
 
 The initial connection handshake for `password_protected` mode is separately
 rate-limited: five failed passphrase attempts from one source address block

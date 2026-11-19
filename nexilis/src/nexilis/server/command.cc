@@ -54,6 +54,8 @@ struct Command::RootAuthState
 
     std::mutex mutex;
     std::unordered_map<std::string, Attempt> byAddress;
+    bool nearCapacityLogged = false;
+    size_t evictions = 0;
 };
 
 Command::Command(const ServerConfig& settings)
@@ -524,16 +526,6 @@ try
                     {
                         return CommandResult::unauthorized;
                     }
-                    if (it == attempts.end() && attempts.size() >= kMaxTrackedRootAuthAddresses)
-                    {
-                        std::erase_if(attempts, [now](const auto& entry)
-                                      { return now - entry.second.firstFailure >= kRootAuthWindow; });
-                        if (attempts.size() >= kMaxTrackedRootAuthAddresses)
-                        {
-                            return CommandResult::unauthorized;
-                        }
-                    }
-
                     auto payload = Util::removeAmountOfBytesFromVector(command, 2);
                     const std::string password = Util::convertToString(payload);
                     if (m_settings.isRootPassword(password))
@@ -553,7 +545,46 @@ try
                     }
                     else
                     {
+                        if (attempts.size() >= kMaxTrackedRootAuthAddresses)
+                        {
+                            std::erase_if(attempts, [now](const auto& entry)
+                                          { return now - entry.second.firstFailure >= kRootAuthWindow; });
+                        }
+                        if (attempts.size() < kMaxTrackedRootAuthAddresses * 3 / 4)
+                        {
+                            m_rootAuthState->nearCapacityLogged = false;
+                        }
+                        if (attempts.size() >= kMaxTrackedRootAuthAddresses)
+                        {
+                            // Preserve locked addresses where possible. Evicting
+                            // the oldest non-locked record keeps a new address
+                            // from being rejected solely because the table is full.
+                            auto oldest = attempts.end();
+                            for (auto candidate = attempts.begin(); candidate != attempts.end(); ++candidate)
+                            {
+                                if (oldest == attempts.end() ||
+                                    (oldest->second.failures >= kMaxRootAuthFailures &&
+                                     candidate->second.failures < kMaxRootAuthFailures) ||
+                                    ((candidate->second.failures >= kMaxRootAuthFailures) ==
+                                             (oldest->second.failures >= kMaxRootAuthFailures) &&
+                                     candidate->second.firstFailure < oldest->second.firstFailure))
+                                {
+                                    oldest = candidate;
+                                }
+                            }
+                            attempts.erase(oldest);
+                            if (++m_rootAuthState->evictions % 256 == 1)
+                            {
+                                Log::warning("Root authentication failure table saturated; evicted an old address");
+                            }
+                        }
                         attempts.emplace(user.getIPAddress(), RootAuthState::Attempt{now, 1});
+                        if (!m_rootAuthState->nearCapacityLogged &&
+                            attempts.size() >= kMaxTrackedRootAuthAddresses * 3 / 4)
+                        {
+                            m_rootAuthState->nearCapacityLogged = true;
+                            Log::warning("Root authentication failure table is at least 75% full");
+                        }
                     }
                     return CommandResult::unauthorized;
                 }
