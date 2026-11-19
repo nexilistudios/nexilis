@@ -44,6 +44,9 @@ CommandResult ServerImpl::room_object2d_create(const DefaultArgs& args)
         !validation::isValidOptionalAssetPath(filepath))
         return CommandResult::invalid_input;
 
+    if (!room->canCreateObject2D(user.getId(), position, dimensions, filepath))
+        return CommandResult::unauthorized;
+
     // Create server object.
     auto object = nexilis::Object2D(Util::getRandomUint64(), position, dimensions);
     object.setFilepath(filepath);

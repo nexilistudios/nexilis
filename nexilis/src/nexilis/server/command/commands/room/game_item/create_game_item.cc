@@ -73,6 +73,10 @@ CommandResult ServerImpl::room_gameitem_create(const DefaultArgs& args)
         !validation::isValidAssetPath(filepath))
         return CommandResult::invalid_input;
 
+    if (!room->canCreateGameItem(user.getId(), position, dimensions, item_type, status,
+                                 filepath))
+        return CommandResult::unauthorized;
+
     auto item = GameItem(Util::getRandomUint64(), item_type, position, dimensions, status, filepath);
     uint64_t itemId = item.getId();
     Log::info("Created game item with id: ", itemId, " type: ", item_type);

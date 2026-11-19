@@ -486,6 +486,12 @@ protected:
     {
         auto room = server::RoomStorage::getRoomById(ROOM_ID);
         room->setClientObjectCreationAllowed(true);
+        room->setObject2DCreationHandler([](uint64_t, const Vector2f&, const Vector2f&,
+                                            const std::string&)
+                                         { return true; });
+        room->setObject3DCreationHandler([](uint64_t, const Vector3f&, const Vector3f&,
+                                            const std::string&)
+                                         { return true; });
         room->setObject2DMutationHandler([](uint64_t, uint64_t,
                                             server::Room::ObjectMutation,
                                             const std::optional<Vector2f>&)
@@ -500,6 +506,10 @@ protected:
     {
         auto room = server::RoomStorage::getRoomById(ROOM_ID);
         room->setClientGameItemCreationAllowed(true);
+        room->setGameItemCreationHandler([](uint64_t, const Vector3f&, const Vector3f&,
+                                            const std::string&, const std::string&,
+                                            const std::string&)
+                                         { return true; });
         room->setGameItemMutationHandler([](uint64_t, uint64_t,
                                             server::Room::GameItemMutation,
                                             const std::string&)
@@ -2328,6 +2338,76 @@ TEST_F(GameplaySpecTest, MoveObject3DUnknownObjectFails)
 
     EXPECT_EQ(read(moveObject3DBytes(OBJECT_ID, Vector3f(1.0f, 1.0f, 1.0f)), *m_sender),
               server::CommandResult::failure);
+}
+
+TEST_F(GameplaySpecTest, ClientCreationRequiresHandlersEvenAfterOptIn)
+{
+    setUpRoom();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->setClientObjectCreationAllowed(true);
+    room->setClientGameItemCreationAllowed(true);
+    auto messages = receivedMessages(*m_target);
+
+    EXPECT_EQ(read(createObject2DBytes({1, 2}, {1, 1}, "sprites/tree.png"), *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(read(createObject3DBytes({1, 2, 3}, {1, 1, 1}, "models/house.obj"), *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(read(createMoving2DBytes({1, 2}, {1, 1}, {1, 0}, 0.1f,
+                                       MovementType::linear, ""),
+                   *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(read(createMoving3DBytes({1, 2, 3}, {1, 1, 1}, {1, 0, 0}, 0.1f,
+                                       MovementType::linear, ""),
+                   *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(read(createGameItemBytes({1, 2, 3}, {1, 1, 1}), *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_TRUE(room->getObjects2D().empty());
+    EXPECT_TRUE(room->getObjects3D().empty());
+    EXPECT_TRUE(room->getGameItems().empty());
+    EXPECT_TRUE(messages.empty());
+}
+
+TEST_F(GameplaySpecTest, ClientCreationHandlersReceiveProposedContent)
+{
+    setUpRoom();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->setClientObjectCreationAllowed(true);
+    room->setClientGameItemCreationAllowed(true);
+    room->setObject2DCreationHandler(
+            [](uint64_t playerId, const Vector2f& position, const Vector2f& dimensions,
+               const std::string& filepath)
+            { return playerId == SENDER_ID && position.x == 1 && dimensions.y == 1 &&
+                     filepath == "sprites/tree.png"; });
+    room->setObject3DCreationHandler(
+            [](uint64_t playerId, const Vector3f& position, const Vector3f& dimensions,
+               const std::string& filepath)
+            { return playerId == SENDER_ID && position.z == 3 && dimensions.y == 1 &&
+                     filepath == "models/house.obj"; });
+    room->setGameItemCreationHandler(
+            [](uint64_t playerId, const Vector3f& position, const Vector3f& dimensions,
+               const std::string& type, const std::string& status, const std::string& filepath)
+            { return playerId == SENDER_ID && position.z == 3 && dimensions.x == 1 &&
+                     type == "health" && status == "ready" && filepath == "items/health.png"; });
+    auto messages = receivedMessages(*m_target);
+    EXPECT_EQ(read(createObject2DBytes({1, 2}, {1, 1}, "sprites/other.png"), *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(read(createMoving3DBytes({1, 2, 3}, {1, 1, 1}, {1, 0, 0}, 0.1f,
+                                       MovementType::linear, "models/other.obj"),
+                   *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(read(createGameItemBytes({1, 2, 3}, {1, 1, 1}, "weapon"), *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_TRUE(messages.empty());
+    EXPECT_EQ(read(createObject2DBytes({1, 2}, {1, 1}, "sprites/tree.png"), *m_target),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(read(createObject3DBytes({1, 2, 3}, {1, 1, 1}, "models/house.obj"), *m_target),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(read(createGameItemBytes({1, 2, 3}, {1, 1, 1}), *m_target),
+              server::CommandResult::unauthorized);
+    EXPECT_TRUE(room->getObjects2D().empty());
+    EXPECT_TRUE(room->getObjects3D().empty());
+    EXPECT_TRUE(room->getGameItems().empty());
 }
 
 TEST_F(GameplaySpecTest, ObjectCreationCapsCoverDimensionsAndMovingObjects)

@@ -77,6 +77,20 @@ public:
     using GameItemMutationHandler = std::function<bool(uint64_t playerId, uint64_t itemId,
                                                        GameItemMutation action,
                                                        const std::string& status)>;
+    using Object2DCreationHandler = std::function<bool(uint64_t playerId,
+                                                       const Vector2f& position,
+                                                       const Vector2f& dimensions,
+                                                       const std::string& filepath)>;
+    using Object3DCreationHandler = std::function<bool(uint64_t playerId,
+                                                       const Vector3f& position,
+                                                       const Vector3f& dimensions,
+                                                       const std::string& filepath)>;
+    using GameItemCreationHandler = std::function<bool(uint64_t playerId,
+                                                       const Vector3f& position,
+                                                       const Vector3f& dimensions,
+                                                       const std::string& type,
+                                                       const std::string& status,
+                                                       const std::string& filepath)>;
     using BroadcastHandler = std::function<bool(uint64_t playerId,
                                                 const std::string& message, bool encrypted)>;
     struct ShotHit
@@ -263,9 +277,17 @@ public:
     void spawnPlayer(uint64_t playerId);
     /// Allow clients to create, move, and delete room objects. Disabled by
     /// default. Applications should enable this only where client-authoritative
-    /// object changes are intended.
+    /// object changes are intended. Creation also requires a matching handler.
     void setClientObjectCreationAllowed(bool allowed);
     bool isClientObjectCreationAllowed() const;
+    /// Approve client creation of static and moving objects. Missing handlers deny.
+    /// Validate placement, dimensions, assets, and game rules against server state.
+    void setObject2DCreationHandler(Object2DCreationHandler handler);
+    bool canCreateObject2D(uint64_t playerId, const Vector2f& position,
+                           const Vector2f& dimensions, const std::string& filepath) const;
+    void setObject3DCreationHandler(Object3DCreationHandler handler);
+    bool canCreateObject3D(uint64_t playerId, const Vector3f& position,
+                           const Vector3f& dimensions, const std::string& filepath) const;
     /// Authorize client moves and deletes of existing objects. Position is the
     /// bounded destination for moves and absent for deletes. Missing handlers deny.
     /// Handlers called during a move must not reenter room resource accessors.
@@ -276,9 +298,15 @@ public:
     bool canMutateObject3D(uint64_t playerId, uint64_t objectId, ObjectMutation action,
                            const std::optional<Vector3f>& position) const;
     /// Allow clients to create, change, and delete game items. Disabled by default.
-    /// A pickup handler can separately authorize pickup updates.
+    /// Creation also requires a handler. A pickup handler can separately
+    /// authorize pickup updates.
     void setClientGameItemCreationAllowed(bool allowed);
     bool isClientGameItemCreationAllowed() const;
+    /// Approve client item creation using server-owned game state. Missing denies.
+    void setGameItemCreationHandler(GameItemCreationHandler handler);
+    bool canCreateGameItem(uint64_t playerId, const Vector3f& position,
+                           const Vector3f& dimensions, const std::string& type,
+                           const std::string& status, const std::string& filepath) const;
     /// Authorize client status changes and deletes of existing game items.
     /// Status is empty for deletes. Missing handlers deny.
     void setGameItemMutationHandler(GameItemMutationHandler handler);
@@ -342,6 +370,9 @@ private:
     AudioEventHandler m_audioEventHandler;
     SpawnHandler m_spawnHandler;
     GameItemPickupHandler m_gameItemPickupHandler;
+    Object2DCreationHandler m_object2DCreationHandler;
+    Object3DCreationHandler m_object3DCreationHandler;
+    GameItemCreationHandler m_gameItemCreationHandler;
     Object2DMutationHandler m_object2DMutationHandler;
     Object3DMutationHandler m_object3DMutationHandler;
     GameItemMutationHandler m_gameItemMutationHandler;

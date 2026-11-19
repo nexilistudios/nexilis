@@ -198,7 +198,11 @@ on match state. The server accepts only the `Terrorist` and `Counter Terrorist`
 team names from clients. An application can set teams directly on the server.
 
 Client game item creation, status changes, and deletion are disabled by default.
-A room can call `setClientGameItemCreationAllowed(true)` to allow creation.
+A room can call `setClientGameItemCreationAllowed(true)` to opt into creation,
+but each request also requires a `Room::setGameItemCreationHandler` that approves
+the actor, position, dimensions, type, status, and asset path against server-owned
+state. A missing or rejecting creation handler denies the request before storing
+or broadcasting the item.
 Status changes and deletion additionally require a
 `Room::setGameItemMutationHandler` that approves the actor, item ID, action, and
 requested status against server-owned ownership and game state. A missing or
@@ -220,7 +224,12 @@ When a pickup handler is installed, it continues to govern the pickup path;
 the general item mutation handler does not replace it.
 
 Client room object creation, movement, and deletion are disabled by default.
-A room can call `setClientObjectCreationAllowed(true)` to allow creation.
+A room can call `setClientObjectCreationAllowed(true)` to opt into creation,
+but each static or moving object request also requires the matching
+`Room::setObject2DCreationHandler` or `Room::setObject3DCreationHandler` to
+approve the actor, starting position, dimensions, and asset path against
+server-owned state. A missing or rejecting creation handler denies the request
+before storing or broadcasting the object.
 Moving or deleting an existing object additionally requires the matching
 `Room::setObject2DMutationHandler` or `Room::setObject3DMutationHandler` to
 approve the actor, object ID, action, and bounded destination for moves. A
