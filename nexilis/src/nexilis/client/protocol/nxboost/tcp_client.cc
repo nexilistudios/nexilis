@@ -171,6 +171,13 @@ bool TCPClient::connectToMainPort()
             Log::error(header(), "Cannot connec to main port: ", m_mainPort, " - ", ec.message());
             return false;
         }
+        m_mainSocket->lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true), ec);
+        if (ec)
+        {
+            Log::error(header(), "Cannot disable TCP packet batching on main port: ", ec.message());
+            m_mainSocket->lowest_layer().close();
+            return false;
+        }
 
         if (m_tlsEnabled)
         {
@@ -217,6 +224,13 @@ bool TCPClient::connectToSwitchedPort(uint16_t port)
         if (ec)
         {
             Log::error(header(), "Cannot connect to switched port: ", port, " - ", ec.message());
+            return false;
+        }
+        m_switchedSocket->lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true), ec);
+        if (ec)
+        {
+            Log::error(header(), "Cannot disable TCP packet batching on switched port: ", ec.message());
+            m_switchedSocket->lowest_layer().close();
             return false;
         }
 
