@@ -328,7 +328,7 @@ void Room::setCombatHandler(CombatHandler handler)
 }
 bool Room::canDamage(uint64_t shooterId, uint64_t targetId) const
 {
-    return !m_combatHandler || m_combatHandler(shooterId, targetId);
+    return m_combatHandler && m_combatHandler(shooterId, targetId);
 }
 void Room::setTeamSelectionHandler(TeamSelectionHandler handler)
 {

@@ -226,6 +226,8 @@ public:
     void setTeamHandler(TeamHandler handler);
     void setActionHandler(ActionHandler handler);
     bool onPlayerAction(uint64_t playerId, uint8_t action);
+    /// Authorize damage from a server-resolved hit. Missing handlers deny hits.
+    /// Validate round state and participants against server-owned state.
     void setCombatHandler(CombatHandler handler);
     bool canDamage(uint64_t shooterId, uint64_t targetId) const;
     /// Client team requests are rejected until an application handler allows them.

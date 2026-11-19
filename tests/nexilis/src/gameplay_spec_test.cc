@@ -481,6 +481,8 @@ protected:
             room->setLegacyClientMovementAllowed(true);
         room->setShotHandler([this](uint64_t, const Vector3f&, uint8_t, uint8_t)
                              { return m_nextHit; });
+        room->setCombatHandler([](uint64_t, uint64_t)
+                               { return true; });
     }
 
     /// Object mutations are disabled by default, so object tests opt in.
@@ -634,6 +636,34 @@ TEST_F(GameplaySpecTest, ShootRejectsClientSelectedHitWithHandler)
     EXPECT_EQ(read(legacyShootBytes(TARGET_ID, 35.0f), *m_sender),
               server::CommandResult::invalid_input);
     EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH);
+}
+
+TEST_F(GameplaySpecTest, ShootRequiresCombatApproval)
+{
+    setUpRoom();
+    setUpOpposingTeams();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    auto targetMessages = receivedMessages(*m_target);
+    room->setCombatHandler({});
+
+    EXPECT_FALSE(room->canDamage(SENDER_ID, TARGET_ID));
+    EXPECT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH);
+    EXPECT_TRUE(targetMessages.empty());
+
+    room->setCombatHandler([](uint64_t, uint64_t)
+                           { return false; });
+    EXPECT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH);
+    EXPECT_TRUE(targetMessages.empty());
+
+    room->setCombatHandler([](uint64_t shooterId, uint64_t targetId)
+                           { return shooterId == SENDER_ID && targetId == TARGET_ID; });
+    EXPECT_EQ(read(shootBytes(TARGET_ID, 25.0f), *m_sender), server::CommandResult::success);
+    EXPECT_FLOAT_EQ(room->getPlayerHealth(TARGET_ID), DEFAULT_HEALTH - 25.0f);
+    EXPECT_EQ(targetMessages.size(), 1);
 }
 
 TEST_F(GameplaySpecTest, ShootRoomNotFoundFails)

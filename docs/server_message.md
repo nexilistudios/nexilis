@@ -190,7 +190,9 @@ An application room must install a shot handler to accept shots.
 byte for weapon slot (1 primary, 2 secondary, 3 knife) and one action byte
 (0 fire, 1 reload). Target ID and damage requests are rejected in every room.
 The handler computes the hit and damage from server state; a request with no
-valid hit does not damage anyone. Rooms without a handler reject shot requests.
+valid hit does not damage anyone. Rooms without a shot handler reject shot requests.
+Damage also requires an application-installed combat handler to approve the
+server-resolved shooter and target. Rooms without a combat handler deny damage.
 
 Client team selection requests are rejected by default. An application must install
 `Room::setTeamSelectionHandler` to allow them; the handler can reject a player based
@@ -307,7 +309,7 @@ to joining clients; this history bound is currently fixed in
 broadcasts reach every member of the room, including the sender. The server
 does not interpret the payload.
 
-`Packet::Room::Player3D::matchAction(api, action)` sends room/player_3D action byte `8` followed by exactly one byte: `0` cancels, `1` begins planting, and `2` begins defusing. The room's application-installed action handler validates the request; rooms without a handler reject it. The server's combat callback can also deny hits by participants who are outside an active round. These callbacks are optional and do not change normal rooms.
+`Packet::Room::Player3D::matchAction(api, action)` sends room/player_3D action byte `8` followed by exactly one byte: `0` cancels, `1` begins planting, and `2` begins defusing. The room's application-installed action handler validates the request; rooms without a handler reject it. The server's combat callback must approve hits and can deny participants who are outside an active round. Rooms without a combat callback deny damage.
 
 An application can send a server-authored JSON room response with `type: "match"` and `action: "state"`. Nexilis exposes the parsed events through `consumeMatchEvents()` as owning pointers to the polymorphic `ClientAPI::MatchEvent` base. The `game_mode` field selects a derived event: `"bomb"` creates `BombMatchEvent`, while `"deathmatch"` creates `DeathmatchMatchEvent`. The base holds `room_id` and a virtual `kind()` discriminator. A missing `game_mode` is treated as bomb for compatibility with older messages; unknown modes are rejected.
 
