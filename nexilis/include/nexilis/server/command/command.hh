@@ -99,6 +99,11 @@ public:
     /// Send message in room context.
     static bool sendRoomCommand(const nx_data& data, User& user, NXProtocol& protocol);
 
+    /// Send an application-authorized event to current room members on the
+    /// selected protocol. Client broadcast commands cannot create this type.
+    static bool sendServerRoomEvent(uint64_t roomId, const std::string& event,
+                                    const boost::json::value& payload, NXProtocol& protocol);
+
     /// Create a serverside package for commands happening inside a room.
     /// This function is expected to be called by ServerImpl room functions.
     static nx_data createRoomCommand(uint64_t roomId, User& user, const nx_data& messageData, const ClientMsgType& params, uint64_t messageId);

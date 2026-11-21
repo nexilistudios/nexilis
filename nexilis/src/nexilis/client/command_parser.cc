@@ -27,6 +27,7 @@
 #include <nexilis/client/command/room/object3d.hh>
 #include <nexilis/client/command/room/player2d.hh>
 #include <nexilis/client/command/room/player3d.hh>
+#include <nexilis/client/command/room/server_event.hh>
 #include <nexilis/client/command/set/port.hh>
 #include <nexilis/client/command/set/username.hh>
 #include <nexilis/client/command_parser.hh>
@@ -165,6 +166,16 @@ std::unique_ptr<BaseAPICommand> CommandParser::parseRoomCommand(const boost::jso
     uint64_t room_id = getUint64(json, "room_id");
     uint64_t client_id = getUint64(json, "client_id");
 
+    if (type == "server_event")
+    {
+        if (action != "emit" || room_id == 0 || !json.contains("event") ||
+            !json.at("event").is_string() || json.at("event").as_string().empty() ||
+            !json.contains("payload"))
+            return makeError(ReadResult::parsing_failed, "invalid server room event");
+        return std::make_unique<RoomServerEventCommand>(ClientAPI::ServerRoomEvent{
+                room_id, getString(json, "event"), json.at("payload")});
+    }
+
     if (type == "match" && action == "state")
     {
         const std::string gameMode = getString(json, "game_mode");
@@ -287,6 +298,10 @@ std::unique_ptr<BaseAPICommand> CommandParser::parseRoomCommand(const boost::jso
     }
     else if (type == "communication")
     {
+        if ((action == "broadcast" || action == "broadcast_encrypted") &&
+            (!json.contains("player_authored") || !json.at("player_authored").is_bool() ||
+             !json.at("player_authored").as_bool()))
+            return makeError(ReadResult::parsing_failed, "unmarked player communication");
         return std::make_unique<RoomCommunicationCommand>(action, room_id, client_id,
                                                           getString(json, "message"));
     }

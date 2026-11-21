@@ -302,6 +302,15 @@ application that must inspect content should reject that mode or decrypt with
 its configured password. Approved broadcasts have `player_authored: true` at the top level of
 their JSON messages. Applications must treat the payload as player content;
 authoritative game events should use separate server-authored message types.
+The server application can call `Command::sendServerRoomEvent(roomId, event,
+payload, protocol)` to send a JSON `room/server_event` message with
+`action: "emit"`, `room_id`, `event`, and `payload` to current room members.
+The event is never accepted from a client command and is not added to broadcast
+history. Native clients receive it through `ClientAPI::consumeServerRoomEvents()`;
+the `ServerRoomEvent` contains the room ID, event name, and JSON payload.
+Applications must choose a protocol with an authenticated server connection and
+validate event names and payloads at their own game boundary. Native clients
+reject `room/communication` messages missing `player_authored: true`.
 Each room retains at most the 100 most recent broadcasts and replays only those
 to joining clients; this history bound is currently fixed in
 `nexilis_constants.hh`. Encrypted history retains its

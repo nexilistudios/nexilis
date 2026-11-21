@@ -796,6 +796,31 @@ bool Command::sendRoomCommand(const nx_data& data, User& user, NXProtocol& proto
     return false;
 }
 
+bool Command::sendServerRoomEvent(uint64_t roomId, const std::string& event,
+                                  const boost::json::value& payload, NXProtocol& protocol)
+{
+    if (roomId == 0 || event.empty())
+        return false;
+    auto room = RoomStorage::getRoomById(roomId);
+    if (!room)
+        return false;
+
+    const auto data = clientMessageData(CommandType::room, "server_event", 0,
+                                        {{"action", boost::json::value("emit")},
+                                         {"room_id", boost::json::value(roomId)},
+                                         {"event", boost::json::value(event)},
+                                         {"payload", payload}});
+    bool allSuccess = true;
+    for (auto clientId : room->getClients())
+    {
+        auto client = ClientStorage::getClientById(clientId);
+        if (!client || client->getRoomId() != roomId ||
+            !sendMessageToClient(data, *client, protocol))
+            allSuccess = false;
+    }
+    return allSuccess;
+}
+
 void Command::runWithTickrate(double tickrate, double durationSeconds, const std::function<void(double)>& tickFunction)
 {
     using namespace std::chrono;

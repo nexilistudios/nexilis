@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <nexilis/client/client_api.hh>
+#include <nexilis/client/command_parser.hh>
 #include <nexilis/crypto.hh>
 #include <nexilis/json.hh>
 #include <nexilis/nexilis_constants.hh>
@@ -181,6 +183,57 @@ TEST_F(RoomHistorySpecTest, BroadcastRequiresRoomApproval)
     ASSERT_EQ(room()->getBroadcasts().size(), 1);
     ASSERT_EQ(messages.size(), 1);
     EXPECT_TRUE(messages[0].at("player_authored").as_bool());
+}
+
+TEST_F(RoomHistorySpecTest, ServerRoomEventsStaySeparateFromPlayerBroadcasts)
+{
+    room()->joinRoom(SENDER_ID);
+    user(SENDER_ID)->setRoomId(ROOM_ID);
+    auto messages = receivedMessages(SENDER_ID);
+    const boost::json::value state = boost::json::object{{"score", 10}};
+    ASSERT_TRUE(server::Command::sendServerRoomEvent(ROOM_ID, "score", state, protocol));
+    ASSERT_EQ(messages.size(), 1);
+    EXPECT_EQ(messages[0].at("type").as_string(), "server_event");
+    EXPECT_EQ(messages[0].at("event").as_string(), "score");
+    EXPECT_EQ(messages[0].at("payload"), state);
+    EXPECT_FALSE(messages[0].contains("player_authored"));
+    EXPECT_TRUE(room()->getBroadcasts().empty());
+
+    client::ClientConfig config;
+    client::ClientAPI api(config);
+    client::ClientAPI::ClientAPIData data;
+    auto eventCommand = client::CommandParser::parse(messages[0]);
+    ASSERT_EQ(eventCommand->execute(api, data), client::ReadResult::success);
+    auto events = data.consumeServerRoomEvents();
+    ASSERT_EQ(events.size(), 1);
+    EXPECT_EQ(events[0].room_id, ROOM_ID);
+    EXPECT_EQ(events[0].event, "score");
+    EXPECT_EQ(events[0].payload, state);
+
+    EXPECT_EQ(command.read(broadcastBytes("score: 999"), *user(SENDER_ID), protocol, 2),
+              server::CommandResult::success);
+    ASSERT_EQ(messages.size(), 2);
+    EXPECT_EQ(messages[1].at("type").as_string(), "communication");
+    EXPECT_TRUE(messages[1].at("player_authored").as_bool());
+    auto chatCommand = client::CommandParser::parse(messages[1]);
+    data.getCurrentlyActiveRooms().emplace_back(
+            RoomData(SENDER_ID, "room", ROOM_ID), std::vector<client::ClientSession>{});
+    EXPECT_EQ(chatCommand->execute(api, data), client::ReadResult::success);
+    EXPECT_EQ(data.getCurrentlyActiveRooms()[0].getMessages().size(), 1);
+    EXPECT_TRUE(data.consumeServerRoomEvents().empty());
+}
+
+TEST_F(RoomHistorySpecTest, UnmarkedBroadcastCannotEnterClientChat)
+{
+    client::ClientConfig config;
+    client::ClientAPI api(config);
+    client::ClientAPI::ClientAPIData data;
+    data.getCurrentlyActiveRooms().emplace_back(
+            RoomData(SENDER_ID, "room", ROOM_ID), std::vector<client::ClientSession>{});
+    boost::json::object message{{"command", "room"}, {"type", "communication"}, {"action", "broadcast"}, {"room_id", ROOM_ID}, {"client_id", SENDER_ID}, {"message", "server: win"}};
+    auto parsed = client::CommandParser::parse(message);
+    EXPECT_NE(parsed->execute(api, data), client::ReadResult::success);
+    EXPECT_TRUE(data.getCurrentlyActiveRooms()[0].getMessages().empty());
 }
 
 TEST_F(RoomHistorySpecTest, EncryptedBroadcastRetainsActionInHistory)
