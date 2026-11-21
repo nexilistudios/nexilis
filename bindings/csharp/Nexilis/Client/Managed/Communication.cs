@@ -73,15 +73,7 @@ namespace Nexilis.Client
                 throw new InvalidOperationException("Failed to get communication payload.");
             }
 
-            try
-            {
-                return Marshal.PtrToStringAnsi(payloadPtr);
-            }
-            finally
-            {
-                // The native side allocates the string with malloc.
-                Marshal.FreeHGlobal(payloadPtr);
-            }
+            return NativeInterop.TakeString(payloadPtr);
         }
 
         /// <summary>

@@ -78,7 +78,8 @@ extern "C"
     // is retained as a legacy alias.
     nexilis_ClientSession* nexilis_client_api_get_client_from_room(const nexilis_ClientAPI* client_api, uint64_t client_id);
 
-    // UTF-8 JSON containing pending damage, respawn and leaderboard events.
+    // UTF-8 JSON containing pending damage, respawn, leaderboard and
+    // server-authored room events, plus player-authored chat.
     // Free the returned buffer with nexilis_client_api_free_events.
     char* nexilis_client_api_drain_game_events(nexilis_ClientAPI* client_api, size_t chat_since);
     void nexilis_client_api_free_events(char* events);

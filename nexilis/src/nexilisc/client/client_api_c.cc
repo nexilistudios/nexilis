@@ -354,7 +354,11 @@ char* nexilis_client_api_drain_game_events(nexilis_ClientAPI* client_api, size_t
     if (!client_api || !client_api->api)
         return nullptr;
     boost::json::object root;
-    boost::json::array damage, respawns, leaderboard, chat, audio;
+    boost::json::array damage, respawns, leaderboard, chat, audio, serverEvents;
+    for (const auto& event : client_api->api->consumeServerRoomEvents())
+        serverEvents.emplace_back(boost::json::object{{"room_id", std::to_string(event.room_id)},
+                                                      {"event", event.event},
+                                                      {"payload", event.payload}});
     for (const auto& event : client_api->api->consumeDamageEvents())
         damage.emplace_back(boost::json::object{{"shooter", std::to_string(event.shooter_id)},
                                                 {"target", std::to_string(event.target_id)},
@@ -378,6 +382,7 @@ char* nexilis_client_api_drain_game_events(nexilis_ClientAPI* client_api, size_t
     root["audio"] = std::move(audio);
     root["respawns"] = std::move(respawns);
     root["leaderboard"] = std::move(leaderboard);
+    root["server_events"] = std::move(serverEvents);
     auto messages = client_api->api->getChatSnapshot(client_api->api->clientRoomId());
     for (size_t i = chat_since; i < messages.size(); ++i)
         chat.emplace_back(boost::json::object{{"sender", std::to_string(messages[i].sender_id)},

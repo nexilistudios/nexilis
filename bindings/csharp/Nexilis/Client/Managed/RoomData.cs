@@ -29,7 +29,7 @@ namespace Nexilis.Client
             {
                 throw new ArgumentException(nameof(name));
             }
-            _nativePtr = RoomDataNative.nexilis_room_data_create(creatorId, name, context, maxSize);
+            _nativePtr = RoomDataNative.create_utf8(creatorId, NativeInterop.Utf8Z(name), context, maxSize);
             if (_nativePtr == IntPtr.Zero)
                 throw new InvalidOperationException("Failed to create native room data");
         }
@@ -40,7 +40,7 @@ namespace Nexilis.Client
             {
                 ThrowIfDisposed();
                 IntPtr namePtr = RoomDataNative.nexilis_room_data_get_name(_nativePtr);
-                return Marshal.PtrToStringAnsi(namePtr);
+                return NativeInterop.TakeString(namePtr);
             }
         }
 

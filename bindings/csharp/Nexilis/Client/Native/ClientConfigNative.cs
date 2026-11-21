@@ -30,12 +30,23 @@ namespace Nexilis.Client
 
         [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
         public static extern void nexilis_client_config_set_password(IntPtr config, string password);
+        [DllImport(NativeLibrary.Name, EntryPoint = "nexilis_client_config_set_password", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void set_password_utf8(IntPtr config, byte[] password);
 
         [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
         public static extern void nexilis_client_config_set_account_credentials(IntPtr config, string accountId, string credential);
+        [DllImport(NativeLibrary.Name,
+            EntryPoint = "nexilis_client_config_set_account_credentials",
+            CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void set_account_credentials_utf8(IntPtr config, byte[] accountId, byte[] credential);
+
+        [DllImport(NativeLibrary.Name, EntryPoint = "nexilis_client_config_get_password", CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr get_password_raw(IntPtr config);
+
+        public static string nexilis_client_config_get_password(IntPtr config) => NativeInterop.TakeString(get_password_raw(config));
 
         [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
-        public static extern string nexilis_client_config_get_password(IntPtr config);
+        public static extern void nexilis_string_free(IntPtr value);
 
         [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
         public static extern void nexilis_client_config_set_mode(IntPtr config, int mode);
@@ -57,14 +68,32 @@ namespace Nexilis.Client
 
         [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
         public static extern void nexilis_client_config_set_boost_tcp_address(IntPtr config, string address);
+        [DllImport(NativeLibrary.Name,
+            EntryPoint = "nexilis_client_config_set_boost_tcp_address",
+            CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void set_boost_tcp_address_utf8(IntPtr config, byte[] address);
 
-        [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
-        public static extern string nexilis_client_config_get_boost_tcp_server_address(IntPtr config);
+        [DllImport(NativeLibrary.Name,
+            EntryPoint = "nexilis_client_config_get_boost_tcp_server_address",
+            CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr get_boost_tcp_server_address_raw(IntPtr config);
+
+        public static string nexilis_client_config_get_boost_tcp_server_address(IntPtr config) =>
+            NativeInterop.TakeString(get_boost_tcp_server_address_raw(config));
 
         [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
         public static extern void nexilis_client_config_set_boost_udp_address(IntPtr config, string address);
+        [DllImport(NativeLibrary.Name,
+            EntryPoint = "nexilis_client_config_set_boost_udp_address",
+            CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void set_boost_udp_address_utf8(IntPtr config, byte[] address);
 
-        [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
-        public static extern string nexilis_client_config_get_boost_udp_server_address(IntPtr config);
+        [DllImport(NativeLibrary.Name,
+            EntryPoint = "nexilis_client_config_get_boost_udp_server_address",
+            CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr get_boost_udp_server_address_raw(IntPtr config);
+
+        public static string nexilis_client_config_get_boost_udp_server_address(IntPtr config) =>
+            NativeInterop.TakeString(get_boost_udp_server_address_raw(config));
     }
 }

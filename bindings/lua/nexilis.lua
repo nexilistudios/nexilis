@@ -277,7 +277,9 @@ end
 function Client:transport_ready(transport)
     self:assert_open()
     if transport == "tcp" then return native.nexilis_client_api_is_boost_tcp_ready(self.state.api) end
-    if transport == "udp" then return native.nexilis_client_api_is_boost_udp_ready(self.state.api) end
+    if transport == "udp" then
+        return self.state.udp ~= nil and native.nexilis_client_api_is_boost_udp_ready(self.state.api)
+    end
     error("transport must be 'tcp' or 'udp'", 2)
 end
 

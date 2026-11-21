@@ -124,15 +124,7 @@ namespace Nexilis.Client
                 return string.Empty;
             }
 
-            try
-            {
-                return Marshal.PtrToStringAnsi(namePtr) ?? string.Empty;
-            }
-            finally
-            {
-                // The native side allocates the string with malloc.
-                Marshal.FreeHGlobal(namePtr);
-            }
+            return NativeInterop.TakeString(namePtr);
         }
 
         /// <summary>

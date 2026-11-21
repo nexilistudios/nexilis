@@ -16,6 +16,8 @@
 
 #include <nexilisc/client/client_config_c.h>
 
+#include <cstdlib>
+
 nexilis_ClientConfigC* nexilis_client_config_create()
 {
     auto config = new nexilis_ClientConfigC();
@@ -35,6 +37,11 @@ void nexilis_client_config_destroy(nexilis_ClientConfigC* config)
         }
         delete config;
     }
+}
+
+void nexilis_string_free(const char* value)
+{
+    std::free(const_cast<char*>(value));
 }
 
 void nexilis_client_config_set_password(nexilis_ClientConfigC* config, const char* password)

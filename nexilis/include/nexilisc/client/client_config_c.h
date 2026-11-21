@@ -35,6 +35,8 @@ void nexilis_client_config_set_password(nexilis_ClientConfigC* config, const cha
 void nexilis_client_config_set_account_credentials(nexilis_ClientConfigC* config,
                                                     const char* account_id, const char* credential);
 const char* nexilis_client_config_get_password(const nexilis_ClientConfigC* config);
+// Free malloc-allocated C getter results; do not pass borrowed strings.
+void nexilis_string_free(const char* value);
 
 void nexilis_client_config_set_mode(nexilis_ClientConfigC* config, int mode);
 

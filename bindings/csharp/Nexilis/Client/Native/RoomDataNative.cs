@@ -27,6 +27,9 @@ namespace Nexilis.Client
             RoomContext context,
             uint maxSize);
 
+        [DllImport(NativeLibrary.Name, EntryPoint = "nexilis_room_data_create", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr create_utf8(ulong creatorId, byte[] name, RoomContext context, uint maxSize);
+
         [DllImport(NativeLibrary.Name, CallingConvention = CallingConvention.Cdecl)]
         public static extern void nexilis_room_data_destroy(IntPtr roomData);
 

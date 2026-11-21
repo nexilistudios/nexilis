@@ -16,6 +16,7 @@
 
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 
 namespace Nexilis
@@ -24,6 +25,39 @@ namespace Nexilis
     {
         private static readonly object _syncRoot = new object();
         private static int? _mainThreadId;
+
+        /// <summary>Copy a malloc-allocated UTF-8 string and release it with the native allocator.</summary>
+        internal static string TakeString(IntPtr pointer)
+        {
+            if (pointer == IntPtr.Zero) return string.Empty;
+            try
+            {
+                return CopyUtf8String(pointer);
+            }
+            finally
+            {
+                Client.ClientConfigNative.nexilis_string_free(pointer);
+            }
+        }
+
+        /// <summary>Copy a borrowed UTF-8 string without taking ownership.</summary>
+        internal static string CopyUtf8String(IntPtr pointer)
+        {
+            if (pointer == IntPtr.Zero) return string.Empty;
+            int length = 0;
+            while (Marshal.ReadByte(pointer, length) != 0) length++;
+            var bytes = new byte[length];
+            Marshal.Copy(pointer, bytes, 0, length);
+            return Encoding.UTF8.GetString(bytes);
+        }
+
+        /// <summary>Encode a managed value for a native null-terminated UTF-8 parameter.</summary>
+        internal static byte[] Utf8Z(string value)
+        {
+            if (value == null) throw new ArgumentNullException(nameof(value));
+            if (value.IndexOf('\0') >= 0) throw new ArgumentException("Native strings cannot contain NUL.", nameof(value));
+            return Encoding.UTF8.GetBytes(value + "\0");
+        }
 
         /// <summary>
         /// Call this once from Unity's main thread during initialization

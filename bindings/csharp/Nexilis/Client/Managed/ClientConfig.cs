@@ -131,13 +131,13 @@ namespace Nexilis.Client
         /// <param name="password">The password to set.</param>
         public void SetPassword(string password)
         {
-            ClientConfigNative.nexilis_client_config_set_password(_configPtr, password);
+            ClientConfigNative.set_password_utf8(_configPtr, NativeInterop.Utf8Z(password));
         }
 
         /// <summary>Sets the stable account ID and private credential for account authentication.</summary>
         public void SetAccountCredentials(string accountId, string credential)
         {
-            ClientConfigNative.nexilis_client_config_set_account_credentials(_configPtr, accountId, credential);
+            ClientConfigNative.set_account_credentials_utf8(_configPtr, NativeInterop.Utf8Z(accountId), NativeInterop.Utf8Z(credential));
         }
 
         /// <summary>
@@ -146,7 +146,7 @@ namespace Nexilis.Client
         /// <param name="password">The password to set.</param>
         public ClientConfig Password(string password)
         {
-            ClientConfigNative.nexilis_client_config_set_password(_configPtr, password);
+            SetPassword(password);
             return this;
         }
 
@@ -165,7 +165,7 @@ namespace Nexilis.Client
         /// <param name="address">The Boost TCP server address to set.</param>
         public void SetBoostTCPAddress(string address)
         {
-            ClientConfigNative.nexilis_client_config_set_boost_tcp_address(_configPtr, address);
+            ClientConfigNative.set_boost_tcp_address_utf8(_configPtr, NativeInterop.Utf8Z(address));
         }
 
         /// <summary>
@@ -174,7 +174,7 @@ namespace Nexilis.Client
         /// <param name="address">The Boost TCP server address to set.</param>
         public ClientConfig BoostTCP(string address)
         {
-            ClientConfigNative.nexilis_client_config_set_boost_tcp_address(_configPtr, address);
+            SetBoostTCPAddress(address);
             return this;
         }
 
@@ -193,7 +193,7 @@ namespace Nexilis.Client
         /// <param name="address">The Boost UDP server address to set.</param>
         public void SetBoostUDP(string address)
         {
-            ClientConfigNative.nexilis_client_config_set_boost_udp_address(_configPtr, address);
+            ClientConfigNative.set_boost_udp_address_utf8(_configPtr, NativeInterop.Utf8Z(address));
         }
 
         /// <summary>
@@ -202,7 +202,7 @@ namespace Nexilis.Client
         /// <param name="address">The Boost UDP server address to set.</param>
         public ClientConfig BoostUDP(string address)
         {
-            ClientConfigNative.nexilis_client_config_set_boost_udp_address(_configPtr, address);
+            SetBoostUDP(address);
             return this;
         }
 

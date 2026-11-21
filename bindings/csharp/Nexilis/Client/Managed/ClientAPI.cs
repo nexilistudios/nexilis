@@ -127,15 +127,7 @@ namespace Nexilis.Client
                 return string.Empty;
             }
 
-            try
-            {
-                return Marshal.PtrToStringAnsi(namePtr) ?? string.Empty;
-            }
-            finally
-            {
-                // The native side allocates the string with malloc.
-                Marshal.FreeHGlobal(namePtr);
-            }
+            return NativeInterop.TakeString(namePtr);
         }
 
         /// <summary>
@@ -194,7 +186,7 @@ namespace Nexilis.Client
             ThrowIfDisposed();
             var ptr = ClientAPINative.nexilis_client_api_drain_game_events(_clientApiPtr, new UIntPtr((uint)Math.Max(0, chatSince)));
             if (ptr == IntPtr.Zero) return "{}";
-            try { return Marshal.PtrToStringAnsi(ptr) ?? "{}"; }
+            try { return NativeInterop.CopyUtf8String(ptr); }
             finally { ClientAPINative.nexilis_client_api_free_events(ptr); }
         }
 
