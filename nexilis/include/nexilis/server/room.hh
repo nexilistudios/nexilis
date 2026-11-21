@@ -240,7 +240,7 @@ public:
     /// request against server-owned game state.
     void setClientPositionAllowed(bool allowed);
     bool isClientPositionAllowed() const;
-    /// Called with the bounded position before it is stored or broadcast.
+    /// Called with the requested in-bounds position before it is stored or broadcast.
     /// Missing handlers reject requests even when client positions are enabled.
     /// Configure handlers before serving room traffic.
     void setPosition3DHandler(Position3DHandler handler);

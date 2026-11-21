@@ -44,9 +44,10 @@ CommandResult ServerImpl::room_player2d_position(const DefaultArgs& args)
         return CommandResult::invalid_input;
 
     const auto& limits = GameplayLimits::get();
-    const Vector2f position(limits.clampHorizontal(vector.x),
-                            limits.clampHorizontal(vector.y));
-    Log::debug("Position x:", position.x, " y:", position.y);
+    if (limits.clampHorizontal(vector.x) != vector.x ||
+        limits.clampHorizontal(vector.y) != vector.y)
+        return CommandResult::invalid_input;
+    Log::debug("Position x:", vector.x, " y:", vector.y);
 
     auto currentRoom = RoomStorage::getRoomById(user.getRoomId());
 
@@ -58,14 +59,14 @@ CommandResult ServerImpl::room_player2d_position(const DefaultArgs& args)
 
     if (!currentRoom->isClientPositionAllowed())
         return CommandResult::invalid_input;
-    if (!currentRoom->canSetPosition2D(user.getId(), position))
+    if (!currentRoom->canSetPosition2D(user.getId(), vector))
         return CommandResult::unauthorized;
 
-    user.getObject2D().setPosition(position);
+    user.getObject2D().setPosition(vector);
 
     std::map<std::string, boost::json::value> params{
-            {"x", boost::json::value(position.x)},
-            {"y", boost::json::value(position.y)}};
+            {"x", boost::json::value(vector.x)},
+            {"y", boost::json::value(vector.y)}};
 
     auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, args.getData(), params, args.getMessageId());
     if (Command::sendRoomCommand(roomCommand, user, args.getProtocol()))

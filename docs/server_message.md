@@ -174,16 +174,15 @@ takes precedence over the legacy opt-in. Client position requests
 a room that wants direct client positions must separately call
 `setClientPositionAllowed(true)` and install `Room::setPosition3DHandler` or
 `Room::setPosition2DHandler` for the dimensions it accepts. The server calls the
-handler with the bounded position (and normalized 3D yaw) before changing the
+handler with the requested in-bounds position (and normalized 3D yaw) before changing the
 player state or broadcasting. A missing handler or one that returns false rejects
 the request. The application must check travel distance, collision, and any
 other game rules using server-owned state; the library cannot infer game
 geometry. Configure these handlers before serving room traffic.
 
 The same room setting gates `room/player_2D/position`. This request requires
-exactly two finite floats; the server clamps both 2D coordinates to the
-configured maximum horizontal position before storing and broadcasting them.
-Malformed or non-finite positions are rejected.
+exactly two finite floats within the configured horizontal bounds. Malformed,
+non-finite, or out-of-bounds positions are rejected before the room handler runs.
 
 An application room must install a shot handler to accept shots.
 `room/player_3D/shoot` requires three floats for aim direction followed by one
@@ -284,8 +283,9 @@ default and is configurable through `nexilis::server::ServerConfig::getGameplayL
 - Maximum damage per shot: 35
 - Minimum and maximum height (Y coordinate): 0 and 1000
 
-Positions outside their limits are clamped to the nearest allowed value (the
-clamped position is applied and broadcast), movement speeds above the maximum
+Direct client position requests outside their limits are rejected before room
+handlers run. Movement results outside the world bounds are clamped; movement
+speeds above the maximum
 are scaled down, damage above the per-shot cap is reduced to it, and shots
 that arrive sooner than the shooting rate allows are dropped. The shooting
 rate applies to fire requests before the room's shot handler runs, including

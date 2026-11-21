@@ -46,19 +46,12 @@ CommandResult ServerImpl::room_player3d_position(const DefaultArgs& args)
         !std::isfinite(vector.z) || !std::isfinite(rawYaw))
         return CommandResult::invalid_input;
 
-    // Keep the position inside the configured world limits: the
-    // horizontal coordinates and the height are clamped to the
-    // nearest allowed value.
     const auto& limits = GameplayLimits::get();
-    Vector3f position(limits.clampHorizontal(vector.x),
-                      limits.clampHeight(vector.y),
-                      limits.clampHorizontal(vector.z));
-    if (position.x != vector.x || position.y != vector.y || position.z != vector.z)
-    {
-        Log::warning("Position (", vector.x, ", ", vector.y, ", ", vector.z,
-                     ") clamped to (", position.x, ", ", position.y, ", ", position.z, ")");
-    }
-    Log::debug("Position x:", position.x, " y:", position.y, " z:", position.z);
+    if (limits.clampHorizontal(vector.x) != vector.x ||
+        limits.clampHeight(vector.y) != vector.y ||
+        limits.clampHorizontal(vector.z) != vector.z)
+        return CommandResult::invalid_input;
+    Log::debug("Position x:", vector.x, " y:", vector.y, " z:", vector.z);
 
     // Normalize yaw into [-pi, pi] so a client cannot store or broadcast
     // unbounded angles (which break client-side orientation math).
@@ -77,16 +70,16 @@ CommandResult ServerImpl::room_player3d_position(const DefaultArgs& args)
     }
     if (!currentRoom->isClientPositionAllowed())
         return CommandResult::invalid_input;
-    if (!currentRoom->canSetPosition3D(user.getId(), position, yaw))
+    if (!currentRoom->canSetPosition3D(user.getId(), vector, yaw))
         return CommandResult::unauthorized;
 
-    user.getObject3D().setPosition(position);
+    user.getObject3D().setPosition(vector);
     user.getObject3D().setYaw(yaw);
 
     std::map<std::string, boost::json::value> params{
-            {"x", boost::json::value(position.x)},
-            {"y", boost::json::value(position.y)},
-            {"z", boost::json::value(position.z)},
+            {"x", boost::json::value(vector.x)},
+            {"y", boost::json::value(vector.y)},
+            {"z", boost::json::value(vector.z)},
             {"yaw", boost::json::value(yaw)}};
 
     auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, args.getData(), params, args.getMessageId());

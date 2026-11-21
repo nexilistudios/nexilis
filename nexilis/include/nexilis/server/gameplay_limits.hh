@@ -29,10 +29,10 @@ namespace nexilis::server
 
 /// Gameplay limits the server enforces on player actions. Every limit
 /// has a default and is configurable through the server's ServerConfig.
-/// Values outside their limits are clamped to the nearest allowed
-/// value; shots that arrive faster than the shooting rate allow are
-/// dropped. Broadcasts that exceed the message length or broadcast
-/// rate limits are rejected.
+/// Direct client positions outside the world bounds are rejected;
+/// movement results, speeds, and damage outside their limits are clamped.
+/// Shots that arrive faster than the shooting rate allows are dropped.
+/// Broadcasts that exceed the message length or rate limits are rejected.
 class GameplayLimits
 {
 public:
