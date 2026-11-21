@@ -36,7 +36,7 @@ TEST(ClientConfigTest_c, PasswordSetGet)
     nexilis_client_config_set_password(config, "my_password");
     char* password = (char*)nexilis_client_config_get_password(config);
     EXPECT_STREQ(password, "my_password");
-    free(password);
+    nexilis_string_free(password);
 
     nexilis_client_config_destroy(config);
 }

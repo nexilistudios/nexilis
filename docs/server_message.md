@@ -63,10 +63,12 @@ The Boost TCP server rejects request payload lengths above `NEXILIS_BUFFER`
 closes the connection. Once frame data is readable, the complete length prefix
 and body must arrive within five seconds; partial reads do not reset this
 deadline. TLS handshakes have a separate five-second deadline. Idle polling
-alone does not close established connections. These limits apply to incoming
-server requests. Client JSON responses are limited to 16 MiB per message
-(excluding the newline delimiter); the Boost TCP receive buffer enforces this
-limit before parsing, and the parser caps nesting at 32 levels.
+alone does not close established connections. A TLS read that completes at the
+poll deadline retains its bytes so the next request frame stays aligned. These
+limits apply to incoming server requests. Client JSON responses are limited to
+16 MiB per message (excluding the newline delimiter); the Boost TCP receive
+buffer enforces this limit before parsing, and the parser caps nesting at 32
+levels.
 
 Boost TCP accepts at most 64 workers waiting for initial authentication or a
 session switch proof, and at most 512 connection workers overall by default.
@@ -308,6 +310,9 @@ payload, protocol)` to send a JSON `room/server_event` message with
 The event is never accepted from a client command and is not added to broadcast
 history. Native clients receive it through `ClientAPI::consumeServerRoomEvents()`;
 the `ServerRoomEvent` contains the room ID, event name, and JSON payload.
+The C API's `nexilis_client_api_drain_game_events` JSON includes these in a
+`server_events` array, separate from the player-authored `chat` array. C# and
+Lua clients expose this array through their JSON event drain methods.
 Applications must choose a protocol with an authenticated server connection and
 validate event names and payloads at their own game boundary. Native clients
 reject `room/communication` messages missing `player_authored: true`.

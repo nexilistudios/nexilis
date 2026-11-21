@@ -39,6 +39,24 @@ namespace Nexilis.Tests
         }
 
         [Fact]
+        public void Utf8PasswordAndAddressRoundTrip()
+        {
+            using var config = new ClientConfig();
+            config.SetPassword("salasana-ä");
+            config.SetBoostTCPAddress("täst.example");
+            Assert.Equal("salasana-ä", config.GetPassword());
+            Assert.Equal("täst.example", config.GetBoostTCPServerAddress());
+        }
+
+        [Fact]
+        public void CredentialsRejectEmbeddedNul()
+        {
+            using var config = new ClientConfig();
+            Assert.Throws<System.ArgumentException>(() => config.SetPassword("pw\0suffix"));
+            Assert.Throws<System.ArgumentException>(() => config.SetAccountCredentials("player", "secret\0suffix"));
+        }
+
+        [Fact]
         public void Mode()
         {
             using var config = new ClientConfig();

@@ -36,6 +36,12 @@ transports are available only in skip mode.
 For servers with account authentication, set `ClientConfig.SetAccountCredentials`
 or `NexilisClient.AccountId` and `AccountCredential` before connecting.
 
+`ClientAPI.DrainGameEventsJson()` includes `server_events` separately from the
+player-authored `chat` array. Each server event has a decimal string `room_id`,
+an `event` name, and a JSON `payload`. Use only `server_events` for authoritative
+game state; chat and broadcast history remain player content. Native strings
+returned through C# getters are copied as UTF-8 and freed through the C API.
+
 For server-authoritative 3D shots, use `NexilisClient.Fire(x, y, z, slot)`.
 The former `Shoot(targetId, damage)` request is rejected by servers.
 

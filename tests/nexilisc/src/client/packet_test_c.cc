@@ -22,6 +22,9 @@
 #include <nexilisc/nx_data_c.h>
 #include <nexilisc/types/vector3_c.h>
 
+#include <boost/json/parse.hpp>
+#include <boost/json/serialize.hpp>
+
 #include <cstring>
 
 class PacketTest_c : public ::testing::Test
@@ -51,6 +54,36 @@ TEST_F(PacketTest_c, GetInfoGeneral)
     EXPECT_NE(packet.data, nullptr);
     EXPECT_GT(nexilis_nx_data_get_size(&packet), 0u);
     nexilis_nx_data_destroy(&packet);
+}
+
+TEST_F(PacketTest_c, DrainSeparatesServerEventsFromPlayerChat)
+{
+    boost::json::object event{{"command", "room"},
+                              {"type", "server_event"},
+                              {"action", "emit"},
+                              {"room_id", 42},
+                              {"event", "score"},
+                              {"payload", boost::json::object{{"points", 7}}}};
+    auto eventJson = boost::json::serialize(event);
+    eventJson.push_back('\n');
+    ASSERT_EQ(client_api->api->readMessage(nexilis::nx_data(eventJson.begin(), eventJson.end())),
+              nexilis::client::ReadResult::success);
+    char* json = nexilis_client_api_drain_game_events(client_api, 0);
+    ASSERT_NE(json, nullptr);
+    auto parsed = boost::json::parse(json).as_object();
+    nexilis_client_api_free_events(json);
+    const auto& events = parsed.at("server_events").as_array();
+    ASSERT_EQ(events.size(), 1);
+    EXPECT_EQ(events[0].as_object().at("room_id").as_string(), "42");
+    EXPECT_EQ(events[0].as_object().at("event").as_string(), "score");
+    EXPECT_EQ(events[0].as_object().at("payload").as_object().at("points").as_int64(), 7);
+    EXPECT_TRUE(parsed.at("chat").as_array().empty());
+
+    json = nexilis_client_api_drain_game_events(client_api, 0);
+    ASSERT_NE(json, nullptr);
+    parsed = boost::json::parse(json).as_object();
+    nexilis_client_api_free_events(json);
+    EXPECT_TRUE(parsed.at("server_events").as_array().empty());
 }
 
 TEST_F(PacketTest_c, GetInfoClients)

@@ -33,6 +33,7 @@ assert(not missing_password_ok)
 assert(#client:packet("info_rooms") > 0)
 assert(#client:rooms() == 0)
 assert(client:room_count() == 0)
+assert(client:drain_events_json():find('"server_events":%[%]') ~= nil)
 
 if arg[1] == "integration" then
     local connected, reason = client:connect()

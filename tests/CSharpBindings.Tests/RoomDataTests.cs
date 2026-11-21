@@ -59,6 +59,13 @@ namespace Nexilis.Tests
         }
 
         [Fact]
+        public void Utf8NameRoundTrips()
+        {
+            using var room = new RoomData(1, "Tähtihuone", RoomContext.ROOM_CONTEXT_3D, 20);
+            Assert.Equal("Tähtihuone", room.Name);
+        }
+
+        [Fact]
         public void CreateWithEmptyNameThrows()
         {
             Assert.Throws<ArgumentException>(() => new RoomData(0, "", RoomContext.ROOM_CONTEXT_2D, 10));

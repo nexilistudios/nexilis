@@ -61,6 +61,8 @@ server to confirm a leave. `client:room(id)`, `client:rooms()`,
 `client:is_initialized()`, and `client:transport_ready("tcp" | "udp")`
 report connection state. Connection and room methods block for their configured
 timeout; call them from a coroutine or worker if the host needs a responsive UI.
+`transport_ready("udp")` reports false when no UDP client was created, as in
+password-protected mode.
 The `on_remote_client_added`, `on_remote_client_removed`, `on_remote_client_position`,
 `on_left_room`, and `on_disconnected` callbacks are optional constructor options.
 
@@ -83,7 +85,9 @@ IDs are LuaJIT `uint64_t` values so the full 64 bit range survives. Pass an ID
 as that value, an exact Lua number up to 2^53 - 1, or a decimal string. Use
 `nexilis.id_string(id)` to print or serialize one. `drain_events_json()`
 returns the native event JSON for damage, respawns, leaderboard, chat, and
-audio. It tracks the chat cursor between calls; pass an explicit cursor to
+audio, plus `server_events` with `room_id` (decimal string), `event`, and
+`payload`. Treat `chat` as player content and use `server_events` for server
+state. It tracks the chat cursor between calls; pass an explicit cursor to
 override it.
 
 `client:close()` stops transports and releases native resources. It is safe to
