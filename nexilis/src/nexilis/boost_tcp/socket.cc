@@ -77,7 +77,10 @@ bool runUntil(boost::asio::io_context& io, boost::asio::ip::tcp::socket& socket,
     io.run();
     if (expiredOut)
         *expiredOut = expired;
-    return !expired && !result;
+    // The deadline and read completion can become ready together. A completed
+    // read has already consumed bytes from the stream; treating it as a
+    // timeout would discard those bytes and desynchronize the next frame.
+    return !result;
 }
 } // namespace
 
