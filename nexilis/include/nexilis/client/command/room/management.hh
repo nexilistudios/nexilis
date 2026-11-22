@@ -89,6 +89,19 @@ public:
             rooms.emplace_back(Room(roomData, std::vector<ClientSession>()));
             return ReadResult::success;
         }
+        else if (m_action == "remove")
+        {
+            const bool wasCurrentRoom = api.getCurrentRoomId() == m_room_id;
+            std::erase_if(rooms, [this](const Room& room)
+                          { return room.getId() == m_room_id; });
+            if (wasCurrentRoom)
+            {
+                api.setRoomId(0);
+                api.setOverLapStatus2D(false);
+            }
+            data.discardRoomEvents(m_room_id, wasCurrentRoom);
+            return ReadResult::success;
+        }
         else if (m_action == "set_overlap")
         {
             api.setOverLapStatus2D(m_overlap_allowed);

@@ -285,6 +285,26 @@ TEST_F(RoomSpecTest, LeaveRemovesClientSessions)
     EXPECT_TRUE(players.empty());
 }
 
+TEST_F(RoomSpecTest, RemoveDropsRoomAndQueuedRoomEventsWithoutRefresh)
+{
+    ASSERT_EQ(readMessage(infoRoomsMessage({CLIENT_A, CLIENT_B})), client::ReadResult::success);
+    api->setRoomId(ROOM_ID);
+    boost::json::object event{{"command", "room"}, {"type", "server_event"}, {"action", "emit"}, {"room_id", ROOM_ID}, {"event", "score"}, {"payload", boost::json::object{}}, {"callback", 0}};
+    ASSERT_EQ(readMessage(event), client::ReadResult::success);
+    event["room_id"] = ROOM_ID + 1;
+    ASSERT_EQ(readMessage(event), client::ReadResult::success);
+
+    ASSERT_EQ(readMessage(roomManagementMessage("remove", CLIENT_A)),
+              client::ReadResult::success);
+    EXPECT_FALSE(api->clientInRoom());
+    EXPECT_EQ(api->getCurrentRoomId(), 0);
+    EXPECT_TRUE(api->getActiveRooms().empty());
+    EXPECT_EQ(api->getRoom(ROOM_ID), nullptr);
+    auto remainingEvents = api->consumeServerRoomEvents();
+    ASSERT_EQ(remainingEvents.size(), 1);
+    EXPECT_EQ(remainingEvents[0].room_id, ROOM_ID + 1);
+}
+
 } // namespace
 
 namespace

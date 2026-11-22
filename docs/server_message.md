@@ -285,8 +285,13 @@ such as `.detach()` or `.join()`.
 Client-requested room removal is disabled by default. A room that wants its
 creator to be able to remove it through `room/management/remove` must call
 `Room::setClientRoomRemovalAllowed(true)`; only the room creator can remove it,
-and applications can still remove rooms directly on the server. Only the room
-creator may change the room-wide overlap setting through
+and applications can still remove rooms directly on the server. The server
+unpublishes an opted-in room, sends a `room/management/remove` response to its
+current members, then clears their room IDs. Clients remove the room and its
+roster, objects, and chat from local state on this response, clear their current
+room ID when it matches, and discard queued events belonging to the room. No
+room-info refresh is needed for connected members that receive the response.
+Only the room creator may change the room-wide overlap setting through
 `room/management/set_overlap`; other members receive an unauthorized result.
 
 Client-requested room creation is denied until the application installs

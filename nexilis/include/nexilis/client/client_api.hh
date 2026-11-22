@@ -540,6 +540,31 @@ public:
             return std::move(m_pendingPlayer2DShootEvents);
         }
 
+        /// Discard queued state belonging to a removed room. Events without a
+        /// room ID belong to the current room because a client joins one room
+        /// at a time.
+        void discardRoomEvents(uint64_t roomId, bool wasCurrentRoom)
+        {
+            std::lock_guard<std::mutex> lock(*m_damageMutex);
+            std::erase_if(m_pendingAnimationEvents,
+                          [roomId](const AnimationEvent& event)
+                          { return event.room_id == roomId; });
+            std::erase_if(m_pendingServerRoomEvents,
+                          [roomId](const ServerRoomEvent& event)
+                          { return event.room_id == roomId; });
+            std::erase_if(m_pendingMatchEvents,
+                          [roomId](const std::unique_ptr<MatchEvent>& event)
+                          { return event && event->room_id == roomId; });
+            if (wasCurrentRoom)
+            {
+                m_pendingDamageEvents.clear();
+                m_pendingRespawnEvents.clear();
+                m_pendingLeaderboardEvents.clear();
+                m_pendingAudioEvents.clear();
+                m_pendingPlayer2DShootEvents.clear();
+            }
+        }
+
     private:
         /// Is the server aware of the client, is "Packet" initialized.
         std::atomic<bool> m_isInitialized{false};
@@ -650,6 +675,12 @@ public:
     void setRoomId(uint64_t id)
     {
         m_clientData.setRoomId(id);
+    }
+
+    /// Last room ID assigned by the server. Zero when no room is current.
+    uint64_t getCurrentRoomId() const
+    {
+        return m_clientData.getRoomId();
     }
 
     /// General.

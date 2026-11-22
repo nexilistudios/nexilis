@@ -55,27 +55,48 @@ CommandResult ServerImpl::room_management_remove(const DefaultArgs& args)
         return CommandResult::unauthorized;
     }
 
-    // Remove all clients from the room first.
+    // Keep the member list while the room is still published. Unpublish it
+    // before notification so no new client can join a room being removed.
     auto roomClients = room->getClients();
-    for (auto clientId : roomClients)
-    {
-        auto client = ClientStorage::getClientById(clientId);
-        if (client)
-        {
-            client->setRoomId(0);
-        }
-    }
-
-    // Atomically remove the registry entry; keep our handle until dispatch ends.
+    const bool actorIsMember = std::find(roomClients.begin(), roomClients.end(),
+                                         args.getUser().getId()) != roomClients.end();
     if (!RoomStorage::remove(roomId))
         return CommandResult::invalid_input;
 
-    std::map<std::string, boost::json::value> params{
-            {"action", boost::json::value("remove")},
-            {"room_id", boost::json::value(roomId)}};
+    auto& user = args.getUser();
+    auto roomCommand = Command::createRoomCommand(roomId, user, args.getData(), {},
+                                                  args.getMessageId());
+    // A peer must not receive the creator's request callback ID.
+    auto peerCommand = Command::createRoomCommand(roomId, user, args.getData(), {}, 0);
+    for (auto clientId : roomClients)
+    {
+        auto storedClient = ClientStorage::getClientById(clientId);
+        User* client = clientId == user.getId() ? &user : storedClient.get();
+        if (client && client->getRoomId() == roomId)
+            Command::sendMessageToClient(clientId == user.getId() ? roomCommand : peerCommand,
+                                         *client, args.getProtocol());
+    }
+    if (!actorIsMember)
+        Command::sendMessageToClient(roomCommand, user, args.getProtocol());
 
-    auto roomCommand = Command::createRoomCommand(roomId, args.getUser(), args.getData(), params, args.getMessageId());
-    Command::sendRoomCommand(roomCommand, args.getUser(), args.getProtocol());
+    // Clear membership after notification, without overwriting a concurrent
+    // transition to another room.
+    for (auto clientId : roomClients)
+    {
+        auto storedClient = ClientStorage::getClientById(clientId);
+        User* client = clientId == user.getId() ? &user : storedClient.get();
+        if (!client)
+            continue;
+        std::lock_guard lock(client->roomTransitionMutex());
+        if (client->getRoomId() == roomId)
+            client->setRoomId(0);
+    }
+    if (!actorIsMember)
+    {
+        std::lock_guard lock(user.roomTransitionMutex());
+        if (user.getRoomId() == roomId)
+            user.setRoomId(0);
+    }
 
     return CommandResult::success;
 }

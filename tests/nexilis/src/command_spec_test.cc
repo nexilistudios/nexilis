@@ -23,6 +23,8 @@
 #include <nexilis/server/room_storage.hh>
 #include <nexilis/util.hh>
 
+#include <boost/json/serialize.hpp>
+
 #include <chrono>
 #include <cstring>
 #include <stdexcept>
@@ -407,6 +409,52 @@ TEST_F(CommandSpecTest, RoomRemovalWorksWhenRoomOptsIn)
     EXPECT_EQ(spec.read(roomRemoveBytes(OVERLAP_ROOM_ID)),
               server::CommandResult::success);
     EXPECT_FALSE(server::RoomStorage::contains(OVERLAP_ROOM_ID));
+}
+
+TEST_F(CommandSpecTest, RoomRemovalNotifiesConnectedPeerAndClearsClientCache)
+{
+    auto room = makeOverlapRoom();
+    room.setClientRoomRemovalAllowed(true);
+    room.joinRoom(spec.user.getId());
+    room.joinRoom(2);
+    ASSERT_TRUE(server::RoomStorage::add(std::move(room)));
+    spec.user.setRoomId(OVERLAP_ROOM_ID);
+
+    std::vector<nx_data> peerMessages;
+    auto peer = std::make_shared<server::User>(2, "127.0.0.2");
+    peer->setRoomId(OVERLAP_ROOM_ID);
+    peer->setBoostTCPSend([&](const nx_data& message)
+                          { peerMessages.push_back(message); });
+    ASSERT_TRUE(server::ClientStorage::add(peer));
+
+    client::ClientAPI peerApi(client::ClientConfig{});
+    peerApi.setClientId(2);
+    peerApi.setRoomId(OVERLAP_ROOM_ID);
+    boost::json::object create{{"command", "room"}, {"type", "management"}, {"action", "create"}, {"room_id", OVERLAP_ROOM_ID}, {"client_id", 1}, {"room_name", "overlap_room"}, {"room_context", 1}, {"callback", 0}};
+    auto deliver = [&](const boost::json::object& message)
+    {
+        auto json = boost::json::serialize(message);
+        nx_data bytes(json.begin(), json.end());
+        bytes.push_back('\n');
+        return peerApi.readMessage(bytes);
+    };
+    ASSERT_EQ(deliver(create), client::ReadResult::success);
+    create["action"] = "join";
+    create["client_id"] = 2;
+    ASSERT_EQ(deliver(create), client::ReadResult::success);
+    ASSERT_TRUE(peerApi.clientInRoom());
+
+    EXPECT_EQ(spec.read(roomRemoveBytes(OVERLAP_ROOM_ID), 17),
+              server::CommandResult::success);
+    EXPECT_FALSE(server::RoomStorage::contains(OVERLAP_ROOM_ID));
+    EXPECT_EQ(spec.user.getRoomId(), 0);
+    EXPECT_EQ(peer->getRoomId(), 0);
+    ASSERT_EQ(peerMessages.size(), 1);
+    EXPECT_EQ(peerApi.readMessage(peerMessages.front()), client::ReadResult::success);
+    EXPECT_FALSE(peerApi.clientInRoom());
+    EXPECT_EQ(peerApi.getCurrentRoomId(), 0);
+    EXPECT_TRUE(peerApi.getActiveRooms().empty());
+    EXPECT_EQ(peerApi.getRoom(OVERLAP_ROOM_ID), nullptr);
 }
 
 TEST_F(CommandSpecTest, RoomCreationRejectsTruncatedAndOversizedRequests)
