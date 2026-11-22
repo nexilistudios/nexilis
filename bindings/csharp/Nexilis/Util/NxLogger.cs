@@ -23,7 +23,7 @@ namespace Nexilis
 public class NxLogger : IDisposable
 {
     // Nexilis logger.
-    static Logger.Logger _logger = new Logger.Logger();
+    readonly Logger.Logger _logger = new Logger.Logger();
 
     // Nexilis logger function handler.
     Logger.FunctionHandler _functionHandler;
@@ -32,6 +32,7 @@ public class NxLogger : IDisposable
     Action<Logger.LogLevel, string>? _logCallback;
 
     readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
+    readonly object _handlerLock = new object();
     bool _disposed = false;
     string _logContext;
 
@@ -43,22 +44,31 @@ public class NxLogger : IDisposable
 
     public void AddHandler(Action<Logger.LogLevel, string> logFunction)
     {
-        _logCallback = logFunction ?? throw new ArgumentNullException(nameof(logFunction));
-
-        try
+        if (logFunction == null) throw new ArgumentNullException(nameof(logFunction));
+        lock (_handlerLock)
         {
-            // Create and register the function handler.
+            if (_disposed) throw new ObjectDisposedException(nameof(NxLogger));
             Action<Logger.LogLevel, string> logCb = (level, msg) =>
             {
                 SafeInvokeLogCallback(level, msg);
             };
-            _functionHandler = new Logger.FunctionHandler(logCb);
-            _logger.AddFunctionHandler(_functionHandler);
-        }
-        catch
-        {
-            _functionHandler?.Dispose();
-            throw;
+            var replacement = new Logger.FunctionHandler(logCb);
+            try
+            {
+                _logger.AddFunctionHandler(replacement);
+            }
+            catch
+            {
+                replacement.Dispose();
+                throw;
+            }
+
+            var previous = _functionHandler;
+            _functionHandler = replacement;
+            _logCallback = logFunction;
+            if (!previous.isEmpty)
+                _logger.RemoveHandler(previous.GetId());
+            previous.Dispose();
         }
     }
 
@@ -155,12 +165,16 @@ public class NxLogger : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-
-        _logger?.RemoveHandler(_functionHandler.GetId());
-        _functionHandler?.Dispose();
-        _logger?.Dispose();
-        _logCallback = null;
+        lock (_handlerLock)
+        {
+            if (_disposed) return;
+            if (!_functionHandler.isEmpty)
+                _logger.RemoveHandler(_functionHandler.GetId());
+            _functionHandler.Dispose();
+            _logger.Dispose();
+            _logCallback = null;
+            _disposed = true;
+        }
     }
 
     private void SafeInvokeLogCallback(Logger.LogLevel level, string message)

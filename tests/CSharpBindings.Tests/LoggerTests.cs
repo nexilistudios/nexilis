@@ -104,6 +104,35 @@ namespace Nexilis.Tests
         }
 
         [Fact]
+        public void FunctionHandlerRetainsIdAfterLoggerTakesOwnership()
+        {
+            using var handler = new Logger.FunctionHandler((_, _) => { });
+            ulong id = handler.GetId();
+
+            _logger.AddFunctionHandler(handler);
+
+            Assert.Equal(id, handler.GetId());
+            _logger.RemoveHandler(id);
+        }
+
+        [Fact]
+        public void NxLoggerReplacesCallbackWithoutLeavingNativeHandler()
+        {
+            using var logger = new NxLogger("replacement");
+            int firstCalls = 0;
+            int secondCalls = 0;
+            logger.Setup((_, _) => firstCalls++);
+            logger.Setup((_, _) => secondCalls++);
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            logger.Debug("message");
+
+            Assert.Equal(0, firstCalls);
+            Assert.Equal(1, secondCalls);
+        }
+
+        [Fact]
         public void MultipleHandlersWithThreads()
         {
             string fileName = GenerateRandomFileName();

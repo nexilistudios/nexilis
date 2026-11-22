@@ -22,6 +22,11 @@ cross-compile binaries. OpenSSL and the C/C++ runtime remain system
 dependencies. On Linux, add `dist/Linux/<arch>/` to the runtime library search
 path if a copied Boost library has further shared-library dependencies.
 
+`NxLogger.Setup` replaces its previous callback, and each `NxLogger` owns its
+native logger. Keep a `Logger.FunctionHandler` alive while its callback is
+registered; after adding it to a `Logger.Logger`, use `GetId()` to remove the
+native handler before disposing the managed wrapper.
+
 To run the C# test project after the native libraries are available, use `make test-csharp`.
 
 Boost TCP clients require the intended server's public-key SHA-256 pin when

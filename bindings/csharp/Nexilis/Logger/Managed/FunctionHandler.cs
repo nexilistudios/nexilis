@@ -23,6 +23,7 @@ namespace Nexilis.Logger
     {
         // Native function handler pointer
         private IntPtr _handlerPtr;
+        private readonly ulong _handlerId;
 
         // Delegate for the callback function
         private readonly Action<LogLevel, string> _function;
@@ -45,6 +46,9 @@ namespace Nexilis.Logger
             _handlerPtr = FunctionHandlerNative.nexilis_logger_FunctionHandler_create(_nativeCallback);
             if (_handlerPtr == IntPtr.Zero)
                 throw new InvalidOperationException("Failed to create native function handler.");
+            // The native logger takes ownership of the C++ handler when it is
+            // added, leaving this wrapper with a null native handler pointer.
+            _handlerId = FunctionHandlerNative.nexilis_logger_FunctionHandler_get_id(_handlerPtr);
         }
 
         /// <summary>
@@ -70,7 +74,7 @@ namespace Nexilis.Logger
             if (_handlerPtr == IntPtr.Zero)
                 throw new ObjectDisposedException(nameof(FunctionHandler));
 
-            return FunctionHandlerNative.nexilis_logger_FunctionHandler_get_id(_handlerPtr);
+            return _handlerId;
         }
 
         // Dispose pattern

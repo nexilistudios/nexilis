@@ -25,23 +25,27 @@ namespace Nexilis.Tests
     public static class TestEnvironment
     {
         static bool _initialized;
+        static readonly object _sync = new object();
 
         public static void Initialize()
         {
-            if (_initialized)
+            lock (_sync)
             {
-                return;
+                if (_initialized)
+                {
+                    return;
+                }
+
+                NativeInterop.InitializeMainThread();
+
+                Action<Logger.LogLevel, string> noop = (_, _) => { };
+                Vector3<float>.InitializeLogger(noop);
+                Vector3<int>.InitializeLogger(noop);
+                Vector3<ulong>.InitializeLogger(noop);
+                NxData.InitializeLogger(noop);
+                Packet.InitializeLogger(noop);
+                _initialized = true;
             }
-            _initialized = true;
-
-            NativeInterop.InitializeMainThread();
-
-            Action<Logger.LogLevel, string> noop = (_, _) => { };
-            Vector3<float>.InitializeLogger(noop);
-            Vector3<int>.InitializeLogger(noop);
-            Vector3<ulong>.InitializeLogger(noop);
-            NxData.InitializeLogger(noop);
-            Packet.InitializeLogger(noop);
         }
     }
 }
