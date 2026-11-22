@@ -228,6 +228,7 @@ file (GLOB_RECURSE NEXILISC_SOURCES
 
 add_library(nexilis SHARED ${NEXILIS_SOURCES})
 add_library(nexilisc SHARED ${NEXILISC_SOURCES})
+target_compile_features(nexilis PUBLIC cxx_std_20)
 
 # Keep sibling libraries discoverable after a Unity build copies them into
 # build_Data/Plugins, without referring back to this machine's build directory.
