@@ -37,11 +37,13 @@ listening on Nexilis's default ports:
 | Native C++ | 55200 | 55201 | 55202 | 55210 | 55211 |
 | Premake | 55300 | 55301 | 55302 | — | — |
 | LuaJIT | 55400 | 55401 | 55402 | — | — |
-| Example runner | 55500 | 55501 | 55502 | — | — |
+| Example runner | 55500 | 55501 | OS-assigned | — | — |
 | C# connection failure test | 55600 | — | — | — | — |
 
 `make test-examples` passes `--test-ports` to examples; running an example
-directly still uses the library defaults. C and Lua clients can set the
-process-wide Boost ports through `nexilis_set_boost_tcp_port`,
+directly still uses the library defaults. The example server asks the OS for a
+free Boost TCP session port and advertises the selected port to its client.
+C and Lua clients can set the process-wide Boost ports through
+`nexilis_set_boost_tcp_port`,
 `nexilis_set_boost_udp_port`, and `nexilis_set_boost_tcp_session_port` before
 constructing transport objects. These setters mirror the C++ `Ports` API.

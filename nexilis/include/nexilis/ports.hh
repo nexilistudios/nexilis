@@ -39,6 +39,8 @@ public:
     static uint16_t getBoostTCPSessionPort();
 
     /// Override the Boost TCP session port for protocols created later.
+    /// Zero asks the server to bind an OS-assigned free port, which it then
+    /// advertises to clients during authentication.
     static void setBoostTCPSessionPort(uint16_t port);
 
     static uint16_t getInetTCPPort();
