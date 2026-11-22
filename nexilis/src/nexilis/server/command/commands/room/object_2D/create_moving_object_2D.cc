@@ -18,6 +18,7 @@
 #include <nexilis/object/object_2d.hh>
 #include <nexilis/server/command/command.hh>
 #include <nexilis/server/command/commands.hh>
+#include <nexilis/server/gameplay_limits.hh>
 #include <nexilis/server/movement.hh>
 #include <nexilis/server/room_limits.hh>
 #include <nexilis/server/room_storage.hh>
@@ -62,6 +63,13 @@ CommandResult ServerImpl::room_object2d_createMoving(const DefaultArgs& args)
         return CommandResult::invalid_input;
 
     if (!room->canCreateObject2D(user.getId(), startingPosition, dimensions, filepath))
+        return CommandResult::unauthorized;
+    const auto& limits = GameplayLimits::get();
+    const Vector2f destination(
+            limits.clampHorizontal(startingPosition.x + static_cast<double>(movement.x)),
+            limits.clampHorizontal(startingPosition.y + static_cast<double>(movement.y)));
+    if (!room->canCreateMovingObject2D(user.getId(), startingPosition, dimensions,
+                                       filepath, movement, deltaTime, movementType, destination))
         return CommandResult::unauthorized;
 
     // Create new object.

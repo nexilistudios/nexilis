@@ -18,6 +18,7 @@
 #define NEXILIS_SERVER_ROOM_HH
 
 #include <nexilis/base_room.hh>
+#include <nexilis/movement_type.hh>
 #include <nexilis/object/object_2d.hh>
 #include <nexilis/object/object_3d.hh>
 #include <nexilis/room_data.hh>
@@ -85,6 +86,14 @@ public:
                                                        const Vector3f& position,
                                                        const Vector3f& dimensions,
                                                        const std::string& filepath)>;
+    using MovingObject2DCreationHandler = std::function<bool(uint64_t playerId,
+                                                             const Vector2f& start, const Vector2f& dimensions, const std::string& filepath,
+                                                             const Vector2f& displacement, float duration, MovementType type,
+                                                             const Vector2f& destination)>;
+    using MovingObject3DCreationHandler = std::function<bool(uint64_t playerId,
+                                                             const Vector3f& start, const Vector3f& dimensions, const std::string& filepath,
+                                                             const Vector3f& displacement, float duration, MovementType type,
+                                                             const Vector3f& destination)>;
     using GameItemCreationHandler = std::function<bool(uint64_t playerId,
                                                        const Vector3f& position,
                                                        const Vector3f& dimensions,
@@ -293,6 +302,19 @@ public:
     void setObject3DCreationHandler(Object3DCreationHandler handler);
     bool canCreateObject3D(uint64_t playerId, const Vector3f& position,
                            const Vector3f& dimensions, const std::string& filepath) const;
+    /// Moving creation also needs a policy for the complete displacement and
+    /// bounded destination. Configure it before accepting room traffic.
+    /// Missing handlers deny moving creation before storage or broadcast.
+    void setMovingObject2DCreationHandler(MovingObject2DCreationHandler handler);
+    bool canCreateMovingObject2D(uint64_t playerId, const Vector2f& start,
+                                 const Vector2f& dimensions, const std::string& filepath,
+                                 const Vector2f& displacement, float duration,
+                                 MovementType type, const Vector2f& destination) const;
+    void setMovingObject3DCreationHandler(MovingObject3DCreationHandler handler);
+    bool canCreateMovingObject3D(uint64_t playerId, const Vector3f& start,
+                                 const Vector3f& dimensions, const std::string& filepath,
+                                 const Vector3f& displacement, float duration,
+                                 MovementType type, const Vector3f& destination) const;
     /// Authorize client moves and deletes of existing objects. Position is the
     /// bounded destination for moves and absent for deletes. Missing handlers deny.
     /// Handlers called during a move must not reenter room resource accessors.
@@ -377,6 +399,8 @@ private:
     GameItemPickupHandler m_gameItemPickupHandler;
     Object2DCreationHandler m_object2DCreationHandler;
     Object3DCreationHandler m_object3DCreationHandler;
+    MovingObject2DCreationHandler m_movingObject2DCreationHandler;
+    MovingObject3DCreationHandler m_movingObject3DCreationHandler;
     GameItemCreationHandler m_gameItemCreationHandler;
     Object2DMutationHandler m_object2DMutationHandler;
     Object3DMutationHandler m_object3DMutationHandler;

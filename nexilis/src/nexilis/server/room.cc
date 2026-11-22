@@ -56,6 +56,8 @@ Room::Room(Room&& other)
       m_gameItemPickupHandler(std::move(other.m_gameItemPickupHandler)),
       m_object2DCreationHandler(std::move(other.m_object2DCreationHandler)),
       m_object3DCreationHandler(std::move(other.m_object3DCreationHandler)),
+      m_movingObject2DCreationHandler(std::move(other.m_movingObject2DCreationHandler)),
+      m_movingObject3DCreationHandler(std::move(other.m_movingObject3DCreationHandler)),
       m_gameItemCreationHandler(std::move(other.m_gameItemCreationHandler)),
       m_object2DMutationHandler(std::move(other.m_object2DMutationHandler)),
       m_object3DMutationHandler(std::move(other.m_object3DMutationHandler)),
@@ -100,6 +102,8 @@ Room& Room::operator=(Room&& other)
         m_gameItemPickupHandler = std::move(other.m_gameItemPickupHandler);
         m_object2DCreationHandler = std::move(other.m_object2DCreationHandler);
         m_object3DCreationHandler = std::move(other.m_object3DCreationHandler);
+        m_movingObject2DCreationHandler = std::move(other.m_movingObject2DCreationHandler);
+        m_movingObject3DCreationHandler = std::move(other.m_movingObject3DCreationHandler);
         m_gameItemCreationHandler = std::move(other.m_gameItemCreationHandler);
         m_object2DMutationHandler = std::move(other.m_object2DMutationHandler);
         m_object3DMutationHandler = std::move(other.m_object3DMutationHandler);
@@ -476,6 +480,32 @@ bool Room::canCreateObject3D(uint64_t playerId, const Vector3f& position,
 {
     return m_object3DCreationHandler &&
            m_object3DCreationHandler(playerId, position, dimensions, filepath);
+}
+void Room::setMovingObject2DCreationHandler(MovingObject2DCreationHandler handler)
+{
+    m_movingObject2DCreationHandler = std::move(handler);
+}
+bool Room::canCreateMovingObject2D(uint64_t playerId, const Vector2f& start,
+                                   const Vector2f& dimensions, const std::string& filepath,
+                                   const Vector2f& displacement, float duration,
+                                   MovementType type, const Vector2f& destination) const
+{
+    return m_movingObject2DCreationHandler &&
+           m_movingObject2DCreationHandler(playerId, start, dimensions, filepath,
+                                           displacement, duration, type, destination);
+}
+void Room::setMovingObject3DCreationHandler(MovingObject3DCreationHandler handler)
+{
+    m_movingObject3DCreationHandler = std::move(handler);
+}
+bool Room::canCreateMovingObject3D(uint64_t playerId, const Vector3f& start,
+                                   const Vector3f& dimensions, const std::string& filepath,
+                                   const Vector3f& displacement, float duration,
+                                   MovementType type, const Vector3f& destination) const
+{
+    return m_movingObject3DCreationHandler &&
+           m_movingObject3DCreationHandler(playerId, start, dimensions, filepath,
+                                           displacement, duration, type, destination);
 }
 void Room::setObject2DMutationHandler(Object2DMutationHandler handler)
 {

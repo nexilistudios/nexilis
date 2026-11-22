@@ -233,6 +233,31 @@ but each static or moving object request also requires the matching
 approve the actor, starting position, dimensions, and asset path against
 server-owned state. A missing or rejecting creation handler denies the request
 before storing or broadcasting the object.
+Moving creation also requires `Room::setMovingObject2DCreationHandler` or
+`Room::setMovingObject3DCreationHandler`. Configure this policy before serving
+room traffic. It receives the actor, start, dimensions, asset path, requested
+displacement, duration, movement type, and final bounded destination. The
+application must validate the whole path, permitted speed (`displacement / duration`),
+destination, ownership, and game rules using server-owned state. An unset or
+rejecting moving creation handler denies the request before storage or broadcast,
+even if the ordinary creation handler accepts the start. The library's world
+clamp is not a game-specific motion or collision rule.
+For example, a 2D game can install a handler before admitting players:
+
+```cpp
+room->setMovingObject2DCreationHandler(
+    [](uint64_t playerId, const Vector2f& start, const Vector2f& dimensions,
+       const std::string& asset, const Vector2f& displacement, float duration,
+       MovementType type, const Vector2f& destination) {
+        // Replace these sample limits with server-owned ownership, map, and
+        // collision checks for the game's actual objects.
+        constexpr float maxSpeed = 10.0f;
+        const float distance = std::hypot(displacement.x, displacement.y);
+        return distance / duration <= maxSpeed &&
+               gameAllowsPath(playerId, start, destination, dimensions, asset, type);
+    });
+```
+
 Moving or deleting an existing object additionally requires the matching
 `Room::setObject2DMutationHandler` or `Room::setObject3DMutationHandler` to
 approve the actor, object ID, action, and bounded destination for moves. A

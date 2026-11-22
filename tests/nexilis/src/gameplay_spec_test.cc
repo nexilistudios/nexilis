@@ -496,6 +496,16 @@ protected:
         room->setObject3DCreationHandler([](uint64_t, const Vector3f&, const Vector3f&,
                                             const std::string&)
                                          { return true; });
+        room->setMovingObject2DCreationHandler([](uint64_t, const Vector2f&,
+                                                  const Vector2f&, const std::string&,
+                                                  const Vector2f&, float, MovementType,
+                                                  const Vector2f&)
+                                               { return true; });
+        room->setMovingObject3DCreationHandler([](uint64_t, const Vector3f&,
+                                                  const Vector3f&, const std::string&,
+                                                  const Vector3f&, float, MovementType,
+                                                  const Vector3f&)
+                                               { return true; });
         room->setObject2DMutationHandler([](uint64_t, uint64_t,
                                             server::Room::ObjectMutation,
                                             const std::optional<Vector2f>&)
@@ -1507,6 +1517,81 @@ TEST(RoomStateTest, DeathHandlerRunsOnPlayerDeath)
 // ---------------------------------------------------------------------------
 // Moving objects (server side)
 // ---------------------------------------------------------------------------
+
+TEST_F(GameplaySpecTest, MovingObjectCreationRequiresMotionPolicyBeforeStorageOrBroadcast)
+{
+    setUpRoom();
+    allowClientObjects();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->setMovingObject2DCreationHandler({});
+    room->setMovingObject3DCreationHandler({});
+    auto targetMessages = receivedMessages(*m_target);
+
+    EXPECT_EQ(read(createMoving2DBytes({1.0f, 2.0f}, {1.0f, 1.0f},
+                                       {1.0f, 0.0f}, 0.1f, MovementType::linear, ""),
+                   *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(read(createMoving3DBytes({1.0f, 2.0f, 3.0f}, {1.0f, 1.0f, 1.0f},
+                                       {1.0f, 0.0f, 0.0f}, 0.1f, MovementType::linear, ""),
+                   *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_TRUE(room->getObjects2D().empty());
+    EXPECT_TRUE(room->getObjects3D().empty());
+    EXPECT_TRUE(targetMessages.empty());
+}
+
+TEST_F(GameplaySpecTest, MovingObjectPolicyCanRejectMotionBeforeStorageOrBroadcast)
+{
+    setUpRoom();
+    allowClientObjects();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    command.getServerConfig().getGameplayLimits().setMaxHorizontalPosition(50.0f);
+    auto targetMessages = receivedMessages(*m_target);
+    int checked2D = 0;
+    int checked3D = 0;
+    room->setMovingObject2DCreationHandler(
+            [&](uint64_t playerId, const Vector2f& start, const Vector2f&,
+                const std::string&, const Vector2f& displacement, float duration,
+                MovementType type, const Vector2f& destination)
+            {
+                ++checked2D;
+                EXPECT_EQ(playerId, SENDER_ID);
+                EXPECT_FLOAT_EQ(start.x, 1.0f);
+                EXPECT_FLOAT_EQ(displacement.x, 100.0f);
+                EXPECT_FLOAT_EQ(duration, 0.25f);
+                EXPECT_EQ(type, MovementType::linear);
+                EXPECT_FLOAT_EQ(destination.x, 50.0f);
+                return false;
+            });
+    room->setMovingObject3DCreationHandler(
+            [&](uint64_t playerId, const Vector3f& start, const Vector3f&,
+                const std::string&, const Vector3f& displacement, float duration,
+                MovementType type, const Vector3f& destination)
+            {
+                ++checked3D;
+                EXPECT_EQ(playerId, SENDER_ID);
+                EXPECT_FLOAT_EQ(start.x, 1.0f);
+                EXPECT_FLOAT_EQ(displacement.x, 100.0f);
+                EXPECT_FLOAT_EQ(duration, 0.25f);
+                EXPECT_EQ(type, MovementType::eased);
+                EXPECT_FLOAT_EQ(destination.x, 50.0f);
+                return false;
+            });
+
+    EXPECT_EQ(read(createMoving2DBytes({1.0f, 2.0f}, {1.0f, 1.0f},
+                                       {100.0f, 0.0f}, 0.25f, MovementType::linear, ""),
+                   *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(read(createMoving3DBytes({1.0f, 2.0f, 3.0f}, {1.0f, 1.0f, 1.0f},
+                                       {100.0f, 0.0f, 0.0f}, 0.25f, MovementType::eased, ""),
+                   *m_sender),
+              server::CommandResult::unauthorized);
+    EXPECT_EQ(checked2D, 1);
+    EXPECT_EQ(checked3D, 1);
+    EXPECT_TRUE(room->getObjects2D().empty());
+    EXPECT_TRUE(room->getObjects3D().empty());
+    EXPECT_TRUE(targetMessages.empty());
+}
 
 TEST_F(GameplaySpecTest, CreateMovingObject2DAddsObjectAndBroadcastsCreate)
 {
