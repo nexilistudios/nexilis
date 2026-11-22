@@ -275,19 +275,6 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                     {
                         blocked = true;
                     }
-                    else if (it == attempts.end() &&
-                             attempts.size() >= kMaxTrackedPassphraseAuthAddresses)
-                    {
-                        std::erase_if(attempts,
-                                      [now](const auto& entry)
-                                      {
-                                          return now - entry.second.firstFailure >= kPassphraseAuthWindow;
-                                      });
-                        if (attempts.size() >= kMaxTrackedPassphraseAuthAddresses)
-                        {
-                            blocked = true;
-                        }
-                    }
                 }
 
                 if (blocked)
@@ -379,12 +366,38 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                         std::lock_guard lock(m_passphraseAuthState->mutex);
                         auto& attempts = m_passphraseAuthState->byAddress;
                         auto it = attempts.find(address);
+                        if (it != attempts.end() &&
+                            now - it->second.firstFailure >= kPassphraseAuthWindow)
+                            it = attempts.erase(it);
                         if (it != attempts.end())
                         {
                             ++it->second.failures;
                         }
                         else
                         {
+                            if (attempts.size() >= kMaxTrackedPassphraseAuthAddresses)
+                                std::erase_if(attempts, [now](const auto& entry)
+                                              { return now - entry.second.firstFailure >= kPassphraseAuthWindow; });
+                            if (attempts.size() >= kMaxTrackedPassphraseAuthAddresses)
+                            {
+                                // Preserve locked addresses when possible. A
+                                // full table must not reject valid credentials
+                                // from an address that has no failure record.
+                                auto oldest = attempts.end();
+                                for (auto candidate = attempts.begin(); candidate != attempts.end(); ++candidate)
+                                {
+                                    if (oldest == attempts.end() ||
+                                        (oldest->second.failures >= kMaxPassphraseAuthFailures &&
+                                         candidate->second.failures < kMaxPassphraseAuthFailures) ||
+                                        ((candidate->second.failures >= kMaxPassphraseAuthFailures) ==
+                                                 (oldest->second.failures >= kMaxPassphraseAuthFailures) &&
+                                         candidate->second.firstFailure < oldest->second.firstFailure))
+                                        oldest = candidate;
+                                }
+                                attempts.erase(oldest);
+                                if (++m_passphraseAuthState->evictions % 256 == 1)
+                                    Log::warning(header(), "Passphrase failure table saturated; evicted an old address");
+                            }
                             attempts.emplace(address, PassphraseAuthState::Attempt{now, 1});
                         }
                     }

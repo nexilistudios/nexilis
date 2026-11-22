@@ -608,6 +608,39 @@ TEST_F(MessageHandlerPasswordProtectedTest, RepeatedFailuresLockOutAddress)
     EXPECT_EQ(other->getType(), server::BaseMessage::Type::auth_message);
 }
 
+TEST_F(MessageHandlerPasswordProtectedTest, FullFailureTableAdmitsNewValidAddress)
+{
+    const auto wrong = Util::convertToByteVector("wrong");
+    const auto correct = Util::convertToByteVector("secret");
+    for (unsigned attempt = 0; attempt < 5; ++attempt)
+        ASSERT_EQ(handler.readMessage("locked-address", wrong, &config)->getType(),
+                  server::BaseMessage::Type::error_message);
+    for (unsigned index = 0; index < 4095; ++index)
+        ASSERT_EQ(handler.readMessage("failed-" + std::to_string(index), wrong, &config)->getType(),
+                  server::BaseMessage::Type::error_message);
+
+    // The table is full, but an address with no failures can still authenticate.
+    auto admitted = handler.readMessage("fresh-valid", correct, &config);
+    ASSERT_NE(admitted, nullptr);
+    EXPECT_EQ(admitted->getType(), server::BaseMessage::Type::auth_message);
+
+    // A new failure gets a bounded record, and the existing lockout survives
+    // eviction while non-blocked records remain available.
+    for (unsigned attempt = 0; attempt < 5; ++attempt)
+        ASSERT_EQ(handler.readMessage("fresh-invalid", wrong, &config)->getType(),
+                  server::BaseMessage::Type::error_message);
+    EXPECT_EQ(handler.readMessage("fresh-invalid", correct, &config)->getType(),
+              server::BaseMessage::Type::error_message);
+    EXPECT_EQ(handler.readMessage("locked-address", correct, &config)->getType(),
+              server::BaseMessage::Type::error_message);
+
+    config.setAccountAuthenticator([](std::string_view account, std::string_view credential)
+                                   { return account == "alice" && credential == "alice-secret"; });
+    auto account = sendAccount("secret", "alice", "alice-secret");
+    ASSERT_NE(account, nullptr);
+    EXPECT_EQ(account->getType(), server::BaseMessage::Type::auth_message);
+}
+
 TEST_F(MessageHandlerPasswordProtectedTest, SuccessfulAuthClearsFailureState)
 {
     for (int i = 0; i < 4; ++i)

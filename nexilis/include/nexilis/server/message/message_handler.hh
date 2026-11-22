@@ -68,6 +68,7 @@ private:
 
         std::mutex mutex;
         std::unordered_map<std::string, Attempt> byAddress;
+        std::size_t evictions = 0;
     };
 
     std::shared_ptr<PassphraseAuthState> m_passphraseAuthState =

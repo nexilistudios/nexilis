@@ -470,11 +470,14 @@ controls at the deployment boundary.
 The initial connection handshake for `password_protected` mode is separately
 rate-limited: five failed passphrase attempts from one source address block
 further handshake attempts from that address for ten minutes, including after a
-reconnect. At most 4096 source addresses are tracked; while that limit is full,
-new addresses are denied handshake attempts. A successful authentication clears
-the recorded failures for the address. Like the root limiter, this state is
-scoped to the server protocol instance and resets when that instance is
-replaced.
+reconnect. At most 4096 source addresses are tracked. A correct passphrase
+from a new address can still authenticate when the table is full. A new failed
+attempt first removes expired records, then evicts the oldest non-blocked
+record, or the oldest blocked record if all are blocked. A successful
+authentication clears the recorded failures for the address. Like the root
+limiter, this state is scoped to the server protocol instance and resets when
+that instance is replaced. Distributed guessing and traffic floods still
+require upstream connection controls.
 
 New registrations in both `skip` and `password_protected` modes are limited to
 20 successful handshakes per source address per minute. Only published clients
