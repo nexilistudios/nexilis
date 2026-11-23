@@ -66,8 +66,8 @@ CommandResult ServerImpl::room_object2d_createMoving(const DefaultArgs& args)
         return CommandResult::unauthorized;
     const auto& limits = GameplayLimits::get();
     const Vector2f destination(
-            limits.clampHorizontal(startingPosition.x + static_cast<double>(movement.x)),
-            limits.clampHorizontal(startingPosition.y + static_cast<double>(movement.y)));
+            limits.clampHorizontal(startingPosition.x + movement.x),
+            limits.clampHorizontal(startingPosition.y + movement.y));
     if (!room->canCreateMovingObject2D(user.getId(), startingPosition, dimensions,
                                        filepath, movement, deltaTime, movementType, destination))
         return CommandResult::unauthorized;
