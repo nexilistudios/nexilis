@@ -48,10 +48,8 @@ CommandResult ServerImpl::room_player3d_setTeam(const DefaultArgs& args)
         return CommandResult::failure;
     }
 
-    if (!room->canSelectTeam(user.getId(), team))
+    if (!room->trySelectTeam(user.getId(), team))
         return CommandResult::invalid_input;
-
-    room->setPlayerTeam(user.getId(), team);
     Log::info("Player ", user.getId(), " [", user.getUsername(), "] joined team ", team);
 
     // Announce the joining player's stats to the whole room so every client

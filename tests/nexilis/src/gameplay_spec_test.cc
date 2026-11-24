@@ -1243,6 +1243,42 @@ TEST_F(GameplaySpecTest, SetTeamUsesServerConfiguredNamesAndRequestedTeamPolicy)
     EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "Blue");
 }
 
+TEST(RoomStateTest, ConcurrentTeamSelectionsRespectServerCapacityPolicy)
+{
+    server::Room room(RoomData(1, "state_room", ROOM_ID));
+    room.joinRoom(SENDER_ID);
+    room.joinRoom(TARGET_ID);
+    room.setAvailableTeams({"Green"});
+    room.setTeamSelectionHandler([&room](uint64_t, const std::string&)
+                                 {
+                                     // A slow policy read makes overlapping approvals observable.
+                                     std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                                     return room.getPlayerTeam(SENDER_ID) != "Green" &&
+                                            room.getPlayerTeam(TARGET_ID) != "Green"; });
+
+    std::atomic<bool> start{false};
+    bool senderAccepted = false;
+    bool targetAccepted = false;
+    std::thread sender([&]
+                       {
+                           while (!start.load())
+                               std::this_thread::yield();
+                           senderAccepted = room.trySelectTeam(SENDER_ID, "Green"); });
+    std::thread target([&]
+                       {
+                           while (!start.load())
+                               std::this_thread::yield();
+                           targetAccepted = room.trySelectTeam(TARGET_ID, "Green"); });
+    start = true;
+    sender.join();
+    target.join();
+
+    EXPECT_NE(senderAccepted, targetAccepted);
+    EXPECT_EQ((room.getPlayerTeam(SENDER_ID) == "Green") +
+                      (room.getPlayerTeam(TARGET_ID) == "Green"),
+              1);
+}
+
 TEST_F(GameplaySpecTest, AvailableTeamsRejectInvalidNames)
 {
     setUpRoom();

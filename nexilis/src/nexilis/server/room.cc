@@ -189,6 +189,7 @@ std::vector<uint64_t> Room::getClients() const
 
 void Room::leaveRoom(uint64_t userId)
 {
+    std::lock_guard selectionLock(m_teamSelectionMutex);
     {
         std::lock_guard lock(m_membershipMutex);
         std::erase(m_clientIds, userId);
@@ -310,6 +311,7 @@ uint64_t Room::getPlayerDeaths(uint64_t clientId) const
 void Room::setPlayerTeam(uint64_t clientId, const std::string& team)
 {
     {
+        std::lock_guard selectionLock(m_teamSelectionMutex);
         std::lock_guard<std::mutex> lock(m_stateMutex);
         m_playerTeams[clientId] = team;
     }
@@ -353,6 +355,7 @@ bool Room::canDamage(uint64_t shooterId, uint64_t targetId) const
 }
 void Room::setTeamSelectionHandler(TeamSelectionHandler handler)
 {
+    std::lock_guard lock(m_teamSelectionMutex);
     m_teamSelectionHandler = std::move(handler);
 }
 void Room::setAvailableTeams(std::vector<std::string> teams)
@@ -365,6 +368,7 @@ void Room::setAvailableTeams(std::vector<std::string> teams)
     std::sort(sorted.begin(), sorted.end());
     if (std::adjacent_find(sorted.begin(), sorted.end()) != sorted.end())
         throw std::invalid_argument("Duplicate team name");
+    std::lock_guard selectionLock(m_teamSelectionMutex);
     std::lock_guard lock(m_stateMutex);
     m_availableTeams = std::move(teams);
 }
@@ -375,6 +379,7 @@ std::vector<std::string> Room::getAvailableTeams() const
 }
 bool Room::canSelectTeam(uint64_t playerId, const std::string& team) const
 {
+    std::lock_guard selectionLock(m_teamSelectionMutex);
     if (!m_teamSelectionHandler)
         return false;
     {
@@ -384,6 +389,29 @@ bool Room::canSelectTeam(uint64_t playerId, const std::string& team) const
             return false;
     }
     return m_teamSelectionHandler(playerId, team);
+}
+bool Room::trySelectTeam(uint64_t playerId, const std::string& team)
+{
+    {
+        std::lock_guard selectionLock(m_teamSelectionMutex);
+        if (!contains(playerId) || !m_teamSelectionHandler)
+            return false;
+        {
+            std::lock_guard stateLock(m_stateMutex);
+            if (std::find(m_availableTeams.begin(), m_availableTeams.end(), team) ==
+                m_availableTeams.end())
+                return false;
+        }
+        if (!m_teamSelectionHandler(playerId, team))
+            return false;
+        {
+            std::lock_guard stateLock(m_stateMutex);
+            m_playerTeams[playerId] = team;
+        }
+    }
+    if (m_teamHandler)
+        m_teamHandler(*this, playerId);
+    return true;
 }
 void Room::setClientPositionAllowed(bool allowed)
 {

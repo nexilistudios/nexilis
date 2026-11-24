@@ -249,9 +249,15 @@ public:
     void setAvailableTeams(std::vector<std::string> teams);
     std::vector<std::string> getAvailableTeams() const;
     /// Client team requests require both a configured name and this handler.
-    /// The handler may veto the proposed team based on match state.
+    /// The handler may veto the proposed team based on match state. It may read
+    /// room state, but must not change team assignments or configuration.
     void setTeamSelectionHandler(TeamSelectionHandler handler);
+    /// Check a request without changing the team. Use trySelectTeam for client
+    /// requests so approval and assignment cannot race with another request.
     bool canSelectTeam(uint64_t playerId, const std::string& team) const;
+    /// Approve and assign a client-requested team as one operation. The policy
+    /// callback may inspect room state, including current team assignments.
+    bool trySelectTeam(uint64_t playerId, const std::string& team);
     /// Allow or disallow direct client position requests
     /// (`room/player_2D/position` and `room/player_3D/position`). Disallowed by default: a game must
     /// explicitly opt in and install a position handler to validate each
@@ -427,6 +433,8 @@ private:
     /// runs one command thread per client, so these shared maps must be
     /// synchronized to avoid races and double-counted kills.
     mutable std::mutex m_stateMutex;
+    /// Serializes client team requests while policy reads current assignments.
+    mutable std::mutex m_teamSelectionMutex;
 
     /// Atomic because movement threads read this while command threads write it.
     std::atomic<bool> m_overlappingAllowed{true};

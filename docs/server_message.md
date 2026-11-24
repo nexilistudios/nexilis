@@ -199,8 +199,14 @@ sets the number of selectable teams; there are no built-in team names or
 two-team limit. Names must be unique, nonempty, at most 64 bytes, and contain
 no NUL. An empty list disables selection. The application must also install
 `Room::setTeamSelectionHandler`; it receives the player ID and requested team
-name and can enforce match state, balance, and switching rules. The server
-rejects names outside the configured list before calling the handler. Clients
+name and must enforce the application's match state, balance, and switching
+rules. The callback can read current assignments with `Room::getPlayerTeam`.
+Client requests are serialized through approval and assignment, so a capacity
+check based on those assignments cannot approve two simultaneous requests for
+the last slot. Configure team names and the handler before serving room traffic;
+the handler should inspect state and return its decision without changing team
+configuration or assignments. The server rejects names outside the configured
+list before calling the handler. Clients
 can request `info_rooms` and read each room's `available_teams` array, exposed
 as `client::Room::getAvailableTeams()`, then send a selected name using
 `room/player_3D/set_team`. The server validates it regardless of client
