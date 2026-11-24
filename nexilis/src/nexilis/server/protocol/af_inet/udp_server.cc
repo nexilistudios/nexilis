@@ -286,12 +286,8 @@ void UDPServer::receiveFromClients()
             }
             if (udp_auth::hasPrefix(buffer, udp_auth::authentication))
             {
-                if (getSettings().getMode() == AuthenticationMode::password_protected)
-                    continue;
-                if (!udp_auth::checkAuthentication(buffer, m_cookieKey, endpointKey, payload))
-                    continue;
-                if (payload.size() >= 8 && ClientStorage::getClientById(Util::uint64FromFront(payload)))
-                    continue;
+                // Never publish a new user's bearer token over plaintext UDP.
+                continue;
             }
             else if (udp_auth::hasPrefix(buffer, udp_auth::session))
             {
@@ -299,7 +295,8 @@ void UDPServer::receiveFromClients()
                     continue;
                 nx_data idBytes(buffer.begin() + 4, buffer.begin() + 12);
                 auto user = ClientStorage::getClientById(Util::uint64FromFront(idBytes));
-                if (!user || !udp_auth::readSession(buffer, user->getUdpToken(), payload))
+                if (!user || !user->hasCommonAccess() || user->getAccountId().empty() ||
+                    !udp_auth::readSession(buffer, user->getUdpToken(), payload))
                     continue;
                 auto bound = m_clientEndpoints.find(user->getId());
                 if (bound != m_clientEndpoints.end() &&

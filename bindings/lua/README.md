@@ -61,8 +61,9 @@ server to confirm a leave. `client:room(id)`, `client:rooms()`,
 `client:is_initialized()`, and `client:transport_ready("tcp" | "udp")`
 report connection state. Connection and room methods block for their configured
 timeout; call them from a coroutine or worker if the host needs a responsive UI.
-`transport_ready("udp")` reports false when no UDP client was created, as in
-password-protected mode.
+`transport_ready("udp")` reports false because the high-level client routes
+gameplay packets over TCP. Advanced callers can create a native Boost UDP
+client after protected TCP authentication.
 The `on_remote_client_added`, `on_remote_client_removed`, `on_remote_client_position`,
 `on_left_room`, and `on_disconnected` callbacks are optional constructor options.
 
@@ -101,10 +102,11 @@ Boost TCP uses certificate-based TLS by default. Set
 through a trusted channel, and set `password` to the server's application
 passphrase. Set `tls = false` only in skip mode when connecting to a server
 that explicitly disables TLS. Password-protected mode requires pinned TLS Boost TCP; the
-high-level Lua client sends packets selected for UDP over TCP in that mode.
+high-level Lua client sends packets selected for UDP over TCP in every mode.
 For protected servers, also pass `account_id` and `account_credential` to
 `nexilis.new`.
-UDP traffic is available only in skip mode and does not use TLS.
+Standalone UDP admission is disabled. Native Boost UDP can attach to an
+account-authenticated TCP session, but gameplay datagrams remain plaintext.
 
 Run the smoke and live server tests with `make test-lua`. This target is part of
 `make test`; `make unit-test` remains C++, C, and C# only.

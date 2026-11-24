@@ -224,12 +224,9 @@ void UDPServer::receiveFromClients()
             }
             if (udp_auth::hasPrefix(received_message, udp_auth::authentication))
             {
-                if (getSettings().getMode() == AuthenticationMode::password_protected)
-                    continue;
-                if (!udp_auth::checkAuthentication(received_message, m_cookieKey, endpointKey, payload))
-                    continue;
-                if (payload.size() >= 8 && ClientStorage::getClientById(Util::uint64FromFront(payload)))
-                    continue;
+                // UDP cannot deliver a bearer token securely. New users must
+                // obtain it through an account-authenticated TLS TCP session.
+                continue;
             }
             else if (udp_auth::hasPrefix(received_message, udp_auth::session))
             {
@@ -237,7 +234,8 @@ void UDPServer::receiveFromClients()
                     continue;
                 nx_data idBytes(received_message.begin() + 4, received_message.begin() + 12);
                 auto user = ClientStorage::getClientById(Util::uint64FromFront(idBytes));
-                if (!user || !udp_auth::readSession(received_message, user->getUdpToken(), payload))
+                if (!user || !user->hasCommonAccess() || user->getAccountId().empty() ||
+                    !udp_auth::readSession(received_message, user->getUdpToken(), payload))
                     continue;
                 auto bound = m_clientEndpoints.find(user->getId());
                 if (bound != m_clientEndpoints.end() && bound->second != senderEndpoint)

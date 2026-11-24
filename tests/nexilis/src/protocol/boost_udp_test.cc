@@ -24,6 +24,7 @@
 #include <nexilis/udp_auth.hh>
 
 #include <boost/asio/ip/udp.hpp>
+#include <boost/json/serialize.hpp>
 
 #include <nexilis/client/protocol/nxboost/udp_client.hh>
 #include <nexilis/server/protocol/nxboost/udp_server.hh>
@@ -56,12 +57,7 @@ protected:
 
         std::this_thread::sleep_for(std::chrono::seconds(1));
 
-        nexilis::client::ClientConfig server_data;
-        server_data.setPassword("salasana");
-        server_data.setBoostUDPAddress("localhost");
-        server_data.setMode(nexilis::server::AuthenticationMode::skip);
-
-        api = std::make_unique<nexilis::client::ClientAPI>(server_data);
+        seedProtectedSession();
         client = std::make_shared<nexilis::client::nxboost::UDPClient>(
                 protocol_manager.createProtocol<nexilis::client::nxboost::UDPClient>(*api));
     }
@@ -90,16 +86,94 @@ protected:
 
     std::shared_ptr<nexilis::server::nxboost::UDPServer> server;
     std::shared_ptr<nexilis::client::nxboost::UDPClient> client;
+
+    void seedProtectedSession()
+    {
+        auto user = std::make_shared<nexilis::server::User>(nexilis::Util::getRandomUint64(),
+                                                            "127.0.0.1", "boost-udp-test");
+        user->setCommonAccess(true);
+        user->claimInitialUdpToken(); // The real session sends this only over TLS TCP.
+        ASSERT_TRUE(nexilis::server::ClientStorage::add(user));
+
+        nexilis::client::ClientConfig config;
+        config.setBoostUDPAddress("localhost");
+        config.setMode(nexilis::server::AuthenticationMode::password_protected);
+        config.setAccountCredentials("boost-udp-test", "test-credential");
+        api = std::make_unique<nexilis::client::ClientAPI>(config);
+        boost::json::object response{{"command", "getting"}, {"type", "client_id"}, {"client_id", user->getId()}, {"udp_token", user->getUdpToken()}, {"callback", 0}};
+        auto json = boost::json::serialize(response) + "\n";
+        ASSERT_EQ(api->readMessage(nexilis::nx_data(json.begin(), json.end())),
+                  nexilis::client::ReadResult::success);
+    }
+
+    void attachClient()
+    {
+        client->start();
+        client->sendMessage(nexilis::client::Packet::Get::General::clientId(*api));
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        auto user = nexilis::server::ClientStorage::getClientById(api->getClientId());
+        while (user && !user->isBoostUDPSet() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        ASSERT_TRUE(user && user->isBoostUDPSet());
+    }
 };
 
 TEST_F(BoostUDPTest, MissingAuthenticationReplyDoesNotBlockForever)
 {
     server->stop();
+    nexilis::client::ClientConfig config;
+    config.setBoostUDPAddress("localhost");
+    config.setMode(nexilis::server::AuthenticationMode::password_protected);
+    config.setAccountCredentials("boost-udp-test", "test-credential");
+    nexilis::client::ClientAPI uninitialized(config);
+    nexilis::client::nxboost::UDPClient withoutTcp(uninitialized);
     const auto started = std::chrono::steady_clock::now();
-    client->start();
+    withoutTcp.start();
     EXPECT_LT(std::chrono::steady_clock::now() - started, std::chrono::seconds(12));
-    EXPECT_FALSE(client->isConnected());
-    EXPECT_EQ(client->getProtocolStatus(), nexilis::client::ProtocolStatus::error);
+    EXPECT_FALSE(withoutTcp.isConnected());
+    EXPECT_EQ(withoutTcp.getProtocolStatus(), nexilis::client::ProtocolStatus::error);
+}
+
+TEST_F(BoostUDPTest, SkipBootstrapCannotPublishToken)
+{
+    nexilis::client::ClientConfig skipConfig;
+    skipConfig.setMode(nexilis::server::AuthenticationMode::skip);
+    skipConfig.setBoostUDPAddress("localhost");
+    nexilis::client::ClientAPI skipApi(skipConfig);
+    nexilis::client::nxboost::UDPClient skipClient(skipApi);
+    skipClient.start();
+    EXPECT_FALSE(skipClient.isConnected());
+    EXPECT_EQ(skipClient.getProtocolStatus(), nexilis::client::ProtocolStatus::error);
+
+    nexilis::server::ClientStorage::clear();
+    boost::asio::io_context context;
+    boost::asio::ip::udp::socket socket(context, boost::asio::ip::udp::v4());
+    socket.non_blocking(true);
+    auto target = boost::asio::ip::udp::endpoint(
+            boost::asio::ip::make_address_v4("127.0.0.1"), server->getPort());
+    auto hello = nexilis::udp_auth::makeHello();
+    socket.send_to(boost::asio::buffer(hello), target);
+
+    nexilis::nx_data response(1024);
+    boost::asio::ip::udp::endpoint sender;
+    std::size_t received = 0;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        boost::system::error_code error;
+        received = socket.receive_from(boost::asio::buffer(response), sender, 0, error);
+        if (!error)
+            break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    ASSERT_EQ(received, 4 + nexilis::udp_auth::cookie_size);
+    nexilis::nx_data cookie(response.begin() + 4, response.begin() + received);
+    nexilis::nx_data skipRequest(16, 0);
+    skipRequest.insert(skipRequest.end(), {1, 0, 0});
+    auto authentication = nexilis::udp_auth::makeAuthentication(cookie, skipRequest);
+    socket.send_to(boost::asio::buffer(authentication), target);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    EXPECT_TRUE(nexilis::server::ClientStorage::getAllClients().empty());
 }
 
 TEST(UdpResponseAuth, RejectsTamperingAndReplay)
@@ -228,7 +302,7 @@ TEST_F(BoostUDPTest, SendMessageAsyncDeliversMessage)
 
 TEST_F(BoostUDPTest, RejectsClientIdFromAnotherEndpoint)
 {
-    client->start();
+    attachClient();
     ASSERT_TRUE(client->isConnected());
     ASSERT_FALSE(api->getUdpToken().empty());
 
@@ -304,15 +378,10 @@ TEST_F(BoostUDPTest, IdleDatagramTransportRemovesUserAndLeavesRoom)
             protocol_manager.createProtocol<nexilis::server::nxboost::UDPServer>(settings));
     server->start();
 
-    nexilis::client::ClientConfig server_data;
-    server_data.setPassword("salasana");
-    server_data.setBoostUDPAddress("localhost");
-    server_data.setMode(nexilis::server::AuthenticationMode::skip);
-
-    api = std::make_unique<nexilis::client::ClientAPI>(server_data);
+    seedProtectedSession();
     client = std::make_shared<nexilis::client::nxboost::UDPClient>(
             protocol_manager.createProtocol<nexilis::client::nxboost::UDPClient>(*api));
-    client->start();
+    attachClient();
 
     const auto connectDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (!client->isConnected() && std::chrono::steady_clock::now() < connectDeadline)
@@ -340,7 +409,7 @@ TEST_F(BoostUDPTest, IdleDatagramTransportRemovesUserAndLeavesRoom)
 
 TEST_F(BoostUDPTest, RetainedCallbackRejectsAfterStopDestructionAndReplacement)
 {
-    client->start();
+    attachClient();
     ASSERT_TRUE(client->isConnected());
     const auto retained = nexilis::server::ClientStorage::getClientById(api->getClientId());
     ASSERT_NE(retained, nullptr);
@@ -358,7 +427,7 @@ TEST_F(BoostUDPTest, DoubleStartAndMovesPreserveLifecycle)
 {
     EXPECT_NO_THROW(server->start());
     EXPECT_THROW(nexilis::server::nxboost::UDPServer(std::move(*server)), std::logic_error);
-    client->start();
+    attachClient();
     ASSERT_TRUE(client->isConnected());
     const auto retained = nexilis::server::ClientStorage::getClientById(api->getClientId());
     ASSERT_NE(retained, nullptr);
@@ -376,7 +445,7 @@ TEST_F(BoostUDPTest, DoubleStartAndMovesPreserveLifecycle)
 
 TEST_F(BoostUDPTest, DestructionSerializesWithConcurrentCallbackSends)
 {
-    client->start();
+    attachClient();
     ASSERT_TRUE(client->isConnected());
     const auto retained = nexilis::server::ClientStorage::getClientById(api->getClientId());
     ASSERT_NE(retained, nullptr);

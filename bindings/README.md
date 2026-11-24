@@ -36,8 +36,8 @@ trusted channel; the connection password alone does not authenticate the
 server. See [TLS transport setup](../docs/server_message.md#tls-transport-and-server-identity).
 
 Password-protected mode requires pinned TLS Boost TCP. The high-level C# client
-sends packets selected for UDP over TCP in that mode. UDP and other plaintext
-transports are available only in skip mode.
+sends packets selected for UDP over TCP. Standalone UDP admission is disabled;
+native Boost UDP can attach to an account-authenticated TCP session.
 Protected servers require account authentication. Set
 `ClientConfig.SetAccountCredentials` or `NexilisClient.AccountId` and
 `AccountCredential` before connecting.

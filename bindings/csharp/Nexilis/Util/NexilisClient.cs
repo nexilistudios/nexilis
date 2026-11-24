@@ -154,7 +154,7 @@ namespace Nexilis.Util
         /// <summary>TCP transport used for reliable room/player management packets.</summary>
         public BoostTCPClient? TcpClient { get; private set; }
 
-        /// <summary>UDP transport in skip mode; absent in password-protected mode.</summary>
+        /// <summary>Optional UDP transport. The high-level client currently routes gameplay over TCP.</summary>
         public BoostUDPClient? UdpClient { get; private set; }
 
         /// <summary>The amount of remote clients currently tracked by <see cref="Update"/>.</summary>
@@ -194,8 +194,6 @@ namespace Nexilis.Util
 
             ClientApi = new ClientAPI(clientConfig);
             TcpClient = new BoostTCPClient(ProtocolManager, ClientApi);
-            if (AuthenticationMode != 2)
-                UdpClient = new BoostUDPClient(ProtocolManager, ClientApi);
 
             Logger.Info("Starting BoostTCP client...");
             bool tcpStarted = await Task.Run(() => TcpClient!.StartClient(ClientApi!));

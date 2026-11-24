@@ -95,6 +95,14 @@ void UDPClient::start()
 {
     // Password-protected sessions are established over pinned TLS Boost TCP;
     // gameplay UDP is authenticated with the per-session token MAC.
+    if (getClientAPI()->getMode() != server::AuthenticationMode::password_protected ||
+        !getClientAPI()->isInitialized() || getClientAPI()->getAccountId().empty() ||
+        getClientAPI()->getUdpToken().empty())
+    {
+        Log::error("Boost UDP requires an established account-authenticated TCP session");
+        updateProtocolStatus(ProtocolStatus::error);
+        return;
+    }
     if (m_stopped->load())
     {
         Log::debug("BoostUDPClient already stopped, cannot start");

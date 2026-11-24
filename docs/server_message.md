@@ -14,7 +14,7 @@ Each TCP and Unix stream request is prefixed with a **4-byte big-endian uint32_t
 [remaining: command bytes + parameters]
 ```
 
-The receiver reads exactly 4 bytes for the length, then exactly that many bytes for the payload. The tag authenticates the client ID, message ID, and complete command using the random per-session `udp_token` key delivered in the initial `client_id` response. The key is never included in later requests. Initial password or `skip` authentication has no session key yet and is the only unsigned request. The server rejects unsigned or incorrectly signed commands before dispatch.
+The receiver reads exactly 4 bytes for the length, then exactly that many bytes for the payload. The tag authenticates the client ID, message ID, and complete command using the random per-session `udp_token` key delivered in the initial `client_id` response. The key is never included in later requests. Initial TCP password or `skip` authentication has no session key yet and is the only unsigned request. The server rejects unsigned or incorrectly signed commands before dispatch.
 
 Password mode requires a stable account identity. Configure
 `ServerConfig::setAccountAuthenticator` with an application callback that
@@ -82,31 +82,27 @@ when no new clients arrive. A connection has 10 seconds to complete its initial
 authentication or session switch proof; established sessions have no such deadline.
 
 UDP messages do not use a length prefix — each datagram is a single message.
-The Boost UDP and af_inet UDP transports add an authentication envelope. A
-new client sends a 20-byte `NXUH` hello and receives a 20-byte `NXUC` cookie
-challenge. It then sends `NXUA`, the 16-byte cookie, and its normal initial
-authentication payload. The cookie is bound to the source IP and port and
-expires after roughly one to two minutes. The server sends no application
-response until the cookie has been returned. A valid `skip`-mode authentication
-response contains a random 16-byte `udp_token` alongside `client_id`. In
-`password_protected` mode, initial UDP authentication is rejected. A session
-established over pinned TLS Boost TCP can subsequently use Boost UDP with its
-session token. Boost UDP traffic is authenticated but remains plaintext.
+The Boost UDP and af_inet UDP transports use an authenticated envelope. Direct
+UDP bootstrap (`NXUA`) is rejected in every mode: the server never sends a
+`client_id` or `udp_token` in an unsigned UDP response. Legacy `NXUH` hello
+packets can still receive an `NXUC` cookie challenge, but presenting the cookie
+cannot create a session. An account-authenticated session established over
+pinned TLS Boost TCP can use Boost UDP with its session token. UDP gameplay
+traffic is authenticated but remains plaintext.
 
 Later requests use `NXUS`, the 8-byte client ID, message ID, a 16-byte MAC tag,
-and command bytes. The server checks the MAC and source
-IP/port before dispatching a command. A skip-mode client obtains its token in
-the `client_id` response and can use it for UDP.
+and command bytes. The server checks the MAC and source IP/port before
+dispatching a command. A UDP user must have a validated account identity and
+common access; skip-mode users cannot attach even if they know their token.
 The 1024-byte receive buffer leaves up to 1004 bytes for the normal request
-payload. Legacy UDP datagrams without this envelope are dropped. UDP remains
-plaintext, so it is unavailable in password-protected mode.
+payload. Legacy UDP datagrams without this envelope are dropped. The Boost UDP
+client requires a protected TCP session before it starts.
 
 After setup, UDP server responses carry `NXUR`, an 8-byte response sequence,
 a 16-byte HMAC-SHA-256 tag, and the JSON payload. The MAC uses the per-session
 token with a response-specific domain label. Clients verify the tag and a
-1024-response replay window before parsing JSON. The initial `skip`-mode
-`client_id` reply is the only unsigned UDP application response because the
-client does not know its token yet.
+1024-response replay window before parsing JSON. There is no unsigned UDP
+application response.
 
 ## Identification (uint64_t)
 

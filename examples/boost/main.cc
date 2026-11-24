@@ -53,10 +53,8 @@ int main(int argc, char** argv)
     auto tcp_server = protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
     tcp_server.start();
 
-    // This separate UDP demonstration uses skip mode because UDP has no TLS.
-    nexilis::server::ServerConfig udp_settings;
-    udp_settings.setMode(nexilis::server::AuthenticationMode::skip);
-    auto udp_server = protocol_manager.createProtocol<nexilis::server::nxboost::UDPServer>(udp_settings);
+    // UDP uses the account session token delivered over pinned TLS TCP.
+    auto udp_server = protocol_manager.createProtocol<nexilis::server::nxboost::UDPServer>(settings);
     udp_server.start();
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -65,6 +63,7 @@ int main(int argc, char** argv)
     nexilis::client::ClientConfig tcp_server_data;
     tcp_server_data.setPassword("salasana");
     tcp_server_data.setBoostTCPAddress("127.0.0.1");
+    tcp_server_data.setBoostUDPAddress("127.0.0.1");
     tcp_server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
     tcp_server_data.setAccountCredentials("demo-player", "demo-credential");
     tcp_server_data.setServerPublicKeySha256(identity.publicKeySha256);
@@ -83,13 +82,7 @@ int main(int argc, char** argv)
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    nexilis::client::ClientConfig udp_server_data;
-    udp_server_data.setPassword("salasana");
-    udp_server_data.setBoostUDPAddress("127.0.0.1");
-    udp_server_data.setMode(nexilis::server::AuthenticationMode::skip);
-
-    nexilis::client::ClientAPI udp_client_api(udp_server_data);
-    auto udp_client = protocol_manager.createProtocol<nexilis::client::nxboost::UDPClient>(udp_client_api);
+    auto udp_client = protocol_manager.createProtocol<nexilis::client::nxboost::UDPClient>(tcp_client_api);
     udp_client.start();
     if (!udp_client.isConnected())
     {

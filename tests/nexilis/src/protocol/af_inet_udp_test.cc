@@ -24,6 +24,8 @@
 #include <nexilis/server/room_storage.hh>
 #include <nexilis/udp_auth.hh>
 
+#include <boost/json/serialize.hpp>
+
 #include <nexilis/client/protocol/af_inet/udp_client.hh>
 #include <nexilis/server/protocol/af_inet/udp_server.hh>
 
@@ -64,13 +66,22 @@ protected:
 
         std::this_thread::sleep_for(std::chrono::seconds(1));
 
+        auto user = std::make_shared<nexilis::server::User>(nexilis::Util::getRandomUint64(),
+                                                            "127.0.0.1", "inet-udp-test");
+        user->setCommonAccess(true);
+        user->claimInitialUdpToken();
+        ASSERT_TRUE(nexilis::server::ClientStorage::add(user));
+
         nexilis::client::ClientConfig server_data;
-        server_data.setPassword("salasana");
         server_data.setInetUDP("127.0.0.1");
         server_data.setInetUDPServerPort(port);
         server_data.setMode(nexilis::server::AuthenticationMode::skip);
 
         api = std::make_unique<nexilis::client::ClientAPI>(server_data);
+        boost::json::object response{{"command", "getting"}, {"type", "client_id"}, {"client_id", user->getId()}, {"udp_token", user->getUdpToken()}, {"callback", 0}};
+        auto json = boost::json::serialize(response) + "\n";
+        ASSERT_EQ(api->readMessage(nexilis::nx_data(json.begin(), json.end())),
+                  nexilis::client::ReadResult::success);
         client = std::make_shared<nexilis::client::af_inet::UDPClient>(
                 protocol_manager.createProtocol<nexilis::client::af_inet::UDPClient>(*api));
     }
@@ -186,6 +197,12 @@ TEST_F(AFInetUDPTest, RejectsClientIdFromAnotherEndpoint)
 {
     startClientAndConnect();
     ASSERT_FALSE(api->getUdpToken().empty());
+    client->sendMessage(nexilis::client::Packet::Get::General::clientId(*api));
+    const auto boundDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    auto user = nexilis::server::ClientStorage::getClientById(api->getClientId());
+    while (user && !user->isInetUDPSet() && std::chrono::steady_clock::now() < boundDeadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    ASSERT_TRUE(user && user->isInetUDPSet());
 
     auto before = nexilis::server::RoomStorage::getAllRooms().size();
     auto beforeClients = nexilis::server::ClientStorage::getAllClients().size();
@@ -247,23 +264,23 @@ struct UDPTestPeer
             return sendto(fd, bytes.data(), bytes.size(), 0,
                           reinterpret_cast<const sockaddr*>(&target), sizeof(target)) == static_cast<ssize_t>(bytes.size());
         };
-        if (!send(nexilis::udp_auth::makeHello()))
+        auto user = std::make_shared<nexilis::server::User>(nexilis::Util::getRandomUint64(),
+                                                            "127.0.0.1", "peer-test");
+        user->setCommonAccess(true);
+        user->claimInitialUdpToken();
+        if (!nexilis::server::ClientStorage::add(user))
+            return {};
+        nexilis::nx_data request = nexilis::Util::convertToByteVector(user->getId());
+        auto messageId = nexilis::Util::convertToByteVector(uint64_t{1});
+        request.insert(request.end(), messageId.begin(), messageId.end());
+        request.insert(request.end(), {static_cast<uint8_t>(nexilis::CommandType::getting), 0, 0});
+        if (!send(nexilis::udp_auth::makeSession(request, user->getUdpToken())))
             return {};
         nexilis::nx_data response(1024);
         auto received = recv(fd, response.data(), response.size(), 0);
-        if (received != 4 + nexilis::udp_auth::cookie_size ||
-            !nexilis::udp_auth::hasPrefix(response, nexilis::udp_auth::challenge))
+        if (received <= 0 || !user->isInetUDPSet())
             return {};
-        nexilis::nx_data cookie(response.begin() + 4, response.begin() + received);
-        nexilis::nx_data skipRequest(16, 0);
-        skipRequest.insert(skipRequest.end(), {1, 0, 0});
-        if (!send(nexilis::udp_auth::makeAuthentication(cookie, skipRequest)))
-            return {};
-        // The authentication reply follows callback installation.
-        if (recv(fd, response.data(), response.size(), 0) <= 0)
-            return {};
-        const auto users = nexilis::server::ClientStorage::getClientsByIpAddress("127.0.0.1");
-        return users.size() == 1 ? users.front() : nullptr;
+        return user;
     }
 
     int fd;
@@ -325,6 +342,7 @@ TEST_F(AFInetUDPTest, PasswordProtectedModeRejectsUdpBootstrap)
 {
     server->stop();
     server.reset();
+    nexilis::server::ClientStorage::clear();
     settings.setMode(nexilis::server::AuthenticationMode::password_protected);
     server = std::make_shared<nexilis::server::af_inet::UDPServer>(
             protocol_manager.createProtocol<nexilis::server::af_inet::UDPServer>(settings, port));
@@ -337,7 +355,16 @@ TEST_F(AFInetUDPTest, PasswordProtectedModeRejectsUdpBootstrap)
     EXPECT_THROW(protectedClient.start(), std::runtime_error);
 
     UDPTestPeer peer;
-    EXPECT_EQ(peer.authenticate(port), nullptr);
+    sockaddr_in target{};
+    target.sin_family = AF_INET;
+    target.sin_port = htons(port);
+    target.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    const auto unauthenticated = nexilis::udp_auth::makeAuthentication(
+            nexilis::nx_data(nexilis::udp_auth::cookie_size, 0), nexilis::nx_data(19, 0));
+    EXPECT_EQ(sendto(peer.fd, unauthenticated.data(), unauthenticated.size(), 0,
+                     reinterpret_cast<const sockaddr*>(&target), sizeof(target)),
+              static_cast<ssize_t>(unauthenticated.size()));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     EXPECT_TRUE(nexilis::server::ClientStorage::getAllClients().empty());
 }
 

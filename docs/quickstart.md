@@ -134,12 +134,14 @@ Things worth knowing before you go further:
 
 ## 5. Other transports
 
-Create a different protocol type on the same `ProtocolManager`:
+After establishing an account-authenticated session over pinned TLS Boost TCP,
+create UDP protocols with that server config and client API:
 
 ```cpp
-auto udp_server = protocol_manager.createProtocol<nexilis::server::nxboost::UDPServer>(settings);
-udp_client_config.setBoostUDPAddress("127.0.0.1");
-auto udp_client = protocol_manager.createProtocol<nexilis::client::nxboost::UDPClient>(udp_api);
+// protected_settings and tcp_api are the config and API used by the TCP session.
+auto udp_server = protocol_manager.createProtocol<nexilis::server::nxboost::UDPServer>(protected_settings);
+// Set the Boost UDP address on tcp_api's ClientConfig before connecting.
+auto udp_client = protocol_manager.createProtocol<nexilis::client::nxboost::UDPClient>(tcp_api);
 ```
 
 Reliable traffic (chat, room management) goes over TCP; position, movement, and
