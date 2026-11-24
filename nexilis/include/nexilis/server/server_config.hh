@@ -89,6 +89,29 @@ public:
         return m_maxClients;
     }
 
+    /// Keep this many client slots for priority accounts. Configure the
+    /// priority predicate before admitting clients; without it, no account
+    /// qualifies for the reserved capacity.
+    void setReservedClientSlots(std::size_t count)
+    {
+        m_reservedClientSlots = count;
+    }
+    std::size_t getReservedClientSlots() const
+    {
+        return m_reservedClientSlots;
+    }
+
+    /// Classify an already authenticated account for reserved-slot admission.
+    using PriorityAccountPredicate = std::function<bool(std::string_view)>;
+    void setPriorityAccountPredicate(PriorityAccountPredicate predicate)
+    {
+        m_priorityAccountPredicate = std::move(predicate);
+    }
+    const PriorityAccountPredicate& getPriorityAccountPredicate() const
+    {
+        return m_priorityAccountPredicate;
+    }
+
     /// Maximum live sessions from one source address. Zero refuses new clients.
     /// Address limits also apply when account authentication is configured.
     void setMaxSessionsPerAddress(std::size_t maximum)
@@ -215,6 +238,8 @@ private:
     AccountAuthenticator m_accountAuthenticator;
     std::size_t m_maxSessionsPerAccount = 1;
     std::size_t m_maxClients = NEXILIS_DEFAULT_MAX_CLIENTS;
+    std::size_t m_reservedClientSlots = 0;
+    PriorityAccountPredicate m_priorityAccountPredicate;
     std::size_t m_maxSessionsPerAddress = 8;
     float m_tickrate = 60.f;
     float m_maxCommandRate = NEXILIS_DEFAULT_MAX_COMMAND_RATE;

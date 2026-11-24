@@ -572,6 +572,33 @@ TEST_F(MessageHandlerPasswordProtectedTest, AccountModeAlsoLimitsSessionsPerAddr
     EXPECT_EQ(server::ClientStorage::getAllClients().size(), 2u);
 }
 
+TEST_F(MessageHandlerPasswordProtectedTest, DistributedAccountsCannotConsumeReservedSlots)
+{
+    config.setMaxClients(4);
+    config.setMaxSessionsPerAddress(1);
+    config.setReservedClientSlots(1);
+    config.setPriorityAccountPredicate([](std::string_view account)
+                                       { return account == "moderator"; });
+    auto connect = [&](const std::string& account)
+    {
+        return handler.readMessage(account, accountPayload("secret", account, account + "-secret"), &config);
+    };
+
+    for (const auto* account : {"alice", "bob", "charlie"})
+        ASSERT_EQ(connect(account)->getType(), server::BaseMessage::Type::auth_message);
+    EXPECT_EQ(connect("dave")->getType(), server::BaseMessage::Type::error_message);
+    EXPECT_EQ(server::ClientStorage::getAllClients().size(), 3u);
+
+    ASSERT_EQ(connect("moderator")->getType(), server::BaseMessage::Type::auth_message);
+    EXPECT_EQ(server::ClientStorage::getAllClients().size(), 4u);
+    EXPECT_EQ(connect("erin")->getType(), server::BaseMessage::Type::error_message);
+
+    const auto alice = server::ClientStorage::getClientsByIpAddress("alice");
+    ASSERT_EQ(alice.size(), 1u);
+    ASSERT_TRUE(server::ClientStorage::remove(alice.front()->getId()));
+    EXPECT_EQ(connect("dave")->getType(), server::BaseMessage::Type::auth_message);
+}
+
 TEST_F(MessageHandlerPasswordProtectedTest, PasswordOnlyAndMissingAuthenticatorRejectAdmission)
 {
     auto result = sendPassword("secret");
@@ -773,6 +800,17 @@ TEST_F(MessageHandlerSkipTest, ConfiguredTotalClientLimitAppliesAcrossAddresses)
     ASSERT_EQ(users.size(), 1u);
     ASSERT_TRUE(server::ClientStorage::remove(users.front()->getId()));
     EXPECT_NE(sendHandshake("address-c"), nullptr);
+    EXPECT_EQ(server::ClientStorage::getAllClients().size(), 2u);
+}
+
+TEST_F(MessageHandlerSkipTest, ReservedSlotsRejectDistributedSkipClients)
+{
+    config.setMaxClients(3);
+    config.setMaxSessionsPerAddress(1);
+    config.setReservedClientSlots(1);
+    EXPECT_NE(sendHandshake("address-a"), nullptr);
+    EXPECT_NE(sendHandshake("address-b"), nullptr);
+    EXPECT_EQ(sendHandshake("address-c"), nullptr);
     EXPECT_EQ(server::ClientStorage::getAllClients().size(), 2u);
 }
 

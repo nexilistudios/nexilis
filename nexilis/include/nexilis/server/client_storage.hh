@@ -35,12 +35,14 @@ public:
     /// A unique_ptr may be moved in and converted to shared ownership.
     static bool add(std::shared_ptr<User> client,
                     std::size_t maximum = maximumClients,
-                    std::size_t maximumPerAddress = maximumClients);
+                    std::size_t maximumPerAddress = maximumClients,
+                    std::size_t reserved = 0);
 
     /// Publish an account user only while its session quota has room.
     static bool addWithAccountLimit(std::shared_ptr<User> client, std::size_t maximumPerAccount,
                                     std::size_t maximum = maximumClients,
-                                    std::size_t maximumPerAddress = maximumClients);
+                                    std::size_t maximumPerAddress = maximumClients,
+                                    std::size_t reserved = 0);
 
     static bool contains(uint64_t id);
 

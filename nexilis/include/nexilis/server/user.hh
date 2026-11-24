@@ -40,7 +40,8 @@ class User : public BaseClient
 {
 public:
     /// Constructor.
-    User(uint64_t id, std::string ip_address, std::string accountId = {});
+    User(uint64_t id, std::string ip_address, std::string accountId = {},
+         bool priorityAdmission = false);
 
     /// Move constructor.
     User(User&& other) noexcept;
@@ -71,6 +72,12 @@ public:
     const std::string& getAccountId() const
     {
         return m_accountId;
+    }
+
+    /// Admission classification fixed when the session is created.
+    bool isPriorityAdmission() const
+    {
+        return m_priorityAdmission;
     }
 
     /// Random per-session capability used to authenticate UDP datagrams.
@@ -395,6 +402,7 @@ private:
     // General
     std::string m_ip_address;
     std::string m_accountId;
+    bool m_priorityAdmission = false;
     std::string m_udpToken;
     std::atomic<bool> m_udpTokenSent{false};
     std::atomic<uint64_t> m_nextUdpResponseId{1};

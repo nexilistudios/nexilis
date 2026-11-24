@@ -27,10 +27,12 @@
 namespace nexilis::server
 {
 
-User::User(uint64_t id, std::string ip_address, std::string accountId)
+User::User(uint64_t id, std::string ip_address, std::string accountId,
+           bool priorityAdmission)
     : BaseClient(id),
       m_ip_address(std::move(ip_address)),
-      m_accountId(std::move(accountId))
+      m_accountId(std::move(accountId)),
+      m_priorityAdmission(priorityAdmission)
 {
     std::array<uint8_t, udp_auth::token_size> token{};
     if (RAND_bytes(token.data(), token.size()) != 1)
@@ -45,6 +47,7 @@ User::User(User&& other) noexcept
     : BaseClient(std::move(other)),
       m_ip_address(std::move(other.m_ip_address)),
       m_accountId(std::move(other.m_accountId)),
+      m_priorityAdmission(other.m_priorityAdmission),
       m_udpToken(std::move(other.m_udpToken)),
       m_udpTokenSent(other.m_udpTokenSent.load()),
       m_nextUdpResponseId(other.m_nextUdpResponseId.load()),
@@ -100,6 +103,7 @@ User& User::operator=(User&& other) noexcept
     {
         m_ip_address = std::move(other.m_ip_address);
         m_accountId = std::move(other.m_accountId);
+        m_priorityAdmission = other.m_priorityAdmission;
         m_udpToken = std::move(other.m_udpToken);
         m_udpTokenSent.store(other.m_udpTokenSent.load());
         m_nextUdpResponseId.store(other.m_nextUdpResponseId.load());

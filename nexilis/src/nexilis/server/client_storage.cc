@@ -26,22 +26,27 @@ std::vector<std::shared_ptr<User>> ClientStorage::m_clients;
 std::mutex ClientStorage::m_mutex;
 
 bool ClientStorage::add(std::shared_ptr<User> client, std::size_t maximum,
-                        std::size_t maximumPerAddress)
+                        std::size_t maximumPerAddress, std::size_t reserved)
 {
     if (!client || maximum == 0 || maximumPerAddress == 0)
         return false;
     std::lock_guard lock(m_mutex);
-    if (m_clients.size() >= std::min(maximum, maximumClients))
+    const auto limit = std::min(maximum, maximumClients);
+    if (m_clients.size() >= limit)
         return false;
     std::size_t sessionsFromAddress = 0;
+    std::size_t generalSessions = 0;
     for (const auto& existing : m_clients)
     {
         if (existing->getId() == client->getId())
             return false;
         if (existing->getIPAddress() == client->getIPAddress())
             ++sessionsFromAddress;
+        if (!existing->isPriorityAdmission())
+            ++generalSessions;
     }
-    if (sessionsFromAddress >= maximumPerAddress)
+    if (sessionsFromAddress >= maximumPerAddress ||
+        (!client->isPriorityAdmission() && generalSessions >= limit - std::min(reserved, limit)))
         return false;
     m_clients.emplace_back(std::move(client));
     return true;
@@ -49,16 +54,18 @@ bool ClientStorage::add(std::shared_ptr<User> client, std::size_t maximum,
 
 bool ClientStorage::addWithAccountLimit(std::shared_ptr<User> client,
                                         std::size_t maximumPerAccount, std::size_t maximum,
-                                        std::size_t maximumPerAddress)
+                                        std::size_t maximumPerAddress, std::size_t reserved)
 {
     if (!client || client->getAccountId().empty() || maximumPerAccount == 0 ||
         maximum == 0 || maximumPerAddress == 0)
         return false;
     std::lock_guard lock(m_mutex);
-    if (m_clients.size() >= std::min(maximum, maximumClients))
+    const auto limit = std::min(maximum, maximumClients);
+    if (m_clients.size() >= limit)
         return false;
     std::size_t sessions = 0;
     std::size_t sessionsFromAddress = 0;
+    std::size_t generalSessions = 0;
     for (const auto& existing : m_clients)
     {
         if (existing->getId() == client->getId())
@@ -67,8 +74,11 @@ bool ClientStorage::addWithAccountLimit(std::shared_ptr<User> client,
             ++sessions;
         if (existing->getIPAddress() == client->getIPAddress())
             ++sessionsFromAddress;
+        if (!existing->isPriorityAdmission())
+            ++generalSessions;
     }
-    if (sessions >= maximumPerAccount || sessionsFromAddress >= maximumPerAddress)
+    if (sessions >= maximumPerAccount || sessionsFromAddress >= maximumPerAddress ||
+        (!client->isPriorityAdmission() && generalSessions >= limit - std::min(reserved, limit)))
         return false;
     m_clients.emplace_back(std::move(client));
     return true;

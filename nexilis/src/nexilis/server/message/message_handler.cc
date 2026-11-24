@@ -135,10 +135,11 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
     auto user = ClientStorage::getClientById(clientId);
     const bool newUser = !user;
     std::string accountId;
+    bool priorityAdmission = false;
     auto createUser = [&]() -> bool
     {
         uint64_t newId = Util::getRandomUint64();
-        user = std::make_shared<User>(newId, address, accountId);
+        user = std::make_shared<User>(newId, address, accountId, priorityAdmission);
         Log::info(header(), "Created new user: ", newId);
         auto username = Util::getRandomString(10);
         user->setUsername(username);
@@ -152,10 +153,12 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                                           return ClientStorage::addWithAccountLimit(
                                                   user, authentication->getMaxSessionsPerAccount(),
                                                   authentication->getMaxClients(),
-                                                  authentication->getMaxSessionsPerAddress());
+                                                  authentication->getMaxSessionsPerAddress(),
+                                                  authentication->getReservedClientSlots());
                                       return ClientStorage::add(
                                               user, authentication->getMaxClients(),
-                                              authentication->getMaxSessionsPerAddress()); });
+                                              authentication->getMaxSessionsPerAddress(),
+                                              authentication->getReservedClientSlots()); });
     };
 
     auto authenticatedMessage = [&]() -> std::unique_ptr<BaseMessage>
@@ -321,6 +324,19 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
 
                 if (accepted)
                 {
+                    if (const auto& predicate = authentication->getPriorityAccountPredicate())
+                    {
+                        try
+                        {
+                            priorityAdmission = predicate(accountId);
+                        }
+                        catch (...)
+                        {
+                            Log::error(header(), "Priority account predicate failed");
+                            return std::make_unique<ErrorMessage>(
+                                    address, ErrorMessage::Type::authentication_error);
+                        }
+                    }
                     if (!createUser())
                         return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::authentication_error);
                     Log::info(header(), "Correct password by user ", user->getId());

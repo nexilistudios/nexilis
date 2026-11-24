@@ -502,6 +502,19 @@ handshakes cannot exceed them. Slots are released when users disconnect, a
 pending handshake expires, or an idle datagram transport expires. Connected
 stream clients remain registered while their connection stays open.
 
+To preserve capacity for selected account holders when clients connect from
+many addresses, configure `ServerConfig::setReservedClientSlots(count)` and
+`ServerConfig::setPriorityAccountPredicate(predicate)` on every server config
+that admits users to the shared registry. The predicate receives an account ID
+only after its private credential has passed the account authenticator. General
+accounts, including skip-mode users, can occupy at most `maxClients - count`
+slots; priority accounts can use the remaining capacity. The reservation is
+zero by default. If no priority predicate is set, no account qualifies for
+the reserved slots. The total and per-account limits still apply, so a
+distributed set of valid priority accounts or an upstream traffic flood can
+still deny admission; deployments must protect those credentials and apply
+upstream connection controls.
+
 `ClientAPI::setMessageEncryption(true)` affects room broadcasts. It does not encrypt othercast or unicast messages. The message key is derived from the password and the room ID; the server holds the password, so this feature does **not** hide message contents from the server.
 
 If encryption is enabled but the password is missing, key derivation fails, or
