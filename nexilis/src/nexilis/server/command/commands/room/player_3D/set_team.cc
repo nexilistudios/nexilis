@@ -35,7 +35,7 @@ CommandResult ServerImpl::room_player3d_setTeam(const DefaultArgs& args)
     auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 3);
     std::string team = Util::convertToString(payload);
 
-    if (team != "Terrorist" && team != "Counter Terrorist")
+    if (team.empty() || team.size() > 64 || team.find('\0') != std::string::npos)
     {
         Log::warning("Set team: Unknown team '", team, "' from user ", user.getId());
         return CommandResult::invalid_input;
@@ -48,7 +48,7 @@ CommandResult ServerImpl::room_player3d_setTeam(const DefaultArgs& args)
         return CommandResult::failure;
     }
 
-    if (!room->canSelectTeam(user.getId()))
+    if (!room->canSelectTeam(user.getId(), team))
         return CommandResult::invalid_input;
 
     room->setPlayerTeam(user.getId(), team);

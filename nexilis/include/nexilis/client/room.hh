@@ -146,6 +146,18 @@ public:
         return m_clients;
     }
 
+    /// Server-advertised names selectable with Packet::Room::Player3D::setTeam.
+    /// The server remains authoritative if this cached list becomes stale.
+    const std::vector<std::string>& getAvailableTeams() const
+    {
+        return m_availableTeams;
+    }
+
+    void setAvailableTeams(std::vector<std::string> teams)
+    {
+        m_availableTeams = std::move(teams);
+    }
+
     void addMessage(Room::Communication&& broadcast)
     {
         m_roomMessages.emplace_back(std::move(broadcast));
@@ -162,6 +174,7 @@ public:
 private:
     /// All of the clients currently inside this room.
     std::vector<ClientSession> m_clients;
+    std::vector<std::string> m_availableTeams;
 
     /// All of the broadcasts that have been sent in this room.
     std::vector<Room::Communication> m_roomMessages;

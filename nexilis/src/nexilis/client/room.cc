@@ -78,6 +78,7 @@ bool operator==(const Room::Communication& lhs, const Room::Communication& rhs)
 Room::Room(const Room& other)
     : BaseRoom(other),
       m_clients(other.m_clients),
+      m_availableTeams(other.m_availableTeams),
       m_roomMessages(other.m_roomMessages)
 {
 }
@@ -85,6 +86,7 @@ Room::Room(const Room& other)
 Room::Room(Room&& other) noexcept
     : BaseRoom(std::move(other)),
       m_clients(std::move(other.m_clients)),
+      m_availableTeams(std::move(other.m_availableTeams)),
       m_roomMessages(std::move(other.m_roomMessages))
 {
 }
@@ -95,6 +97,7 @@ Room& Room::operator=(Room&& other) noexcept
     {
         static_cast<BaseRoom&>(*this) = static_cast<BaseRoom&&>(other);
         m_clients = std::move(other.m_clients);
+        m_availableTeams = std::move(other.m_availableTeams);
         m_roomMessages = std::move(other.m_roomMessages);
     }
     return *this;

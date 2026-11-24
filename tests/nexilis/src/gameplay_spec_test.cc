@@ -23,6 +23,7 @@
 #include <nexilis/server/gameplay_limits.hh>
 #include <nexilis/server/movement.hh>
 #include <nexilis/server/room_storage.hh>
+#include <nexilis/server/server_json.hh>
 
 #include <boost/json/serialize.hpp>
 
@@ -1183,7 +1184,8 @@ TEST_F(GameplaySpecTest, SetTeamValidatesTeamValueAndStoresIt)
 {
     setUpRoom();
     auto room = server::RoomStorage::getRoomById(ROOM_ID);
-    room->setTeamSelectionHandler([](uint64_t)
+    room->setAvailableTeams({"Terrorist", "Counter Terrorist"});
+    room->setTeamSelectionHandler([](uint64_t, const std::string&)
                                   { return true; });
 
     ASSERT_EQ(read(setTeamBytes("Terrorist"), *m_sender), server::CommandResult::success);
@@ -1197,16 +1199,17 @@ TEST_F(GameplaySpecTest, SetTeamRequiresApplicationApproval)
 {
     setUpRoom();
     auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->setAvailableTeams({"Terrorist", "Counter Terrorist"});
 
     EXPECT_EQ(read(setTeamBytes("Terrorist"), *m_sender), server::CommandResult::invalid_input);
     EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "");
 
-    room->setTeamSelectionHandler([](uint64_t)
+    room->setTeamSelectionHandler([](uint64_t, const std::string&)
                                   { return false; });
     EXPECT_EQ(read(setTeamBytes("Terrorist"), *m_sender), server::CommandResult::invalid_input);
     EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "");
 
-    room->setTeamSelectionHandler([](uint64_t playerId)
+    room->setTeamSelectionHandler([](uint64_t playerId, const std::string&)
                                   { return playerId == SENDER_ID; });
     EXPECT_EQ(read(setTeamBytes("Terrorist"), *m_sender), server::CommandResult::success);
     EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "Terrorist");
@@ -1215,11 +1218,77 @@ TEST_F(GameplaySpecTest, SetTeamRequiresApplicationApproval)
     EXPECT_EQ(room->getPlayerTeam(TARGET_ID), "");
 }
 
+TEST_F(GameplaySpecTest, SetTeamUsesServerConfiguredNamesAndRequestedTeamPolicy)
+{
+    setUpRoom();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->setTeamSelectionHandler([](uint64_t, const std::string&)
+                                  { return true; });
+
+    // A callback alone cannot enable names the server has not configured.
+    EXPECT_EQ(read(setTeamBytes("Red"), *m_sender), server::CommandResult::invalid_input);
+    room->setAvailableTeams({"Red", "Blue", "Green"});
+    EXPECT_EQ(room->getAvailableTeams().size(), 3);
+    ASSERT_EQ(read(setTeamBytes("Green"), *m_sender), server::CommandResult::success);
+    EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "Green");
+    EXPECT_EQ(read(setTeamBytes("Terrorist"), *m_sender),
+              server::CommandResult::invalid_input);
+    EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "Green");
+
+    room->setTeamSelectionHandler([](uint64_t, const std::string& requestedTeam)
+                                  { return requestedTeam == "Blue"; });
+    EXPECT_EQ(read(setTeamBytes("Red"), *m_sender), server::CommandResult::invalid_input);
+    EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "Green");
+    ASSERT_EQ(read(setTeamBytes("Blue"), *m_sender), server::CommandResult::success);
+    EXPECT_EQ(room->getPlayerTeam(SENDER_ID), "Blue");
+}
+
+TEST_F(GameplaySpecTest, AvailableTeamsRejectInvalidNames)
+{
+    setUpRoom();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->setAvailableTeams({"Red", "Blue"});
+    EXPECT_THROW(room->setAvailableTeams({"Red", "Red"}), std::invalid_argument);
+    EXPECT_THROW(room->setAvailableTeams({""}), std::invalid_argument);
+    EXPECT_THROW(room->setAvailableTeams({std::string(65, 'x')}), std::invalid_argument);
+    EXPECT_THROW(room->setAvailableTeams({std::string("Red\0Blue", 8)}),
+                 std::invalid_argument);
+    EXPECT_EQ(room->getAvailableTeams(), (std::vector<std::string>{"Red", "Blue"}));
+}
+
+TEST_F(GameplaySpecTest, RoomInfoAdvertisesConfiguredTeams)
+{
+    setUpRoom();
+    auto room = server::RoomStorage::getRoomById(ROOM_ID);
+    room->setAvailableTeams({"Red", "Blue", "Green"});
+    auto info = server::ServerJson::getRoomData();
+    const auto& teams = info.at("rooms").as_array().front().as_object().at("available_teams").as_array();
+    ASSERT_EQ(teams.size(), 3);
+    EXPECT_EQ(teams[0].as_string(), "Red");
+    EXPECT_EQ(teams[1].as_string(), "Blue");
+    EXPECT_EQ(teams[2].as_string(), "Green");
+}
+
+TEST(TeamDiscoveryTest, ClientReadsServerAdvertisedTeams)
+{
+    client::ClientAPI api(client::ClientConfig{});
+    auto message = infoRoomsMessage();
+    auto& room = message["rooms"].as_array().front().as_object();
+    room["available_teams"] = boost::json::array{"Red", "Blue", "Green"};
+    ASSERT_EQ(readClientMessage(api, message), client::ReadResult::success);
+    const auto cached = api.getRoom(ROOM_ID);
+    ASSERT_NE(cached, nullptr);
+    EXPECT_EQ(cached->getAvailableTeams(),
+              (std::vector<std::string>{"Red", "Blue", "Green"}));
+}
+
 TEST_F(GameplaySpecTest, SetTeamAnnouncesLeaderboardToRoomAndSeedsJoiner)
 {
     setUpRoom();
-    server::RoomStorage::getRoomById(ROOM_ID)->setTeamSelectionHandler(
-            [](uint64_t)
+    auto configuredRoom = server::RoomStorage::getRoomById(ROOM_ID);
+    configuredRoom->setAvailableTeams({"Terrorist", "Counter Terrorist"});
+    configuredRoom->setTeamSelectionHandler(
+            [](uint64_t, const std::string&)
             { return true; });
     m_sender->setUsername("shooters");
 

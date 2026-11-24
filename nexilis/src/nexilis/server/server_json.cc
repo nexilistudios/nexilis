@@ -142,6 +142,10 @@ boost::json::array ServerJson::roomsToJSON(const std::vector<std::shared_ptr<Roo
         roomObj["max_size"] = room->getMaxSize();
         roomObj["room_id"] = room->getId();
         roomObj["creator_id"] = room->getCreatorId();
+        boost::json::array availableTeams;
+        for (const auto& team : room->getAvailableTeams())
+            availableTeams.emplace_back(team);
+        roomObj["available_teams"] = std::move(availableTeams);
         auto ctx = room->getContext();
         roomObj["context"] = static_cast<uint32_t>(ctx);
 

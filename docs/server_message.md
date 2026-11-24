@@ -195,10 +195,20 @@ valid hit does not damage anyone. Rooms without a shot handler reject shot reque
 Damage also requires an application-installed combat handler to approve the
 server-resolved shooter and target. Rooms without a combat handler deny damage.
 
-Client team selection requests are rejected by default. An application must install
-`Room::setTeamSelectionHandler` to allow them; the handler can reject a player based
-on match state. The server accepts only the `Terrorist` and `Counter Terrorist`
-team names from clients. An application can set teams directly on the server.
+Client team selection requests are rejected by default. The server application
+sets the selectable names for each room with `Room::setAvailableTeams`, for
+example `room.setAvailableTeams({"Red", "Blue", "Green"})`. The number of names
+sets the number of selectable teams; there are no built-in team names or
+two-team limit. Names must be unique, nonempty, at most 64 bytes, and contain
+no NUL. An empty list disables selection. The application must also install
+`Room::setTeamSelectionHandler`; it receives the player ID and requested team
+name and can enforce match state, balance, and switching rules. The server
+rejects names outside the configured list before calling the handler. Clients
+can request `info_rooms` and read each room's `available_teams` array, exposed
+as `client::Room::getAvailableTeams()`, then send a selected name using
+`room/player_3D/set_team`. The server validates it regardless of client
+behavior. Applications may set teams directly on the
+server with `Room::setPlayerTeam`.
 
 Client game item creation, status changes, and deletion are disabled by default.
 A room can call `setClientGameItemCreationAllowed(true)` to opt into creation,

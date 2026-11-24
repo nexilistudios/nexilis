@@ -90,6 +90,19 @@ public:
 
             auto roomData = RoomData(creatorId, name, id, ctx, maxSize);
             newRooms.emplace_back(Room(roomData, std::move(roomClients)));
+            if (const auto* teams = room.as_object().if_contains("available_teams"))
+            {
+                if (!teams->is_array())
+                    return ReadResult::invalid_input;
+                std::vector<std::string> names;
+                for (const auto& team : teams->as_array())
+                {
+                    if (!team.is_string())
+                        return ReadResult::invalid_input;
+                    names.emplace_back(team.as_string().c_str());
+                }
+                newRooms.back().setAvailableTeams(std::move(names));
+            }
 
             // 2D context room cannot have 3D objects.
             if (ctx != RoomData::Context::_2D)

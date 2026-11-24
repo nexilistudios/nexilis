@@ -20,6 +20,9 @@
 #include <nexilis/server/room.hh>
 #include <nexilis/util.hh>
 
+#include <algorithm>
+#include <stdexcept>
+
 namespace nexilis::server
 {
 
@@ -36,6 +39,7 @@ Room::Room(Room&& other)
       m_playerKills(std::move(other.m_playerKills)),
       m_playerDeaths(std::move(other.m_playerDeaths)),
       m_playerTeams(std::move(other.m_playerTeams)),
+      m_availableTeams(std::move(other.m_availableTeams)),
       m_defaultHealth(other.m_defaultHealth),
       m_deathHandler(std::move(other.m_deathHandler)),
       m_admissionHandler(std::move(other.m_admissionHandler)),
@@ -82,6 +86,7 @@ Room& Room::operator=(Room&& other)
         m_playerKills = std::move(other.m_playerKills);
         m_playerDeaths = std::move(other.m_playerDeaths);
         m_playerTeams = std::move(other.m_playerTeams);
+        m_availableTeams = std::move(other.m_availableTeams);
         m_defaultHealth = other.m_defaultHealth;
         m_deathHandler = std::move(other.m_deathHandler);
         m_admissionHandler = std::move(other.m_admissionHandler);
@@ -338,9 +343,35 @@ void Room::setTeamSelectionHandler(TeamSelectionHandler handler)
 {
     m_teamSelectionHandler = std::move(handler);
 }
-bool Room::canSelectTeam(uint64_t playerId) const
+void Room::setAvailableTeams(std::vector<std::string> teams)
 {
-    return m_teamSelectionHandler && m_teamSelectionHandler(playerId);
+    if (std::any_of(teams.begin(), teams.end(), [](const std::string& team)
+                    { return team.empty() || team.size() > 64 ||
+                             team.find('\0') != std::string::npos; }))
+        throw std::invalid_argument("Invalid team name");
+    auto sorted = teams;
+    std::sort(sorted.begin(), sorted.end());
+    if (std::adjacent_find(sorted.begin(), sorted.end()) != sorted.end())
+        throw std::invalid_argument("Duplicate team name");
+    std::lock_guard lock(m_stateMutex);
+    m_availableTeams = std::move(teams);
+}
+std::vector<std::string> Room::getAvailableTeams() const
+{
+    std::lock_guard lock(m_stateMutex);
+    return m_availableTeams;
+}
+bool Room::canSelectTeam(uint64_t playerId, const std::string& team) const
+{
+    if (!m_teamSelectionHandler)
+        return false;
+    {
+        std::lock_guard lock(m_stateMutex);
+        if (std::find(m_availableTeams.begin(), m_availableTeams.end(), team) ==
+            m_availableTeams.end())
+            return false;
+    }
+    return m_teamSelectionHandler(playerId, team);
 }
 void Room::setClientPositionAllowed(bool allowed)
 {

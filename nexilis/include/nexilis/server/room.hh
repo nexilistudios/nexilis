@@ -49,7 +49,7 @@ public:
     using AdmissionHandler = std::function<bool(const User& user)>;
     using ActionHandler = std::function<bool(Room& room, uint64_t playerId, uint8_t action)>;
     using CombatHandler = std::function<bool(uint64_t shooterId, uint64_t targetId)>;
-    using TeamSelectionHandler = std::function<bool(uint64_t playerId)>;
+    using TeamSelectionHandler = std::function<bool(uint64_t playerId, const std::string& team)>;
     using MovementInputHandler = std::function<bool(uint64_t playerId, const Vector3f& input, float yaw)>;
     using Movement2DInputHandler = std::function<bool(uint64_t playerId, const Vector2f& input)>;
     using Position3DHandler = std::function<bool(uint64_t playerId, const Vector3f& position, float yaw)>;
@@ -239,10 +239,15 @@ public:
     /// Validate round state and participants against server-owned state.
     void setCombatHandler(CombatHandler handler);
     bool canDamage(uint64_t shooterId, uint64_t targetId) const;
-    /// Client team requests are rejected until an application handler allows them.
-    /// The handler may veto changes based on the player's match state.
+    /// Set the team names a client may request. Empty by default, so selection
+    /// is disabled until the server application configures a list.
+    /// Names must be unique, nonempty, at most 64 bytes, and contain no NUL.
+    void setAvailableTeams(std::vector<std::string> teams);
+    std::vector<std::string> getAvailableTeams() const;
+    /// Client team requests require both a configured name and this handler.
+    /// The handler may veto the proposed team based on match state.
     void setTeamSelectionHandler(TeamSelectionHandler handler);
-    bool canSelectTeam(uint64_t playerId) const;
+    bool canSelectTeam(uint64_t playerId, const std::string& team) const;
     /// Allow or disallow direct client position requests
     /// (`room/player_2D/position` and `room/player_3D/position`). Disallowed by default: a game must
     /// explicitly opt in and install a position handler to validate each
@@ -379,6 +384,7 @@ private:
     std::unordered_map<uint64_t, uint64_t> m_playerKills;
     std::unordered_map<uint64_t, uint64_t> m_playerDeaths;
     std::unordered_map<uint64_t, std::string> m_playerTeams;
+    std::vector<std::string> m_availableTeams;
     float m_defaultHealth = 100.0f;
     DeathHandler m_deathHandler;
     AdmissionHandler m_admissionHandler;
