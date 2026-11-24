@@ -74,6 +74,7 @@ const char* nexilis_communication_get_payload(const nexilis_Communication* commu
 const nexilis_ClientSession* nexilis_communication_get_client(const nexilis_Communication* communication);
     uint64_t nexilis_communication_get_id(const nexilis_Communication* communication);
     uint64_t nexilis_communication_get_sender_id(const nexilis_Communication* communication);
+bool nexilis_communication_was_replayed(const nexilis_Communication* communication);
 
 #ifdef __cplusplus
 }

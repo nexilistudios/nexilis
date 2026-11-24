@@ -338,8 +338,11 @@ Rooms reject client broadcasts until the application installs
 `Room::setBroadcastHandler` and approves the sender, payload, and encryption
 mode. For encrypted broadcasts, the handler receives base64 ciphertext; an
 application that must inspect content should reject that mode or decrypt with
-its configured password. Approved broadcasts have `player_authored: true` at the top level of
-their JSON messages. Applications must treat the payload as player content;
+its configured password. Approved broadcasts have `player_authored: true` and
+`replayed: false` at the top level of their live JSON messages. Stored messages
+sent on room join have `replayed: true`. Clients treat a missing marker from an
+older server as replayed and reject a marker of the wrong type. Applications
+must treat the payload as player content;
 authoritative game events should use separate server-authored message types.
 The server application can call `Command::sendServerRoomEvent(roomId, event,
 payload, protocol)` to send a JSON `room/server_event` message with
@@ -349,16 +352,22 @@ history. Native clients receive it through `ClientAPI::consumeServerRoomEvents()
 the `ServerRoomEvent` contains the room ID, event name, and JSON payload.
 The C API's `nexilis_client_api_drain_game_events` JSON includes these in a
 `server_events` array, separate from the player-authored `chat` array. C# and
-Lua clients expose this array through their JSON event drain methods.
+Lua clients expose this array through their JSON event drain methods. Each
+`chat` entry also includes `replayed`; native C++ room messages and C/C#
+communication objects expose the same flag.
 Applications must choose a protocol with an authenticated server connection and
 validate event names and payloads at their own game boundary. Native clients
 reject `room/communication` messages missing `player_authored: true`.
-Each room retains at most the 100 most recent broadcasts and replays only those
-to joining clients; this history bound is currently fixed in
-`nexilis_constants.hh`. Encrypted history retains its
+Room broadcast history is disabled by default, so joining clients receive no
+old player messages. Applications that need chat history can call
+`Room::setBroadcastHistoryEnabled(true)` before serving room traffic. An
+enabled room retains at most the 100 most recent broadcasts and replays only
+those to joining clients; this bound is currently fixed in
+`nexilis_constants.hh`. Disabling history clears stored messages. Encrypted history retains its
 `broadcast_encrypted` action so clients decrypt it on replay. Approved
 broadcasts reach every member of the room, including the sender. The server
-does not interpret the payload.
+does not interpret the payload. The replay flag distinguishes history from
+new activity; player-authored content is never an authoritative game event.
 
 `Packet::Room::Player3D::matchAction(api, action)` sends room/player_3D action byte `8` followed by exactly one byte: `0` cancels, `1` begins planting, and `2` begins defusing. The room's application-installed action handler validates the request; rooms without a handler reject it. The server's combat callback must approve hits and can deny participants who are outside an active round. Rooms without a combat callback deny damage.
 

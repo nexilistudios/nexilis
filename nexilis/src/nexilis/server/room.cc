@@ -35,6 +35,7 @@ Room::Room(Room&& other)
     : BaseRoom(std::move(other)),
       m_clientIds(std::move(other.m_clientIds)),
       m_broadcasts(std::move(other.m_broadcasts)),
+      m_broadcastHistoryEnabled(other.m_broadcastHistoryEnabled),
       m_playerHealth(std::move(other.m_playerHealth)),
       m_playerKills(std::move(other.m_playerKills)),
       m_playerDeaths(std::move(other.m_playerDeaths)),
@@ -82,6 +83,7 @@ Room& Room::operator=(Room&& other)
     {
         m_clientIds = std::move(other.m_clientIds);
         m_broadcasts = std::move(other.m_broadcasts);
+        m_broadcastHistoryEnabled = other.m_broadcastHistoryEnabled;
         m_playerHealth = std::move(other.m_playerHealth);
         m_playerKills = std::move(other.m_playerKills);
         m_playerDeaths = std::move(other.m_playerDeaths);
@@ -198,9 +200,19 @@ void Room::leaveRoom(uint64_t userId)
     m_playerTeams.erase(userId);
 }
 
+void Room::setBroadcastHistoryEnabled(bool enabled)
+{
+    std::lock_guard<std::mutex> lock(m_broadcastMutex);
+    m_broadcastHistoryEnabled = enabled;
+    if (!enabled)
+        m_broadcasts.clear();
+}
+
 void Room::addBroadcast(uint64_t clientId, const std::string& message, bool encrypted)
 {
     std::lock_guard<std::mutex> lock(m_broadcastMutex);
+    if (!m_broadcastHistoryEnabled)
+        return;
     if (m_broadcasts.size() >= NEXILIS_MAX_BROADCAST_HISTORY)
         m_broadcasts.pop_front();
     m_broadcasts.emplace_back(Broadcast{clientId, message, encrypted});

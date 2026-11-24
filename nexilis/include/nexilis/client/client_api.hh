@@ -801,6 +801,7 @@ public:
     {
         uint64_t sender_id = 0;
         std::string message;
+        bool replayed = false;
     };
 
     std::vector<ChatSnapshot> getChatSnapshot(uint64_t room_id)
@@ -815,7 +816,8 @@ public:
             const auto& messages = room.getMessages();
             std::transform(messages.begin(), messages.end(), std::back_inserter(result),
                            [](const Room::Communication& communication)
-                           { return ChatSnapshot{communication.getSenderId(), communication.getPayload()}; });
+                           { return ChatSnapshot{communication.getSenderId(), communication.getPayload(),
+                                                 communication.wasReplayed()}; });
             break;
         }
         return result;

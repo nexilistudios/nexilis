@@ -189,6 +189,7 @@ TEST_F(RoomTest_c, CommunicationCreateAndPayload)
     const char* payload = nexilis_communication_get_payload(comm);
     ASSERT_NE(payload, nullptr);
     EXPECT_STREQ(payload, "hello world");
+    EXPECT_FALSE(nexilis_communication_was_replayed(comm));
     free((void*)payload);
 
     nexilis_communication_destroy(comm);
@@ -258,6 +259,17 @@ TEST_F(RoomTest_c, CommunicationGetMessages)
     free((void*)payload);
 
     nexilis_room_free_message_array(messages, num_messages);
+}
+
+TEST_F(RoomTest_c, CommunicationReplayMarker)
+{
+    room->room->addMessage(nexilis::client::Room::Communication("old chat", nullptr, true));
+    size_t count = 0;
+    nexilis_Communication** messages = nexilis_room_get_messages(room, &count);
+    ASSERT_NE(messages, nullptr);
+    ASSERT_EQ(count, 1u);
+    EXPECT_TRUE(nexilis_communication_was_replayed(messages[0]));
+    nexilis_room_free_message_array(messages, count);
 }
 
 TEST_F(RoomTest_c, CommunicationGetMessagesEmpty)

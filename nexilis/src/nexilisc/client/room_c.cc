@@ -326,3 +326,9 @@ uint64_t nexilis_communication_get_sender_id(const nexilis_Communication* commun
         return 0;
     return communication->communication->getSenderId();
 }
+
+bool nexilis_communication_was_replayed(const nexilis_Communication* communication)
+{
+    return communication && communication->communication &&
+           communication->communication->wasReplayed();
+}

@@ -35,7 +35,7 @@ public:
     public:
         /// Constructor.
         /// \param payload The data for the Communication messages.
-        Communication(const std::string& payload, ClientSession* sender);
+        Communication(const std::string& payload, ClientSession* sender, bool replayed = false);
 
         /// Copy constructor.
         Communication(const Communication& other);
@@ -75,6 +75,12 @@ public:
             return m_senderId;
         }
 
+        /// True when the server sent this stored message on room join.
+        bool wasReplayed() const
+        {
+            return m_replayed;
+        }
+
         uint64_t getId() const
         {
             return m_id;
@@ -87,6 +93,7 @@ public:
         /// The id of the message.
         std::shared_ptr<const ClientSession> m_client;
         uint64_t m_senderId;
+        bool m_replayed = false;
 
         /// The id of the message.
         uint64_t m_id;

@@ -298,12 +298,22 @@ std::unique_ptr<BaseAPICommand> CommandParser::parseRoomCommand(const boost::jso
     }
     else if (type == "communication")
     {
-        if ((action == "broadcast" || action == "broadcast_encrypted") &&
-            (!json.contains("player_authored") || !json.at("player_authored").is_bool() ||
-             !json.at("player_authored").as_bool()))
-            return makeError(ReadResult::parsing_failed, "unmarked player communication");
+        bool replayed = false;
+        if (action == "broadcast" || action == "broadcast_encrypted")
+        {
+            if (!json.contains("player_authored") || !json.at("player_authored").is_bool() ||
+                !json.at("player_authored").as_bool())
+                return makeError(ReadResult::parsing_failed, "unmarked player communication");
+            replayed = true;
+            if (json.contains("replayed"))
+            {
+                if (!json.at("replayed").is_bool())
+                    return makeError(ReadResult::parsing_failed, "invalid replay marker");
+                replayed = json.at("replayed").as_bool();
+            }
+        }
         return std::make_unique<RoomCommunicationCommand>(action, room_id, client_id,
-                                                          getString(json, "message"));
+                                                          getString(json, "message"), replayed);
     }
 
     return makeError<>(ReadResult::parsing_failed, "cannot find room command type");

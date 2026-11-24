@@ -19,10 +19,11 @@
 namespace nexilis::client
 {
 
-Room::Communication::Communication(const std::string& payload, ClientSession* client)
+Room::Communication::Communication(const std::string& payload, ClientSession* client, bool replayed)
     : m_payload(payload),
       m_client(client ? std::make_shared<ClientSession>(*client) : nullptr),
       m_senderId(client ? client->getId() : 0),
+      m_replayed(replayed),
       m_id(Util::getRandomUint64())
 {
 }
@@ -31,6 +32,7 @@ Room::Communication::Communication(const Communication& other)
     : m_payload(other.m_payload),
       m_client(other.m_client),
       m_senderId(other.m_senderId),
+      m_replayed(other.m_replayed),
       m_id(other.m_id)
 {
 }
@@ -42,6 +44,7 @@ Room::Communication& Room::Communication::operator=(const Communication& other)
         m_payload = other.m_payload;
         m_client = other.m_client;
         m_senderId = other.m_senderId;
+        m_replayed = other.m_replayed;
         m_id = other.m_id;
     }
     return *this;
@@ -51,6 +54,7 @@ Room::Communication::Communication(Communication&& other)
     : m_payload(std::move(other.m_payload)),
       m_client(std::move(other.m_client)),
       m_senderId(other.m_senderId),
+      m_replayed(other.m_replayed),
       m_id(std::move(other.m_id))
 
 {
@@ -63,6 +67,7 @@ Room::Communication& Room::Communication::operator=(Communication&& other)
         m_payload = std::move(other.m_payload);
         m_client = std::move(other.m_client);
         m_senderId = other.m_senderId;
+        m_replayed = other.m_replayed;
         m_id = std::move(other.m_id);
     }
     return *this;
@@ -72,6 +77,7 @@ bool operator==(const Room::Communication& lhs, const Room::Communication& rhs)
 {
     return lhs.getPayload() == rhs.getPayload() &&
            lhs.getClient() == rhs.getClient() &&
+           lhs.wasReplayed() == rhs.wasReplayed() &&
            lhs.getId() == rhs.getId();
 }
 

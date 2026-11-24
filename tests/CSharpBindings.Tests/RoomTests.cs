@@ -233,6 +233,7 @@ namespace Nexilis.Tests
             // Ids are generated at construction time.
             Assert.NotEqual(0ul, comm.GetId());
             Assert.Equal("hello world", comm.GetPayload());
+            Assert.False(comm.WasReplayed());
         }
 
         [Fact]

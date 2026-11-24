@@ -386,7 +386,8 @@ char* nexilis_client_api_drain_game_events(nexilis_ClientAPI* client_api, size_t
     auto messages = client_api->api->getChatSnapshot(client_api->api->clientRoomId());
     for (size_t i = chat_since; i < messages.size(); ++i)
         chat.emplace_back(boost::json::object{{"sender", std::to_string(messages[i].sender_id)},
-                                              {"message", messages[i].message}});
+                                              {"message", messages[i].message},
+                                              {"replayed", messages[i].replayed}});
     root["chat"] = std::move(chat);
     root["chatTotal"] = messages.size();
     auto serialized = boost::json::serialize(root);

@@ -183,8 +183,12 @@ public:
     /// Return a stable snapshot of member IDs.
     std::vector<uint64_t> getClients() const;
 
-    /// Store a broadcast message in the room. Only the most recent
-    /// NEXILIS_MAX_BROADCAST_HISTORY messages are retained.
+    /// Enable storage and join replay of player broadcasts. Disabled by
+    /// default; disabling it also clears any stored messages.
+    void setBroadcastHistoryEnabled(bool enabled);
+
+    /// Store a broadcast message when history is enabled. Only the most
+    /// recent NEXILIS_MAX_BROADCAST_HISTORY messages are retained.
     /// \param clientId The id of the user that sent the message.
     /// \param message The payload of the message.
     void addBroadcast(uint64_t clientId, const std::string& message, bool encrypted = false);
@@ -380,6 +384,7 @@ private:
     mutable std::mutex m_admissionMutex;
     mutable std::mutex m_broadcastMutex;
     std::deque<Broadcast> m_broadcasts;
+    bool m_broadcastHistoryEnabled = false;
     std::unordered_map<uint64_t, float> m_playerHealth;
     std::unordered_map<uint64_t, uint64_t> m_playerKills;
     std::unordered_map<uint64_t, uint64_t> m_playerDeaths;

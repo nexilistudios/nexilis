@@ -64,6 +64,8 @@ timeout; call them from a coroutine or worker if the host needs a responsive UI.
 `transport_ready("udp")` reports false because the high-level client routes
 gameplay packets over TCP. Advanced callers can create a native Boost UDP
 client after protected TCP authentication.
+Chat entries from `drain_events` include `replayed`, which is true for stored
+messages delivered on room join. Both live and replayed chat are player content.
 The `on_remote_client_added`, `on_remote_client_removed`, `on_remote_client_position`,
 `on_left_room`, and `on_disconnected` callbacks are optional constructor options.
 

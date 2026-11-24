@@ -28,8 +28,10 @@ namespace nexilis::client
 class RoomCommunicationCommand : public BaseAPICommand
 {
 public:
-    RoomCommunicationCommand(std::string action, uint64_t room_id, uint64_t client_id, const std::string& message)
-        : m_action(action), m_room_id(room_id), m_client_id(client_id), m_message(message)
+    RoomCommunicationCommand(std::string action, uint64_t room_id, uint64_t client_id,
+                             const std::string& message, bool replayed = false)
+        : m_action(action), m_room_id(room_id), m_client_id(client_id),
+          m_message(message), m_replayed(replayed)
     {
     }
 
@@ -69,7 +71,7 @@ public:
 
                 if (room->getId() == m_room_id)
                 {
-                    Room::Communication newMessage(payload, sender);
+                    Room::Communication newMessage(payload, sender, m_replayed);
                     [[maybe_unused]] auto message_id = newMessage.getId();
                     room->addMessage(std::move(newMessage));
 
@@ -92,6 +94,7 @@ private:
     uint64_t m_room_id;
     uint64_t m_client_id;
     std::string m_message;
+    bool m_replayed = false;
 };
 
 } // namespace nexilis::client

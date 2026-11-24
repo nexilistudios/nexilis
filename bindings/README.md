@@ -38,6 +38,8 @@ server. See [TLS transport setup](../docs/server_message.md#tls-transport-and-se
 Password-protected mode requires pinned TLS Boost TCP. The high-level C# client
 sends packets selected for UDP over TCP. Standalone UDP admission is disabled;
 native Boost UDP can attach to an account-authenticated TCP session.
+Room chat entries expose a `replayed` flag so applications can distinguish
+stored messages sent on join from live player broadcasts. Treat both as player content.
 Protected servers require account authentication. Set
 `ClientConfig.SetAccountCredentials` or `NexilisClient.AccountId` and
 `AccountCredential` before connecting.

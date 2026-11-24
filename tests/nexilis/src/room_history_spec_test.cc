@@ -74,6 +74,7 @@ protected:
         server::ClientStorage::clear();
 
         server::RoomStorage::add(server::Room(RoomData(SENDER_ID, "history_room", ROOM_ID)));
+        server::RoomStorage::getRoomById(ROOM_ID)->setBroadcastHistoryEnabled(true);
         server::RoomStorage::getRoomById(ROOM_ID)->setAdmissionHandler(
                 [](const server::User&)
                 { return true; });
@@ -163,6 +164,34 @@ TEST_F(RoomHistorySpecTest, BroadcastIsStoredInRoom)
     EXPECT_EQ(broadcasts[0].message, message);
 }
 
+TEST_F(RoomHistorySpecTest, BroadcastHistoryRequiresExplicitOptIn)
+{
+    server::Room fresh(RoomData(SENDER_ID, "fresh", ROOM_ID + 1));
+    fresh.addBroadcast(SENDER_ID, "not retained");
+    EXPECT_TRUE(fresh.getBroadcasts().empty());
+
+    room()->setBroadcastHistoryEnabled(false);
+    room()->joinRoom(SENDER_ID);
+    user(SENDER_ID)->setRoomId(ROOM_ID);
+    auto replayMessages = receivedMessages(JOINER_ID);
+    EXPECT_EQ(command.read(broadcastBytes("live only"), *user(SENDER_ID), protocol, 1),
+              server::CommandResult::success);
+    EXPECT_TRUE(room()->getBroadcasts().empty());
+    ASSERT_EQ(command.read(joinBytes(), *user(JOINER_ID), protocol, 2),
+              server::CommandResult::success);
+    EXPECT_EQ(std::count_if(replayMessages.begin(), replayMessages.end(),
+                            [](const auto& message)
+                            { return message.contains("type") &&
+                                     message.at("type").as_string() == "communication"; }),
+              0);
+
+    room()->setBroadcastHistoryEnabled(true);
+    room()->addBroadcast(SENDER_ID, "retained");
+    ASSERT_EQ(room()->getBroadcasts().size(), 1u);
+    room()->setBroadcastHistoryEnabled(false);
+    EXPECT_TRUE(room()->getBroadcasts().empty());
+}
+
 TEST_F(RoomHistorySpecTest, BroadcastRequiresRoomApproval)
 {
     room()->joinRoom(SENDER_ID);
@@ -183,6 +212,7 @@ TEST_F(RoomHistorySpecTest, BroadcastRequiresRoomApproval)
     ASSERT_EQ(room()->getBroadcasts().size(), 1);
     ASSERT_EQ(messages.size(), 1);
     EXPECT_TRUE(messages[0].at("player_authored").as_bool());
+    EXPECT_FALSE(messages[0].at("replayed").as_bool());
 }
 
 TEST_F(RoomHistorySpecTest, ServerRoomEventsStaySeparateFromPlayerBroadcasts)
@@ -220,6 +250,7 @@ TEST_F(RoomHistorySpecTest, ServerRoomEventsStaySeparateFromPlayerBroadcasts)
             RoomData(SENDER_ID, "room", ROOM_ID), std::vector<client::ClientSession>{});
     EXPECT_EQ(chatCommand->execute(api, data), client::ReadResult::success);
     EXPECT_EQ(data.getCurrentlyActiveRooms()[0].getMessages().size(), 1);
+    EXPECT_FALSE(data.getCurrentlyActiveRooms()[0].getMessages()[0].wasReplayed());
     EXPECT_TRUE(data.consumeServerRoomEvents().empty());
 }
 
@@ -234,6 +265,27 @@ TEST_F(RoomHistorySpecTest, UnmarkedBroadcastCannotEnterClientChat)
     auto parsed = client::CommandParser::parse(message);
     EXPECT_NE(parsed->execute(api, data), client::ReadResult::success);
     EXPECT_TRUE(data.getCurrentlyActiveRooms()[0].getMessages().empty());
+}
+
+TEST_F(RoomHistorySpecTest, MissingReplayMarkerIsConservativelyHistorical)
+{
+    client::ClientConfig config;
+    client::ClientAPI api(config);
+    client::ClientAPI::ClientAPIData data;
+    data.getCurrentlyActiveRooms().emplace_back(
+            RoomData(SENDER_ID, "room", ROOM_ID), std::vector<client::ClientSession>{});
+    boost::json::object message{{"command", "room"}, {"type", "communication"}, {"action", "broadcast"}, {"room_id", ROOM_ID}, {"client_id", SENDER_ID}, {"message", "old chat"}};
+    message["player_authored"] = true;
+    auto parsed = client::CommandParser::parse(message);
+    EXPECT_EQ(parsed->execute(api, data), client::ReadResult::success);
+    const auto& messages = data.getCurrentlyActiveRooms()[0].getMessages();
+    ASSERT_EQ(messages.size(), 1u);
+    EXPECT_TRUE(messages[0].wasReplayed());
+
+    message["replayed"] = "false";
+    parsed = client::CommandParser::parse(message);
+    EXPECT_NE(parsed->execute(api, data), client::ReadResult::success);
+    EXPECT_EQ(messages.size(), 1u);
 }
 
 TEST_F(RoomHistorySpecTest, EncryptedBroadcastRetainsActionInHistory)
@@ -254,6 +306,7 @@ TEST_F(RoomHistorySpecTest, EncryptedBroadcastRetainsActionInHistory)
     ASSERT_EQ(liveMessages.size(), 1);
     EXPECT_EQ(liveMessages[0].at("action").as_string(), "broadcast_encrypted");
     EXPECT_TRUE(liveMessages[0].at("player_authored").as_bool());
+    EXPECT_FALSE(liveMessages[0].at("replayed").as_bool());
 
     auto replayMessages = receivedMessages(JOINER_ID);
     EXPECT_EQ(command.read(joinBytes(), *user(JOINER_ID), protocol, 2),
@@ -265,6 +318,7 @@ TEST_F(RoomHistorySpecTest, EncryptedBroadcastRetainsActionInHistory)
     ASSERT_NE(replay, replayMessages.end());
     EXPECT_EQ(replay->at("message").as_string(), ciphertext);
     EXPECT_TRUE(replay->at("player_authored").as_bool());
+    EXPECT_TRUE(replay->at("replayed").as_bool());
 }
 
 TEST_F(RoomHistorySpecTest, BroadcastWithoutRoomFails)
@@ -366,18 +420,30 @@ TEST_F(RoomHistorySpecTest, JoinSendsStoredBroadcasts)
               server::CommandResult::success);
 
     std::vector<std::string> broadcastPayloads;
+    client::ClientConfig config;
+    client::ClientAPI api(config);
+    client::ClientAPI::ClientAPIData data;
+    data.getCurrentlyActiveRooms().emplace_back(
+            RoomData(SENDER_ID, "room", ROOM_ID), std::vector<client::ClientSession>{});
     for (const auto& msg : messages)
     {
         if (msg.contains("type") && msg.at("type").as_string() == "communication" &&
             msg.contains("action") && msg.at("action").as_string() == "broadcast")
         {
+            EXPECT_TRUE(msg.at("replayed").as_bool());
             broadcastPayloads.emplace_back(msg.at("message").as_string().c_str());
+            auto parsed = client::CommandParser::parse(msg);
+            EXPECT_EQ(parsed->execute(api, data), client::ReadResult::success);
         }
     }
 
     ASSERT_EQ(broadcastPayloads.size(), 2);
     EXPECT_EQ(broadcastPayloads[0], "first message");
     EXPECT_EQ(broadcastPayloads[1], "second message");
+    const auto& received = data.getCurrentlyActiveRooms()[0].getMessages();
+    ASSERT_EQ(received.size(), 2u);
+    EXPECT_TRUE(received[0].wasReplayed());
+    EXPECT_TRUE(received[1].wasReplayed());
 }
 
 TEST_F(RoomHistorySpecTest, JoinHistoryKeepsOriginalSender)

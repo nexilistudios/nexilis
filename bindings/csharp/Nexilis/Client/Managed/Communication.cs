@@ -92,6 +92,13 @@ namespace Nexilis.Client
             return RoomNative.nexilis_communication_get_sender_id(_nativePtr);
         }
 
+        /// <summary>Whether this was stored chat sent when joining a room.</summary>
+        public bool WasReplayed()
+        {
+            ThrowIfDisposed();
+            return RoomNative.nexilis_communication_was_replayed(_nativePtr);
+        }
+
         /// <summary>
         /// Gets the native pointer to the sender's session wrapper.
         /// </summary>

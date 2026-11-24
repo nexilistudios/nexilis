@@ -74,6 +74,7 @@ CommandResult ServerImpl::room_communicate_broadcast(const DefaultArgs& args)
             {"id", boost::json::value(user.getId())},
             {"room_id", boost::json::value(user.getRoomId())},
             {"player_authored", boost::json::value(true)},
+            {"replayed", boost::json::value(false)},
             {"message", boost::json::value(messageData)}};
 
     auto roomCommand = Command::createRoomCommand(user.getRoomId(), user, args.getData(), params, args.getMessageId());
