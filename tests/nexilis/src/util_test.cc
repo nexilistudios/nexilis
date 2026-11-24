@@ -22,6 +22,7 @@
 
 #include <boost/json/parse.hpp>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 
 using namespace nexilis;
@@ -615,7 +616,8 @@ TEST(UtilColorMessageTest, ContainsData)
 
 TEST(UtilFileTest, DeleteIfExists)
 {
-    std::string path = std::tmpnam(nullptr);
+    const auto path = std::filesystem::temp_directory_path() /
+                      ("nexilis_util_" + std::to_string(Util::getRandomUint64()));
     {
         std::ofstream f(path);
         f << "test";
@@ -628,7 +630,9 @@ TEST(UtilFileTest, DeleteIfExists)
 
 TEST(UtilFileTest, DeleteIfExistsNonexistent)
 {
-    EXPECT_NO_THROW(Util::deleteIfExists("/tmp/nonexistent_nexilis_test_file_xyz"));
+    const auto path = std::filesystem::temp_directory_path() /
+                      ("nexilis_missing_" + std::to_string(Util::getRandomUint64()));
+    EXPECT_NO_THROW(Util::deleteIfExists(path));
 }
 
 TEST(UtilFileTest, GetNexilisTempPath)

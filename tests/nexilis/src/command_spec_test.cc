@@ -411,12 +411,13 @@ TEST_F(CommandSpecTest, RoomRemovalWorksWhenRoomOptsIn)
     EXPECT_FALSE(server::RoomStorage::contains(OVERLAP_ROOM_ID));
 }
 
-TEST_F(CommandSpecTest, RoomRemovalNotifiesConnectedPeerAndClearsClientCache)
+TEST_F(CommandSpecTest, RoomRemovalNotifiesPeersAcrossTransportsAndClearsClientCache)
 {
     auto room = makeOverlapRoom();
     room.setClientRoomRemovalAllowed(true);
     room.joinRoom(spec.user.getId());
     room.joinRoom(2);
+    room.joinRoom(3);
     ASSERT_TRUE(server::RoomStorage::add(std::move(room)));
     spec.user.setRoomId(OVERLAP_ROOM_ID);
 
@@ -425,36 +426,96 @@ TEST_F(CommandSpecTest, RoomRemovalNotifiesConnectedPeerAndClearsClientCache)
     peer->setRoomId(OVERLAP_ROOM_ID);
     peer->setBoostTCPSend([&](const nx_data& message)
                           { peerMessages.push_back(message); });
+    std::vector<nx_data> unusedPeerUdpMessages;
+    peer->setBoostUDPSend([&](const nx_data& message)
+                          { unusedPeerUdpMessages.push_back(message); });
     ASSERT_TRUE(server::ClientStorage::add(peer));
+
+    std::vector<nx_data> udpPeerMessages;
+    auto udpPeer = std::make_shared<server::User>(3, "127.0.0.3");
+    udpPeer->setRoomId(OVERLAP_ROOM_ID);
+    udpPeer->setBoostUDPSend([&](const nx_data& message)
+                             { udpPeerMessages.push_back(message); });
+    ASSERT_TRUE(server::ClientStorage::add(udpPeer));
+
+    std::vector<nx_data> actorUdpMessages;
+    spec.user.setBoostUDPSend([&](const nx_data& message)
+                              { actorUdpMessages.push_back(message); });
 
     client::ClientAPI peerApi(client::ClientConfig{});
     peerApi.setClientId(2);
     peerApi.setRoomId(OVERLAP_ROOM_ID);
     boost::json::object create{{"command", "room"}, {"type", "management"}, {"action", "create"}, {"room_id", OVERLAP_ROOM_ID}, {"client_id", 1}, {"room_name", "overlap_room"}, {"room_context", 1}, {"callback", 0}};
-    auto deliver = [&](const boost::json::object& message)
+    client::ClientAPI udpPeerApi(client::ClientConfig{});
+    udpPeerApi.setClientId(3);
+    udpPeerApi.setRoomId(OVERLAP_ROOM_ID);
+    auto deliver = [&](client::ClientAPI& api, const boost::json::object& message)
     {
         auto json = boost::json::serialize(message);
         nx_data bytes(json.begin(), json.end());
         bytes.push_back('\n');
-        return peerApi.readMessage(bytes);
+        return api.readMessage(bytes);
     };
-    ASSERT_EQ(deliver(create), client::ReadResult::success);
+    ASSERT_EQ(deliver(peerApi, create), client::ReadResult::success);
+    ASSERT_EQ(deliver(udpPeerApi, create), client::ReadResult::success);
     create["action"] = "join";
     create["client_id"] = 2;
-    ASSERT_EQ(deliver(create), client::ReadResult::success);
+    ASSERT_EQ(deliver(peerApi, create), client::ReadResult::success);
+    create["client_id"] = 3;
+    ASSERT_EQ(deliver(udpPeerApi, create), client::ReadResult::success);
     ASSERT_TRUE(peerApi.clientInRoom());
+    ASSERT_TRUE(udpPeerApi.clientInRoom());
 
     EXPECT_EQ(spec.read(roomRemoveBytes(OVERLAP_ROOM_ID), 17),
               server::CommandResult::success);
     EXPECT_FALSE(server::RoomStorage::contains(OVERLAP_ROOM_ID));
     EXPECT_EQ(spec.user.getRoomId(), 0);
     EXPECT_EQ(peer->getRoomId(), 0);
+    EXPECT_EQ(udpPeer->getRoomId(), 0);
     ASSERT_EQ(peerMessages.size(), 1);
+    ASSERT_EQ(udpPeerMessages.size(), 1);
+    EXPECT_TRUE(unusedPeerUdpMessages.empty());
+    EXPECT_TRUE(actorUdpMessages.empty());
     EXPECT_EQ(peerApi.readMessage(peerMessages.front()), client::ReadResult::success);
+    EXPECT_EQ(udpPeerApi.readMessage(udpPeerMessages.front()), client::ReadResult::success);
     EXPECT_FALSE(peerApi.clientInRoom());
+    EXPECT_FALSE(udpPeerApi.clientInRoom());
     EXPECT_EQ(peerApi.getCurrentRoomId(), 0);
     EXPECT_TRUE(peerApi.getActiveRooms().empty());
     EXPECT_EQ(peerApi.getRoom(OVERLAP_ROOM_ID), nullptr);
+    EXPECT_EQ(udpPeerApi.getCurrentRoomId(), 0);
+    EXPECT_TRUE(udpPeerApi.getActiveRooms().empty());
+}
+
+TEST_F(CommandSpecTest, RoomRemovalClearsMembershipAfterNotificationFailure)
+{
+    auto room = makeOverlapRoom();
+    room.setClientRoomRemovalAllowed(true);
+    room.joinRoom(spec.user.getId());
+    room.joinRoom(2);
+    room.joinRoom(3);
+    ASSERT_TRUE(server::RoomStorage::add(std::move(room)));
+    spec.user.setRoomId(OVERLAP_ROOM_ID);
+
+    auto failingPeer = std::make_shared<server::User>(2, "127.0.0.2");
+    failingPeer->setRoomId(OVERLAP_ROOM_ID);
+    failingPeer->setBoostUDPSend([](const nx_data&)
+                                 { throw std::runtime_error("send failed"); });
+    ASSERT_TRUE(server::ClientStorage::add(failingPeer));
+
+    auto otherPeer = std::make_shared<server::User>(3, "127.0.0.3");
+    otherPeer->setRoomId(OVERLAP_ROOM_ID);
+    std::vector<nx_data> received;
+    otherPeer->setBoostTCPSend([&](const nx_data& data)
+                               { received.push_back(data); });
+    ASSERT_TRUE(server::ClientStorage::add(otherPeer));
+
+    EXPECT_EQ(spec.read(roomRemoveBytes(OVERLAP_ROOM_ID)), server::CommandResult::success);
+    EXPECT_FALSE(server::RoomStorage::contains(OVERLAP_ROOM_ID));
+    EXPECT_EQ(spec.user.getRoomId(), 0);
+    EXPECT_EQ(failingPeer->getRoomId(), 0);
+    EXPECT_EQ(otherPeer->getRoomId(), 0);
+    EXPECT_EQ(received.size(), 1u);
 }
 
 TEST_F(CommandSpecTest, RoomCreationRejectsTruncatedAndOversizedRequests)

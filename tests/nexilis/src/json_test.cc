@@ -17,10 +17,13 @@
 #include <gtest/gtest.h>
 
 #include <nexilis/json.hh>
+#include <nexilis/util.hh>
 
 #include <boost/json/parse.hpp>
 
+#include <filesystem>
 #include <stdexcept>
+#include <string>
 
 using namespace nexilis;
 
@@ -115,22 +118,24 @@ TEST(JsonTest, SaveAndReadJSONFile)
     obj["test"] = "roundtrip";
     obj["val"] = 99;
 
-    std::string path = std::tmpnam(nullptr);
-    path += ".json";
+    const auto path = std::filesystem::temp_directory_path() /
+                      ("nexilis_json_" + std::to_string(Util::getRandomUint64()) + ".json");
 
-    Json::saveToFile(obj, path);
+    Json::saveToFile(obj, path.string());
 
-    auto value = Json::readJSONFromFile(path);
+    auto value = Json::readJSONFromFile(path.string());
     auto readObj = value.as_object();
 
     EXPECT_EQ(readObj.at("test").as_string(), "roundtrip");
     EXPECT_EQ(readObj.at("val").as_int64(), 99);
 
-    std::remove(path.c_str());
+    std::filesystem::remove(path);
 }
 
 TEST(JsonTest, ReadJSONFromFileNonexistent)
 {
-    auto value = Json::readJSONFromFile("/tmp/nonexistent_nexilis_test_file_12345.json");
+    const auto path = std::filesystem::temp_directory_path() /
+                      ("nexilis_missing_" + std::to_string(Util::getRandomUint64()) + ".json");
+    auto value = Json::readJSONFromFile(path.string());
     EXPECT_TRUE(value.is_null());
 }

@@ -293,11 +293,16 @@ Client-requested room removal is disabled by default. A room that wants its
 creator to be able to remove it through `room/management/remove` must call
 `Room::setClientRoomRemovalAllowed(true)`; only the room creator can remove it,
 and applications can still remove rooms directly on the server. The server
-unpublishes an opted-in room, sends a `room/management/remove` response to its
-current members, then clears their room IDs. Clients remove the room and its
+unpublishes an opted-in room, sends the creator a `room/management/remove`
+response on the request transport, notifies peers on their own available
+transport, then clears their room IDs. Peer notifications prefer a stream
+connection and use an established datagram callback only when no stream is
+available. Clients remove the room and its
 roster, objects, and chat from local state on this response, clear their current
 room ID when it matches, and discard queued events belonging to the room. No
 room-info refresh is needed for connected members that receive the response.
+Datagram delivery can still fail, so applications that need guaranteed state
+convergence should use a reliable stream or periodically reconcile room state.
 Only the room creator may change the room-wide overlap setting through
 `room/management/set_overlap`; other members receive an unauthorized result.
 

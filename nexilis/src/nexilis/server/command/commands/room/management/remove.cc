@@ -24,6 +24,29 @@
 namespace nexilis::server
 {
 
+namespace
+{
+// Room removal is a server-originated invalidation for an existing member.
+// Prefer a reliable connection; a datagram transport is used only when the
+// peer has no stream callback. Request replies still use their own transport.
+bool sendRemovalToPeer(const nx_data& data, User& peer)
+{
+    if (peer.isBoostTCPSet())
+        return peer.boostTCPSend(data);
+    if (peer.isUnixStreamSet())
+        return peer.unixStreamSend(data);
+    if (peer.isInetTCPSet())
+        return peer.inetTCPSend(data);
+    if (peer.isBoostUDPSet())
+        return peer.boostUDPSend(data);
+    if (peer.isUnixDgramSet())
+        return peer.unixDgramSend(data);
+    if (peer.isInetUDPSet())
+        return peer.inetUDPSend(data);
+    return false;
+}
+} // namespace
+
 CommandResult ServerImpl::room_management_remove(const DefaultArgs& args)
 {
     auto payload = Util::removeAmountOfBytesFromVector(args.getData(), 3);
@@ -73,11 +96,31 @@ CommandResult ServerImpl::room_management_remove(const DefaultArgs& args)
         auto storedClient = ClientStorage::getClientById(clientId);
         User* client = clientId == user.getId() ? &user : storedClient.get();
         if (client && client->getRoomId() == roomId)
-            Command::sendMessageToClient(clientId == user.getId() ? roomCommand : peerCommand,
-                                         *client, args.getProtocol());
+        {
+            try
+            {
+                if (clientId == user.getId())
+                    Command::sendMessageToClient(roomCommand, *client, args.getProtocol());
+                else
+                    sendRemovalToPeer(peerCommand, *client);
+            }
+            catch (...)
+            {
+                Log::warning("Room removal notification failed for user ", clientId);
+            }
+        }
     }
     if (!actorIsMember)
-        Command::sendMessageToClient(roomCommand, user, args.getProtocol());
+    {
+        try
+        {
+            Command::sendMessageToClient(roomCommand, user, args.getProtocol());
+        }
+        catch (...)
+        {
+            Log::warning("Room removal response failed for user ", user.getId());
+        }
+    }
 
     // Clear membership after notification, without overwriting a concurrent
     // transition to another room.
