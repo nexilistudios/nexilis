@@ -19,7 +19,8 @@
 namespace nexilis::client
 {
 
-ClientConfig createClientConfig(const std::string& ip_address, const std::string& password)
+ClientConfig createClientConfig(const std::string& ip_address, const std::string& password,
+                                const std::string& accountId, const std::string& credential)
 {
     ClientConfig config;
 
@@ -30,6 +31,7 @@ ClientConfig createClientConfig(const std::string& ip_address, const std::string
     // We use password protection by default.
     config.setMode(nexilis::server::AuthenticationMode::password_protected);
     config.setPassword(password);
+    config.setAccountCredentials(accountId, credential);
 
     return config;
 }

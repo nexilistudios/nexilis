@@ -22,7 +22,8 @@
 namespace nexilis::client
 {
 
-ClientConfig createClientConfig(const std::string& ip_address, const std::string& password);
+ClientConfig createClientConfig(const std::string& ip_address, const std::string& password,
+                                const std::string& accountId, const std::string& credential);
 
 }
 

@@ -101,11 +101,8 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
 {
     Log::debug(header(), "Payload size: ", payload.size());
 
-    // In password_protected mode the very first message from an unidentified
-    // client is the raw password, which may be shorter than 8 bytes. Only attempt
-    // to read a client id when the payload is large enough; a short payload would
-    // otherwise parse as a zero client id and get rejected before the password
-    // comparison runs, leaking the length of the correct password.
+    // A protected handshake begins with a zero client ID. Short or malformed
+    // frames are rejected by the account-handshake parser below.
     uint64_t clientId = 0;
     if (payload.size() >= sizeof(uint64_t))
     {
@@ -113,8 +110,8 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
     }
 
     // Reject a zero client id in every mode except password_protected and skip:
-    // in password_protected the first message from an unidentified client is the
-    // password itself, and in skip mode the client has not been assigned an id
+    // in password_protected the account handshake has no assigned ID yet, and
+    // in skip mode the client has not been assigned an id
     // yet and sends a "getting client_id" handshake to learn it.
     if (clientId == 0 && authentication->getMode() != AuthenticationMode::password_protected && authentication->getMode() != AuthenticationMode::skip)
     {
@@ -256,7 +253,13 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
             }
             else
             {
-                // Only accept the password as a message from unidentified clients.
+                const auto& authenticator = authentication->getAccountAuthenticator();
+                if (!authenticator)
+                {
+                    Log::error(header(), "Protected mode requires an account authenticator");
+                    return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::authentication_error);
+                }
+                // Only accept an account handshake from unidentified clients.
                 // Failed attempts are shared by source address across reconnects to
                 // this server instance so the shared passphrase cannot be
                 // brute-forced at line speed.
@@ -283,47 +286,37 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                     return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::authentication_error);
                 }
 
-                // Account mode requires a distinct private credential for each
-                // stable account. The 8-byte zero ID and NXAC marker distinguish
-                // this first frame from the legacy raw passphrase.
+                // A distinct private credential identifies each stable account.
+                // The 8-byte zero ID and NXAC marker identify this first frame.
                 bool accepted = false;
-                const auto& authenticator = authentication->getAccountAuthenticator();
-                if (authenticator)
+                if (payload.size() >= 15 &&
+                    std::all_of(payload.begin(), payload.begin() + 8,
+                                [](uint8_t byte)
+                                { return byte == 0; }) &&
+                    std::equal(payload.begin() + 8, payload.begin() + 12, "NXAC"))
                 {
-                    if (payload.size() >= 15 &&
-                        std::all_of(payload.begin(), payload.begin() + 8,
-                                    [](uint8_t byte)
-                                    { return byte == 0; }) &&
-                        std::equal(payload.begin() + 8, payload.begin() + 12, "NXAC"))
+                    const std::size_t passwordLength = payload[12];
+                    const std::size_t accountLength = payload[13];
+                    const std::size_t credentialLength = payload[14];
+                    if (accountLength > 0 && credentialLength > 0 &&
+                        payload.size() == 15 + passwordLength + accountLength + credentialLength)
                     {
-                        const std::size_t passwordLength = payload[12];
-                        const std::size_t accountLength = payload[13];
-                        const std::size_t credentialLength = payload[14];
-                        if (accountLength > 0 && credentialLength > 0 &&
-                            payload.size() == 15 + passwordLength + accountLength + credentialLength)
+                        const auto passwordEnd = payload.begin() + 15 + passwordLength;
+                        const nx_data password(payload.begin() + 15, passwordEnd);
+                        accountId.assign(passwordEnd, passwordEnd + accountLength);
+                        const std::string credential(passwordEnd + accountLength, payload.end());
+                        if (Util::constantTimeEquals(authentication->getPassphrase(), password))
                         {
-                            const auto passwordEnd = payload.begin() + 15 + passwordLength;
-                            const nx_data password(payload.begin() + 15, passwordEnd);
-                            accountId.assign(passwordEnd, passwordEnd + accountLength);
-                            const std::string credential(passwordEnd + accountLength, payload.end());
-                            if (Util::constantTimeEquals(authentication->getPassphrase(), password))
+                            try
                             {
-                                try
-                                {
-                                    accepted = authenticator(accountId, credential);
-                                }
-                                catch (...)
-                                {
-                                    Log::error(header(), "Account authenticator failed");
-                                }
+                                accepted = authenticator(accountId, credential);
+                            }
+                            catch (...)
+                            {
+                                Log::error(header(), "Account authenticator failed");
                             }
                         }
                     }
-                }
-                else
-                {
-                    // The comparison runs over the stored password length only.
-                    accepted = Util::constantTimeEquals(authentication->getPassphrase(), payload);
                 }
 
                 if (accepted)
@@ -334,7 +327,7 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
 
                     user->setCommonAccess(true);
 
-                    const bool published = publishUser(static_cast<bool>(authenticator));
+                    const bool published = publishUser(true);
                     if (!published)
                         return std::make_unique<ErrorMessage>(address, ErrorMessage::Type::authentication_error);
 

@@ -25,6 +25,8 @@ int main()
     config.setMode(nexilis::server::AuthenticationMode::password_protected);
     config.setPassphrase("lua-test-password");
     config.setRootPassword("lua-test-root");
+    config.setAccountAuthenticator([](std::string_view account, std::string_view credential)
+                                   { return account == "lua-test" && credential == "lua-test-credential"; });
     const auto identity = nexilis::tls::generateSelfSignedIdentity();
     if (identity.publicKeySha256.empty())
         return 1;

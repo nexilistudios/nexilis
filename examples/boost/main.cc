@@ -43,6 +43,8 @@ int main(int argc, char** argv)
     settings.setMode(nexilis::server::AuthenticationMode::password_protected);
     settings.setPassphrase("salasana");
     settings.setRootPassword("root");
+    settings.setAccountAuthenticator([](std::string_view account, std::string_view credential)
+                                     { return account == "demo-player" && credential == "demo-credential"; });
     const auto identity = nexilis::tls::generateSelfSignedIdentity();
     if (identity.publicKeySha256.empty())
         return 1;
@@ -64,6 +66,7 @@ int main(int argc, char** argv)
     tcp_server_data.setPassword("salasana");
     tcp_server_data.setBoostTCPAddress("127.0.0.1");
     tcp_server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+    tcp_server_data.setAccountCredentials("demo-player", "demo-credential");
     tcp_server_data.setServerPublicKeySha256(identity.publicKeySha256);
 
     nexilis::client::ClientAPI tcp_client_api(tcp_server_data);

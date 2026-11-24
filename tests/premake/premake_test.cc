@@ -44,6 +44,8 @@ int main()
     settings.setMode(nexilis::server::AuthenticationMode::password_protected);
     settings.setPassphrase("salasana");
     settings.setRootPassword("root");
+    settings.setAccountAuthenticator([](std::string_view account, std::string_view credential)
+                                     { return account == "premake-test" && credential == "premake-test-credential"; });
     const auto identity = nexilis::tls::generateSelfSignedIdentity();
     if (identity.publicKeySha256.empty())
     {
@@ -62,6 +64,7 @@ int main()
     server_data.setBoostTCPAddress("127.0.0.1");
     server_data.setServerPublicKeySha256(identity.publicKeySha256);
     server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+    server_data.setAccountCredentials("premake-test", "premake-test-credential");
 
     nexilis::client::ClientAPI client_api(server_data);
     auto client = protocol_manager.createProtocol<nexilis::client::nxboost::TCPClient>(client_api);

@@ -128,8 +128,9 @@ Things worth knowing before you go further:
   [security notes](server_message.md#security-notes) before deploying outside a
   trusted environment.
 - **Authentication modes.** `AuthenticationMode::skip` accepts anyone;
-  `password_protected` requires `setPassphrase` on the server and
-  `setPassword` on each client. See `examples/messaging`.
+  `password_protected` requires `setPassphrase` and a
+  `setAccountAuthenticator` callback on the server, plus `setPassword` and
+  `setAccountCredentials` on each client. See `examples/messaging`.
 
 ## 5. Other transports
 

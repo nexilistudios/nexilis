@@ -141,6 +141,19 @@ TEST(ClientHandshake, SendsAccountCredentialsInInitialBoostTcpFrame)
     EXPECT_EQ(std::string(frame.begin() + 15, frame.end()), "secretalicealice-token");
 }
 
+TEST(ClientHandshake, PasswordOnlyProtectedClientSendsNoHandshake)
+{
+    client::ClientConfig config;
+    config.setMode(AuthenticationMode::password_protected);
+    config.setPassword("secret");
+    client::ClientAPI api(config);
+    HandshakeProbe protocol(api);
+    protocol.updateProtocolStatus(client::ProtocolStatus::connected);
+    protocol.startHandshake(NXProtocol::Type::BOOST_TCP_CLIENT);
+    EXPECT_TRUE(protocol.sent.empty());
+    EXPECT_EQ(protocol.getProtocolStatus(), client::ProtocolStatus::error);
+}
+
 TEST(ConstantTimeEquals, MatchesIdenticalStrings)
 {
     EXPECT_TRUE(Util::constantTimeEquals("secret", "secret"));
@@ -474,6 +487,12 @@ protected:
     server::ServerConfig config{AuthenticationMode::password_protected, "secret"};
     server::MessageHandler handler;
 
+    void SetUp() override
+    {
+        config.setAccountAuthenticator([](std::string_view account, std::string_view credential)
+                                       { return !account.empty() && credential == std::string(account) + "-secret"; });
+    }
+
     void TearDown() override
     {
         server::ClientStorage::clear();
@@ -484,7 +503,7 @@ protected:
         return handler.readMessage("test_address", Util::convertToByteVector(password), &config);
     }
 
-    std::unique_ptr<server::BaseMessage> sendAccount(
+    nx_data accountPayload(
             const std::string& password, const std::string& account,
             const std::string& credential)
     {
@@ -496,7 +515,14 @@ protected:
         payload.insert(payload.end(), password.begin(), password.end());
         payload.insert(payload.end(), account.begin(), account.end());
         payload.insert(payload.end(), credential.begin(), credential.end());
-        return handler.readMessage("test_address", payload, &config);
+        return payload;
+    }
+
+    std::unique_ptr<server::BaseMessage> sendAccount(
+            const std::string& password, const std::string& account,
+            const std::string& credential)
+    {
+        return handler.readMessage("test_address", accountPayload(password, account, credential), &config);
     }
 };
 
@@ -546,11 +572,16 @@ TEST_F(MessageHandlerPasswordProtectedTest, AccountModeAlsoLimitsSessionsPerAddr
     EXPECT_EQ(server::ClientStorage::getAllClients().size(), 2u);
 }
 
-TEST_F(MessageHandlerPasswordProtectedTest, CorrectShortPasswordAuthenticates)
+TEST_F(MessageHandlerPasswordProtectedTest, PasswordOnlyAndMissingAuthenticatorRejectAdmission)
 {
     auto result = sendPassword("secret");
     ASSERT_NE(result, nullptr);
-    EXPECT_EQ(result->getType(), server::BaseMessage::Type::auth_message);
+    EXPECT_EQ(result->getType(), server::BaseMessage::Type::error_message);
+    config.setAccountAuthenticator({});
+    result = sendAccount("secret", "alice", "alice-secret");
+    ASSERT_NE(result, nullptr);
+    EXPECT_EQ(result->getType(), server::BaseMessage::Type::error_message);
+    EXPECT_TRUE(server::ClientStorage::getAllClients().empty());
 }
 
 TEST_F(MessageHandlerPasswordProtectedTest, RejectedPasswordsDoNotPublishUsers)
@@ -598,12 +629,12 @@ TEST_F(MessageHandlerPasswordProtectedTest, RepeatedFailuresLockOutAddress)
     }
 
     // The correct passphrase is rejected while the source address is locked out.
-    auto blocked = sendPassword("secret");
+    auto blocked = sendAccount("secret", "alice", "alice-secret");
     ASSERT_NE(blocked, nullptr);
     EXPECT_EQ(blocked->getType(), server::BaseMessage::Type::error_message);
 
     // A different source address is unaffected by the lockout.
-    auto other = handler.readMessage("other_address", Util::convertToByteVector("secret"), &config);
+    auto other = handler.readMessage("other_address", accountPayload("secret", "alice", "alice-secret"), &config);
     ASSERT_NE(other, nullptr);
     EXPECT_EQ(other->getType(), server::BaseMessage::Type::auth_message);
 }
@@ -611,7 +642,7 @@ TEST_F(MessageHandlerPasswordProtectedTest, RepeatedFailuresLockOutAddress)
 TEST_F(MessageHandlerPasswordProtectedTest, FullFailureTableAdmitsNewValidAddress)
 {
     const auto wrong = Util::convertToByteVector("wrong");
-    const auto correct = Util::convertToByteVector("secret");
+    const auto correct = accountPayload("secret", "alice", "alice-secret");
     for (unsigned attempt = 0; attempt < 5; ++attempt)
         ASSERT_EQ(handler.readMessage("locked-address", wrong, &config)->getType(),
                   server::BaseMessage::Type::error_message);
@@ -634,9 +665,7 @@ TEST_F(MessageHandlerPasswordProtectedTest, FullFailureTableAdmitsNewValidAddres
     EXPECT_EQ(handler.readMessage("locked-address", correct, &config)->getType(),
               server::BaseMessage::Type::error_message);
 
-    config.setAccountAuthenticator([](std::string_view account, std::string_view credential)
-                                   { return account == "alice" && credential == "alice-secret"; });
-    auto account = sendAccount("secret", "alice", "alice-secret");
+    auto account = sendAccount("secret", "bob", "bob-secret");
     ASSERT_NE(account, nullptr);
     EXPECT_EQ(account->getType(), server::BaseMessage::Type::auth_message);
 }
@@ -650,7 +679,7 @@ TEST_F(MessageHandlerPasswordProtectedTest, SuccessfulAuthClearsFailureState)
         EXPECT_EQ(result->getType(), server::BaseMessage::Type::error_message);
     }
 
-    auto result = sendPassword("secret");
+    auto result = sendAccount("secret", "alice", "alice-secret");
     ASSERT_NE(result, nullptr);
     EXPECT_EQ(result->getType(), server::BaseMessage::Type::auth_message);
 
@@ -661,7 +690,7 @@ TEST_F(MessageHandlerPasswordProtectedTest, SuccessfulAuthClearsFailureState)
         ASSERT_NE(retry, nullptr);
         EXPECT_EQ(retry->getType(), server::BaseMessage::Type::error_message);
     }
-    auto stillAllowed = sendPassword("secret");
+    auto stillAllowed = sendAccount("secret", "bob", "bob-secret");
     ASSERT_NE(stillAllowed, nullptr);
     EXPECT_EQ(stillAllowed->getType(), server::BaseMessage::Type::auth_message);
 }

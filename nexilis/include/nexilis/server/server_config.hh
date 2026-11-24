@@ -57,8 +57,8 @@ public:
     }
 
     /// Validate a stable account ID and private credential after the shared
-    /// passphrase. Configure before starting the server. When set, legacy
-    /// password-only handshakes are refused.
+    /// passphrase. Required for password-protected Boost TCP and configured
+    /// before starting the server. Password-only handshakes are refused.
     using AccountAuthenticator = std::function<bool(std::string_view, std::string_view)>;
     void setAccountAuthenticator(AccountAuthenticator authenticator)
     {

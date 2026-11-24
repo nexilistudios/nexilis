@@ -97,6 +97,11 @@ int main(int argc, char** argv)
     settings.setMode(nexilis::server::AuthenticationMode::password_protected);
     settings.setPassphrase("salasana");
     settings.setRootPassword("root");
+    // Demo credentials only. A deployed game must validate accounts against
+    // its own persistent credential store.
+    settings.setAccountAuthenticator([](std::string_view account, std::string_view credential)
+                                     { return (account == "alice" && credential == "alice-demo-secret") ||
+                                              (account == "bob" && credential == "bob-demo-secret"); });
     // In a deployed game, persist the server private key and distribute the
     // public-key pin to clients through a trusted channel.
     const auto identity = nexilis::tls::generateSelfSignedIdentity();
@@ -129,6 +134,7 @@ int main(int argc, char** argv)
     server_data.setPassword("salasana");
     server_data.setBoostTCPAddress("127.0.0.1");
     server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+    server_data.setAccountCredentials("alice", "alice-demo-secret");
     server_data.setServerPublicKeySha256(identity.publicKeySha256);
 
     nexilis::client::ClientAPI alice_api(server_data);
@@ -161,6 +167,7 @@ int main(int argc, char** argv)
     bob_data.setPassword("salasana");
     bob_data.setBoostTCPAddress("127.0.0.1");
     bob_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+    bob_data.setAccountCredentials("bob", "bob-demo-secret");
     bob_data.setServerPublicKeySha256(identity.publicKeySha256);
 
     nexilis::client::ClientAPI bob_api(bob_data);

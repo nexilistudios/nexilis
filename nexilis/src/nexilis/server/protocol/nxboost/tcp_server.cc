@@ -128,6 +128,12 @@ TCPServer::~TCPServer()
 void TCPServer::start()
 {
     if (getSettings().getMode() == AuthenticationMode::password_protected &&
+        !getSettings().getAccountAuthenticator())
+    {
+        Log::critical(header(), "Password-protected Boost TCP requires an account authenticator");
+        return;
+    }
+    if (getSettings().getMode() == AuthenticationMode::password_protected &&
         !getSettings().isTlsEnabled())
     {
         Log::critical(header(), "Password-protected Boost TCP requires TLS");

@@ -121,6 +121,8 @@ protected:
         settings.setMode(nexilis::server::AuthenticationMode::password_protected);
         settings.setPassphrase("salasana");
         settings.setRootPassword("root");
+        settings.setAccountAuthenticator([](std::string_view account, std::string_view credential)
+                                         { return account == "test-player" && credential == "test-credential"; });
     }
 
     void createServer()
@@ -139,6 +141,7 @@ protected:
     {
         server_data.setPassword("salasana");
         server_data.setMode(nexilis::server::AuthenticationMode::password_protected);
+        server_data.setAccountCredentials("test-player", "test-credential");
     }
 
     void createClientAPI()

@@ -38,8 +38,9 @@ server. See [TLS transport setup](../docs/server_message.md#tls-transport-and-se
 Password-protected mode requires pinned TLS Boost TCP. The high-level C# client
 sends packets selected for UDP over TCP in that mode. UDP and other plaintext
 transports are available only in skip mode.
-For servers with account authentication, set `ClientConfig.SetAccountCredentials`
-or `NexilisClient.AccountId` and `AccountCredential` before connecting.
+Protected servers require account authentication. Set
+`ClientConfig.SetAccountCredentials` or `NexilisClient.AccountId` and
+`AccountCredential` before connecting.
 
 `ClientAPI.DrainGameEventsJson()` includes `server_events` separately from the
 player-authored `chat` array. Each server event has a decimal string `room_id`,
