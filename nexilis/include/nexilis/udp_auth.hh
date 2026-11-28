@@ -17,6 +17,7 @@
 #ifndef NEXILIS_UDP_AUTH_HH
 #define NEXILIS_UDP_AUTH_HH
 
+#include <nexilis/crypto.hh>
 #include <nexilis/message_auth.hh>
 #include <nexilis/nx_data.hh>
 
@@ -86,6 +87,24 @@ inline bool fromHex(std::string_view hex, std::array<uint8_t, token_size>& bytes
     return true;
 }
 
+/// Derive a 32-byte AES-256-GCM key from the 16-byte per-session UDP token via
+/// SHA-256. Client id and message id stay in plaintext so the server can route
+/// the packet before decryption; only the command payload is encrypted.
+inline std::array<uint8_t, crypto::kKeyLength> sessionKey(std::string_view tokenHex)
+{
+    std::array<uint8_t, token_size> token{};
+    if (!fromHex(tokenHex, token))
+        return {};
+    unsigned char digest[EVP_MAX_MD_SIZE]{};
+    unsigned int digestSize = 0;
+    if (!EVP_Digest(token.data(), token.size(), digest, &digestSize, EVP_sha256(), nullptr) ||
+        digestSize < crypto::kKeyLength)
+        return {};
+    std::array<uint8_t, crypto::kKeyLength> key{};
+    std::copy_n(digest, key.size(), key.begin());
+    return key;
+}
+
 inline nx_data makeHello()
 {
     nx_data packet(hello.begin(), hello.end());
@@ -103,7 +122,24 @@ inline nx_data makeAuthentication(const nx_data& cookie, const nx_data& payload)
 
 inline nx_data makeSession(const nx_data& payload, std::string_view token)
 {
-    auto signedPayload = message_auth::sign(payload, token);
+    if (payload.size() < message_auth::request_header_size + 2)
+        return {};
+    auto key = sessionKey(token);
+    if (key.empty())
+        return {};
+    // Client id and message id stay in plaintext so the server can route the
+    // packet before decryption. Only the command payload is encrypted.
+    nx_data header(payload.begin(), payload.begin() + message_auth::request_header_size);
+    nx_data command(payload.begin() + message_auth::request_header_size, payload.end());
+    std::string sealed;
+    if (!crypto::encrypt(std::string(key.begin(), key.end()),
+                         std::string(command.begin(), command.end()),
+                         sealed))
+        return {};
+    nx_data encryptedCommand(sealed.begin(), sealed.end());
+    nx_data toSign(header);
+    toSign.insert(toSign.end(), encryptedCommand.begin(), encryptedCommand.end());
+    auto signedPayload = message_auth::sign(toSign, token);
     if (signedPayload.empty())
         return {};
     nx_data packet(session.begin(), session.end());
@@ -119,7 +155,21 @@ inline bool readSession(const nx_data& packet, std::string_view token, nx_data& 
     nx_data verified;
     if (!message_auth::verify(signedPayload, token, verified))
         return false;
-    payload = std::move(verified);
+    // verified = [client_id(8)][message_id(8)][encrypted_command]. Decrypt the
+    // command payload and rebuild [client_id][message_id][plaintext_command].
+    if (verified.size() < message_auth::request_header_size)
+        return false;
+    auto key = sessionKey(token);
+    if (key.empty())
+        return false;
+    nx_data encryptedCommand(verified.begin() + message_auth::request_header_size,
+                             verified.end());
+    std::string sealed(encryptedCommand.begin(), encryptedCommand.end());
+    std::string decryptedStr;
+    if (!crypto::decrypt(std::string(key.begin(), key.end()), sealed, decryptedStr))
+        return false;
+    payload.assign(verified.begin(), verified.begin() + message_auth::request_header_size);
+    payload.insert(payload.end(), decryptedStr.begin(), decryptedStr.end());
     return true;
 }
 
@@ -147,10 +197,20 @@ inline nx_data makeResponse(const nx_data& payload, std::string_view token, uint
 {
     if (sequence == 0)
         return {};
+    auto key = sessionKey(token);
+    if (key.empty())
+        return {};
+    // Encrypt the response payload before wrapping it in the response envelope.
+    std::string sealed;
+    if (!crypto::encrypt(std::string(key.begin(), key.end()),
+                         std::string(payload.begin(), payload.end()),
+                         sealed))
+        return {};
+    nx_data encryptedPayload(sealed.begin(), sealed.end());
     nx_data data(response.begin(), response.end());
     for (int shift = 56; shift >= 0; shift -= 8)
         data.push_back(static_cast<uint8_t>(sequence >> shift));
-    data.insert(data.end(), payload.begin(), payload.end());
+    data.insert(data.end(), encryptedPayload.begin(), encryptedPayload.end());
     auto tag = responseTag(data, token);
     if (!tag)
         return {};
@@ -174,7 +234,16 @@ inline bool readResponse(const nx_data& packet, std::string_view token,
         sequence = (sequence << 8) | packet[i];
     if (sequence == 0)
         return false;
+    // payload is encrypted; decrypt it after MAC verification.
     payload.assign(packet.begin() + 12 + message_auth::tag_size, packet.end());
+    auto key = sessionKey(token);
+    if (key.empty())
+        return false;
+    std::string sealed(payload.begin(), payload.end());
+    std::string decryptedStr;
+    if (!crypto::decrypt(std::string(key.begin(), key.end()), sealed, decryptedStr))
+        return false;
+    payload.assign(decryptedStr.begin(), decryptedStr.end());
     return true;
 }
 

@@ -212,6 +212,7 @@ void UDPServer::receiveFromClients()
             const auto senderEndpoint = remoteEndpoint;
             const auto endpointKey = address + ":" + std::to_string(senderEndpoint.port());
             nx_data payload;
+            nx_data signedPayload;
             if (udp_auth::hasPrefix(received_message, udp_auth::hello))
             {
                 if (received_message.size() == udp_auth::makeHello().size())
@@ -233,23 +234,32 @@ void UDPServer::receiveFromClients()
                 if (received_message.size() < 4 + 8)
                     continue;
                 nx_data idBytes(received_message.begin() + 4, received_message.begin() + 12);
-                auto user = ClientStorage::getClientById(Util::uint64FromFront(idBytes));
-                if (!user || !user->hasCommonAccess() || user->getAccountId().empty() ||
-                    !udp_auth::readSession(received_message, user->getUdpToken(), payload))
+                auto sessionUser = ClientStorage::getClientById(Util::uint64FromFront(idBytes));
+                if (!sessionUser || !sessionUser->hasCommonAccess() ||
+                    sessionUser->getAccountId().empty())
                     continue;
-                auto bound = m_clientEndpoints.find(user->getId());
+                if (!udp_auth::readSession(received_message, sessionUser->getUdpToken(), payload))
+                    continue;
+                // readSession returns decrypted [client_id][message_id][command]
+                // without a MAC tag. Re-sign so MessageHandler's re-verification
+                // succeeds over plaintext command bytes.
+                auto resigned = message_auth::sign(payload, sessionUser->getUdpToken());
+                if (resigned.empty())
+                    continue;
+                signedPayload.assign(udp_auth::session.begin(), udp_auth::session.end());
+                signedPayload.insert(signedPayload.end(), resigned.begin(), resigned.end());
+                auto bound = m_clientEndpoints.find(sessionUser->getId());
                 if (bound != m_clientEndpoints.end() && bound->second != senderEndpoint)
                     continue;
-                // MessageHandler independently verifies MAC and replay IDs. Preserve
-                // the signed request; readSession returns the untagged payload.
-                payload.assign(received_message.begin() + 4, received_message.end());
             }
             else
             {
                 continue;
             }
 
-            auto handledMessage = getMessageHandler().readMessage(address, payload, &getSettings());
+            // Strip the NXUS prefix: readMessage expects [client_id][message_id][MAC][command].
+            nx_data messagePayload(signedPayload.begin() + 4, signedPayload.end());
+            auto handledMessage = getMessageHandler().readMessage(address, messagePayload, &getSettings());
 
             if (!handledMessage || !handledMessage->getUser())
             {
