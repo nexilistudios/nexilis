@@ -21,6 +21,9 @@
 #include <nexilis/auth_config.hh>
 #include <nexilis/client/client_protocol.hh>
 #include <nexilis/command_type.hh>
+#include <nexilis/logger/function_handler.hh>
+#include <nexilis/logger/log.hh>
+#include <nexilis/logger/log_level.hh>
 #include <nexilis/message_auth.hh>
 #include <nexilis/nx_protocol.hh>
 #include <nexilis/server/client_storage.hh>
@@ -38,8 +41,10 @@
 #include <algorithm>
 #include <chrono>
 #include <limits>
+#include <memory>
 #include <string>
 #include <thread>
+#include <vector>
 
 using namespace nexilis;
 
@@ -210,8 +215,18 @@ TEST(AuthConfig, LockedModeCannotBeChanged)
     EXPECT_EQ(config.getMode(), AuthenticationMode::skip);
 }
 
-TEST(ServerAuthMode, LiveConfigIsLocked)
+TEST(ServerAuthMode, SkipModeWarnsAndLiveConfigIsLocked)
 {
+    Log::stopLogging();
+    std::vector<std::string> warnings;
+    Log::setMinimumLevel(logger::LogLevel::Warning);
+    Log::addHandler(std::make_unique<logger::FunctionHandler>(
+            [&](logger::LogLevel level, const std::string& message)
+            {
+                if (level == logger::LogLevel::Warning)
+                    warnings.push_back(message);
+            }));
+
     server::ServerConfig config{AuthenticationMode::skip, ""};
     server::ServerProtocol protocol(config);
     EXPECT_TRUE(protocol.getSettings().isModeLocked());
@@ -219,6 +234,16 @@ TEST(ServerAuthMode, LiveConfigIsLocked)
 
     protocol.getSettings().setMode(AuthenticationMode::password_protected);
     EXPECT_EQ(protocol.getSettings().getMode(), AuthenticationMode::skip);
+    Log::stopLogging();
+
+    const auto hasWarning = [&](const std::string& text)
+    {
+        return std::any_of(warnings.begin(), warnings.end(),
+                           [&](const std::string& message)
+                           { return message.find(text) != std::string::npos; });
+    };
+    EXPECT_TRUE(hasWarning("skip"));
+    EXPECT_TRUE(hasWarning("locked"));
 }
 
 TEST(ServerConfig, IsPassphraseMatches)

@@ -40,6 +40,11 @@ nx_data leaveRoomData()
 ServerProtocol::ServerProtocol(const ServerConfig& settings)
     : m_command(settings)
 {
+    if (settings.getMode() == AuthenticationMode::skip)
+    {
+        Log::warning("AuthenticationMode::skip accepts every client without credentials");
+        Log::warning("Skip mode is for local testing only; use password_protected for real servers");
+    }
 }
 
 ServerProtocol::ServerProtocol(ServerProtocol&& other)

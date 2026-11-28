@@ -251,6 +251,7 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
             // password_protected mode (no credentials are verified here).
             if (!createUser() || !publishUser(false))
                 return nullptr;
+            Log::warning(header(), "Accepted unauthenticated skip-mode client from ", address);
 
             // This message is equal to Packet::getId (without client id):
             // a "getting" / "client_id" command that delivers the assigned id.

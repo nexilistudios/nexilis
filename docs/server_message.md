@@ -33,9 +33,11 @@ with `ServerConfig::setMaxSessionsPerAccount`. Applications should use the
 stable account ID for bans, permissions, and account quotas, and can reject
 banned or revoked credentials in the authenticator. The numeric client ID and
 session tokens remain ephemeral. Clients without both account fields send no
-protected handshake. `skip` mode remains unauthenticated by design. A server
-latches the authentication mode when the protocol is created, so later
-`setMode` calls on its live configuration are refused and logged.
+protected handshake. `skip` mode remains unauthenticated by design. The server
+logs a warning when a skip-mode protocol is created and whenever it registers a
+new skip-mode client; use it only for local testing. A server latches the
+authentication mode when the protocol is created, so later `setMode` calls on
+its live configuration are refused and logged.
 
 The Boost TCP server also reads requests already buffered by OpenSSL, including
 an unprocessed TLS record after a previous request, without waiting for new
