@@ -73,7 +73,8 @@ Room::Room(Room&& other)
       m_clientObjectCreationAllowed(other.m_clientObjectCreationAllowed),
       m_clientGameItemCreationAllowed(other.m_clientGameItemCreationAllowed),
       m_clientRoomRemovalAllowed(other.m_clientRoomRemovalAllowed),
-      m_overlappingAllowed(other.m_overlappingAllowed.load())
+      m_overlappingAllowed(other.m_overlappingAllowed.load()),
+      m_teamDamageEnabled(other.m_teamDamageEnabled.load())
 {
 }
 
@@ -122,6 +123,7 @@ Room& Room::operator=(Room&& other)
         m_clientGameItemCreationAllowed = other.m_clientGameItemCreationAllowed;
         m_clientRoomRemovalAllowed = other.m_clientRoomRemovalAllowed;
         m_overlappingAllowed.store(other.m_overlappingAllowed.load());
+        m_teamDamageEnabled.store(other.m_teamDamageEnabled.load());
         BaseRoom::operator=(std::move(other));
     }
     return *this;

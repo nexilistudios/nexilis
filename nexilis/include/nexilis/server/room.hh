@@ -243,6 +243,10 @@ public:
     /// Validate round state and participants against server-owned state.
     void setCombatHandler(CombatHandler handler);
     bool canDamage(uint64_t shooterId, uint64_t targetId) const;
+    /// Whether combat may damage another player on the same team.
+    /// Self damage is decided by the application combat handler.
+    void setTeamDamageEnabled(bool enabled) { m_teamDamageEnabled.store(enabled); }
+    bool isTeamDamageEnabled() const { return m_teamDamageEnabled.load(); }
     /// Set the team names a client may request. Empty by default, so selection
     /// is disabled until the server application configures a list.
     /// Names must be unique, nonempty, at most 64 bytes, and contain no NUL.
@@ -438,6 +442,7 @@ private:
 
     /// Atomic because movement threads read this while command threads write it.
     std::atomic<bool> m_overlappingAllowed{true};
+    std::atomic<bool> m_teamDamageEnabled{false};
     mutable std::mutex m_resourceMutex;
 };
 
