@@ -203,8 +203,8 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
         }
 
         // Drop excess authenticated traffic before parsing or dispatching it.
-        // The token bucket allows a one-second burst at the configured rate;
-        // a non-positive rate disables the limit.
+        // The token bucket allows a one-second burst at the configured rate.
+        // ServerConfig and User both enforce a positive minimum rate.
         const float maxCommandRate = authentication->getMaxCommandRate();
         if (!user->acceptCommand(std::chrono::steady_clock::now(), maxCommandRate, maxCommandRate))
         {

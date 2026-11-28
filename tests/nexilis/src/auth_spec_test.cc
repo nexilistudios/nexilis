@@ -36,6 +36,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <limits>
 #include <string>
 #include <thread>
 
@@ -222,11 +223,27 @@ TEST(ServerConfig, CommandRateDefaultsAndConfigures)
 {
     server::ServerConfig config;
     EXPECT_FLOAT_EQ(config.getMaxCommandRate(), NEXILIS_DEFAULT_MAX_COMMAND_RATE);
+
     config.setMaxCommandRate(12.0f);
     EXPECT_FLOAT_EQ(config.getMaxCommandRate(), 12.0f);
+
+    config.setMaxCommandRate(0.5f);
+    EXPECT_FLOAT_EQ(config.getMaxCommandRate(), NEXILIS_MIN_MAX_COMMAND_RATE);
+
+    config.setMaxCommandRate(0.0f);
+    EXPECT_FLOAT_EQ(config.getMaxCommandRate(), NEXILIS_MIN_MAX_COMMAND_RATE);
+
+    config.setMaxCommandRate(-1.0f);
+    EXPECT_FLOAT_EQ(config.getMaxCommandRate(), NEXILIS_MIN_MAX_COMMAND_RATE);
+
+    config.setMaxCommandRate(std::numeric_limits<float>::quiet_NaN());
+    EXPECT_FLOAT_EQ(config.getMaxCommandRate(), NEXILIS_MIN_MAX_COMMAND_RATE);
+
+    config.setMaxCommandRate(std::numeric_limits<float>::infinity());
+    EXPECT_FLOAT_EQ(config.getMaxCommandRate(), NEXILIS_MIN_MAX_COMMAND_RATE);
 }
 
-TEST(UserCommandRateLimit, ConsumesBurstRefillsAndCanBeDisabled)
+TEST(UserCommandRateLimit, ConsumesBurstRefillsAndEnforcesMinimumRate)
 {
     server::User user(1, "address");
     const auto start = std::chrono::steady_clock::now();
@@ -244,8 +261,11 @@ TEST(UserCommandRateLimit, ConsumesBurstRefillsAndCanBeDisabled)
     EXPECT_TRUE(user.acceptCommand(later, 2.0f, 2.0f));
     EXPECT_FALSE(user.acceptCommand(later, 2.0f, 2.0f));
 
-    EXPECT_TRUE(user.acceptCommand(later, 0.0f, 0.0f));
-    EXPECT_TRUE(user.acceptCommand(later, -1.0f, -1.0f));
+    server::User minimumRateUser(2, "address");
+    EXPECT_TRUE(minimumRateUser.acceptCommand(start, 0.0f, 0.0f));
+    EXPECT_FALSE(minimumRateUser.acceptCommand(start, -1.0f, -1.0f));
+    EXPECT_TRUE(minimumRateUser.acceptCommand(start + std::chrono::seconds(1),
+                                              -1.0f, -1.0f));
 }
 
 TEST(MessageAuthentication, RejectsTamperingAndReplaysBeforeDispatch)
@@ -868,16 +888,7 @@ TEST_F(MessageHandlerSkipTest, InvalidHandshakeDoesNotAllocateUser)
 
 TEST_F(MessageHandlerSkipTest, DropsCommandsOverThePerClientRateLimit)
 {
-    auto first = sendHandshake();
-    ASSERT_NE(first, nullptr);
-    ASSERT_EQ(first->getType(), server::BaseMessage::Type::auth_message);
-
-    auto stored = server::ClientStorage::getClientsByIpAddress("test_address");
-    ASSERT_FALSE(stored.empty());
-    const auto clientId = stored[0]->getId();
-    const auto token = stored[0]->getUdpToken();
-
-    auto request = [&](uint64_t messageId)
+    auto request = [](uint64_t clientId, const std::string& token, uint64_t messageId)
     {
         nx_data payload = Util::convertToByteVector(clientId);
         auto messageIdBytes = Util::convertToByteVector(messageId);
@@ -888,12 +899,37 @@ TEST_F(MessageHandlerSkipTest, DropsCommandsOverThePerClientRateLimit)
         return message_auth::sign(payload, token);
     };
 
-    config.setMaxCommandRate(0.000001f);
-    ASSERT_NE(handler.readMessage("test_address", request(200), &config), nullptr);
-    EXPECT_EQ(handler.readMessage("test_address", request(201), &config), nullptr);
+    auto first = sendHandshake();
+    ASSERT_NE(first, nullptr);
+    ASSERT_EQ(first->getType(), server::BaseMessage::Type::auth_message);
 
+    auto stored = server::ClientStorage::getClientsByIpAddress("test_address");
+    ASSERT_FALSE(stored.empty());
+    const auto clientId = stored[0]->getId();
+    const auto token = stored[0]->getUdpToken();
+
+    config.setMaxCommandRate(NEXILIS_MIN_MAX_COMMAND_RATE);
+    ASSERT_NE(handler.readMessage("test_address", request(clientId, token, 200), &config),
+              nullptr);
+    EXPECT_EQ(handler.readMessage("test_address", request(clientId, token, 201), &config),
+              nullptr);
+
+    // A non-positive setting is clamped instead of disabling the limiter.
     config.setMaxCommandRate(0.0f);
-    ASSERT_NE(handler.readMessage("test_address", request(202), &config), nullptr);
+    EXPECT_FLOAT_EQ(config.getMaxCommandRate(), NEXILIS_MIN_MAX_COMMAND_RATE);
+
+    auto secondHandshake = sendHandshake("second_address");
+    ASSERT_NE(secondHandshake, nullptr);
+    auto secondStored = server::ClientStorage::getClientsByIpAddress("second_address");
+    ASSERT_FALSE(secondStored.empty());
+    const auto secondId = secondStored[0]->getId();
+    const auto secondToken = secondStored[0]->getUdpToken();
+    ASSERT_NE(handler.readMessage("second_address",
+                                  request(secondId, secondToken, 300), &config),
+              nullptr);
+    EXPECT_EQ(handler.readMessage("second_address",
+                                  request(secondId, secondToken, 301), &config),
+              nullptr);
 }
 
 TEST_F(MessageHandlerSkipTest, SecondMessageFromSameClientIsHandledAsCommand)

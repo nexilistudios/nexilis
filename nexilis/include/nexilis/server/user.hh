@@ -240,8 +240,9 @@ public:
 
     /// Atomically check and consume one command from a token bucket.
     /// \param now Current steady-clock time.
-    /// \param ratePerSecond Sustained commands per second. A non-positive
-    ///        value disables the limit.
+    /// \param ratePerSecond Sustained commands per second. Values below
+    ///        `NEXILIS_MIN_MAX_COMMAND_RATE`, including non-finite values,
+    ///        are raised to the minimum so the limit cannot be disabled.
     /// \param burstCapacity Maximum tokens the bucket may hold. Values below
     ///        one are raised to one so a single command is always possible.
     /// \return True when the command may be dispatched.

@@ -52,7 +52,7 @@ observer can see the switch credential; TLS protects it in password mode.
 The switch proof changes the Boost TCP wire protocol, so the client and server
 must both use versions that implement it.
 
-After a request is authenticated and accepted by the replay window, the server applies a per-client command throughput limit before parsing or dispatching it. The limiter is a token bucket with a default rate of 120 commands per second and a burst allowance of one second's worth; excess commands are dropped without a response. Configure it with `nexilis::server::ServerConfig::setMaxCommandRate`; zero or a negative value disables the limit.
+After a request is authenticated and accepted by the replay window, the server applies a per-client command throughput limit before parsing or dispatching it. The limiter is a token bucket with a default rate of 120 commands per second and a burst allowance of one second's worth; excess commands are dropped without a response. Configure it with `nexilis::server::ServerConfig::setMaxCommandRate`; values below 1 command/second, including zero, negative, and non-finite values, are clamped to the minimum so the limit cannot be disabled.
 
 Clients send the initial authentication payload after their transport socket is
 set up. Boost TCP also completes its TCP and certificate-based TLS connection before sending

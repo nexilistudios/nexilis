@@ -34,6 +34,9 @@ constexpr inline uint64_t NEXILIS_MAX_BROADCAST_LENGTH = 1024;
 constexpr inline uint64_t NEXILIS_MAX_BROADCAST_HISTORY = 100;
 constexpr inline float NEXILIS_DEFAULT_MAX_BROADCAST_RATE = 5.0f;
 constexpr inline float NEXILIS_DEFAULT_MAX_COMMAND_RATE = 120.0f;
+/// Lower bound for the per-client command rate. Values below this are clamped
+/// so the limit cannot be disabled through configuration.
+constexpr inline float NEXILIS_MIN_MAX_COMMAND_RATE = 1.0f;
 constexpr inline uint64_t NEXILIS_DEFAULT_MAX_ROOMS = 1024;
 constexpr inline uint64_t NEXILIS_DEFAULT_MAX_ROOMS_PER_CLIENT = 64;
 

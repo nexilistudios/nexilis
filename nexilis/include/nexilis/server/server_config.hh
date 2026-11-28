@@ -23,6 +23,7 @@
 
 #include <cassert>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <functional>
 #include <string>
@@ -141,11 +142,17 @@ public:
 
     /// Maximum sustained commands per second accepted from one client.
     /// Commands over the limit are dropped before dispatch. The limiter
-    /// allows a burst of up to one second's worth of commands. A
-    /// non-positive value disables the limit.
+    /// allows a burst of up to one second's worth of commands. Values below
+    /// `NEXILIS_MIN_MAX_COMMAND_RATE`, including zero, negative, and
+    /// non-finite values, are clamped to the minimum so the limit cannot be
+    /// disabled.
     void setMaxCommandRate(float maxCommandRate)
     {
-        m_maxCommandRate = maxCommandRate;
+        if (!std::isfinite(maxCommandRate) ||
+            maxCommandRate < NEXILIS_MIN_MAX_COMMAND_RATE)
+            m_maxCommandRate = NEXILIS_MIN_MAX_COMMAND_RATE;
+        else
+            m_maxCommandRate = maxCommandRate;
     }
     float getMaxCommandRate() const
     {

@@ -14,6 +14,7 @@
    You should have received a copy of the GNU Lesser General Public License
    along with this file.  If not, see <https://gnu.org>. */
 
+#include <nexilis/nexilis_constants.hh>
 #include <nexilis/server/user.hh>
 #include <nexilis/udp_auth.hh>
 
@@ -190,8 +191,9 @@ bool User::acceptCommand(std::chrono::steady_clock::time_point now,
                          float ratePerSecond,
                          float burstCapacity)
 {
-    if (!(ratePerSecond > 0.0f))
-        return true;
+    if (!std::isfinite(ratePerSecond) ||
+        ratePerSecond < NEXILIS_MIN_MAX_COMMAND_RATE)
+        ratePerSecond = NEXILIS_MIN_MAX_COMMAND_RATE;
 
     const double capacity = std::max(1.0, static_cast<double>(burstCapacity));
     const double rate = static_cast<double>(ratePerSecond);
