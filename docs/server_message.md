@@ -757,7 +757,15 @@ failure, and the C# `RoomData` constructor reports a construction exception.
 Zero disables the corresponding client operation. Object/item requests at the
 cap fail before insertion or broadcast; deletions free capacity. Username
 updates above the configured size are rejected before state changes or sending.
-The room opt-in gates remain required for client object/item creation.
+Client usernames are also rejected when empty or when they contain NUL or other
+control bytes. `setReservedUsernames`/`addReservedUsername` define names clients
+may not claim (ASCII case-insensitive), and `setUsernamesUnique(true)` rejects a
+name already used by another live client. `setUsernameValidator` installs an
+additional `(username, accountId)` policy callback; the account ID is empty for
+skip-mode clients. Malformed names return `invalid_input`, while reserved,
+duplicate, or validator-rejected names return `unauthorized`. Every rejection
+leaves the stored username and outgoing messages unchanged. The room opt-in
+gates remain required for client object/item creation.
 
 Server `Room::tryAddObject` and `tryAddGameItem` check capacity and insert under
 a resource mutex shared with server additions and deletions. Direct server

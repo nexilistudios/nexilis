@@ -27,7 +27,9 @@
 
 #include <chrono>
 #include <cstring>
+#include <memory>
 #include <stdexcept>
+#include <string_view>
 #include <thread>
 
 using namespace nexilis;
@@ -214,6 +216,94 @@ TEST_F(CommandSpecTest, UsernameLengthIsBoundedBeforeMutationOrSend)
     EXPECT_EQ(spec.read(request(4)), server::CommandResult::success);
     spec.command.getServerConfig().getRoomLimits().setMaxUsernameLength(0);
     EXPECT_EQ(spec.read(request(0)), server::CommandResult::invalid_input);
+}
+
+TEST_F(CommandSpecTest, RejectsControlAndEmptyUsernamesBeforeMutationOrSend)
+{
+    auto client = server::ClientStorage::getClientById(spec.user.getId());
+    ASSERT_NE(client, nullptr);
+    client->setUsername("old");
+    unsigned sends = 0;
+    spec.user.setBoostTCPSend([&](const nx_data&)
+                              { ++sends; });
+
+    auto request = [](const std::string& name)
+    {
+        nx_data bytes{0, 0, 1};
+        bytes.insert(bytes.end(), name.begin(), name.end());
+        return bytes;
+    };
+
+    EXPECT_EQ(spec.read({0, 0, 1}), server::CommandResult::invalid_input);
+    EXPECT_EQ(spec.read(request(std::string("a\0b", 3))), server::CommandResult::invalid_input);
+    EXPECT_EQ(spec.read(request("bad\nname")), server::CommandResult::invalid_input);
+    EXPECT_EQ(client->getUsername(), "old");
+    EXPECT_EQ(sends, 0u);
+
+    EXPECT_EQ(spec.read(request("good_name")), server::CommandResult::success);
+    EXPECT_EQ(client->getUsername(), "good_name");
+    EXPECT_EQ(sends, 1u);
+}
+
+TEST_F(CommandSpecTest, ReservedAndDuplicateUsernamesAreRejectedWhenConfigured)
+{
+    auto& limits = spec.command.getServerConfig().getRoomLimits();
+    limits.setReservedUsernames({"Admin"});
+    limits.setUsernamesUnique(true);
+
+    auto client = server::ClientStorage::getClientById(spec.user.getId());
+    ASSERT_NE(client, nullptr);
+    client->setUsername("start");
+    unsigned sends = 0;
+    spec.user.setBoostTCPSend([&](const nx_data&)
+                              { ++sends; });
+
+    auto other = std::make_shared<server::User>(2, "other-address");
+    other->setUsername("Taken");
+    ASSERT_TRUE(server::ClientStorage::add(other));
+
+    auto request = [](const std::string& name)
+    {
+        nx_data bytes{0, 0, 1};
+        bytes.insert(bytes.end(), name.begin(), name.end());
+        return bytes;
+    };
+
+    EXPECT_EQ(spec.read(request("admin")), server::CommandResult::unauthorized);
+    EXPECT_EQ(spec.read(request("Admin")), server::CommandResult::unauthorized);
+    EXPECT_EQ(spec.read(request("taken")), server::CommandResult::unauthorized);
+    EXPECT_EQ(client->getUsername(), "start");
+    EXPECT_EQ(sends, 0u);
+
+    // Reusing the client's own name is still allowed.
+    EXPECT_EQ(spec.read(request("start")), server::CommandResult::success);
+    EXPECT_EQ(sends, 1u);
+}
+
+TEST_F(CommandSpecTest, UsernameValidatorReceivesAccountId)
+{
+    auto& limits = spec.command.getServerConfig().getRoomLimits();
+    limits.setUsernameValidator([](std::string_view username, std::string_view accountId)
+                                { return accountId == "alice" && username == "alice-play"; });
+
+    auto user = std::make_shared<server::User>(3, "validated-address", "alice");
+    user->setBoostTCPSend([](const nx_data&) {});
+    ASSERT_TRUE(server::ClientStorage::add(user));
+    server::Command command(spec.command.getServerConfig());
+
+    auto request = [](const std::string& name)
+    {
+        nx_data bytes{0, 0, 1};
+        bytes.insert(bytes.end(), name.begin(), name.end());
+        return bytes;
+    };
+
+    EXPECT_EQ(command.read(request("wrong"), *user, spec.protocol, 1),
+              server::CommandResult::unauthorized);
+    EXPECT_TRUE(user->getUsername().empty());
+    EXPECT_EQ(command.read(request("alice-play"), *user, spec.protocol, 2),
+              server::CommandResult::success);
+    EXPECT_EQ(user->getUsername(), "alice-play");
 }
 
 TEST_F(CommandSpecTest, RejectsCommandsWithoutTwoRequiredBytes)

@@ -20,6 +20,11 @@
 #include <nexilis/nexilis_constants.hh>
 
 #include <cstddef>
+#include <functional>
+#include <string>
+#include <string_view>
+#include <unordered_set>
+#include <utility>
 
 namespace nexilis::server
 {
@@ -79,6 +84,45 @@ public:
         return m_maxUsernameLength;
     }
 
+    /// Additional policy for client-requested usernames. The library always
+    /// rejects empty names, NUL bytes, and control characters before calling
+    /// this validator. The account ID is empty for unauthenticated sessions.
+    using UsernameValidator = std::function<bool(std::string_view, std::string_view)>;
+    void setUsernameValidator(UsernameValidator validator)
+    {
+        m_usernameValidator = std::move(validator);
+    }
+    const UsernameValidator& getUsernameValidator() const
+    {
+        return m_usernameValidator;
+    }
+
+    /// Names clients may not set for themselves. Comparisons are
+    /// case-insensitive for ASCII names; server code may still assign them.
+    void setReservedUsernames(std::unordered_set<std::string> names)
+    {
+        m_reservedUsernames = std::move(names);
+    }
+    void addReservedUsername(std::string name)
+    {
+        m_reservedUsernames.insert(std::move(name));
+    }
+    const std::unordered_set<std::string>& getReservedUsernames() const
+    {
+        return m_reservedUsernames;
+    }
+
+    /// Reject usernames already used by another live client. Comparison is
+    /// case-insensitive for ASCII names. Disabled by default.
+    void setUsernamesUnique(bool unique)
+    {
+        m_usernamesUnique = unique;
+    }
+    bool areUsernamesUnique() const
+    {
+        return m_usernamesUnique;
+    }
+
     /// Whether the limits the static command handlers enforce have been
     /// bound to a live configuration.
     static bool isInitialized()
@@ -109,6 +153,9 @@ private:
     std::size_t m_maxObjectsPerRoom = 1024;
     std::size_t m_maxGameItemsPerRoom = 1024;
     std::size_t m_maxUsernameLength = 64;
+    UsernameValidator m_usernameValidator;
+    std::unordered_set<std::string> m_reservedUsernames;
+    bool m_usernamesUnique = false;
 
     static inline const RoomLimits* m_limits = nullptr;
 };
