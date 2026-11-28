@@ -551,14 +551,23 @@ distributed set of valid priority accounts or an upstream traffic flood can
 still deny admission; deployments must protect those credentials and apply
 upstream connection controls.
 
-`ClientAPI::setMessageEncryption(true)` affects room broadcasts. It does not encrypt othercast or unicast messages. The message key is derived from the password and the room ID; the server holds the password, so this feature does **not** hide message contents from the server.
+`ClientAPI::setMessageEncryption(true)` affects room broadcasts. It does not
+encrypt othercast or unicast messages. By default the broadcast key is derived
+from the password and the room ID; the server holds the password, so this
+fallback does **not** hide message contents from the server. Set
+`ClientConfig::setBroadcastEncryptionKey()` (or
+`ClientAPI::setBroadcastEncryptionKey()`) on every client to use a separate key
+instead. The server never receives that key, forwards only ciphertext, and
+cannot decrypt room broadcasts encrypted with it. All room members must share
+the same key out of band; it is not negotiated by Nexilis.
 
-If encryption is enabled but the password is missing, key derivation fails, or
-encryption fails, the client packet builder returns no packet. Receivers reject
-encrypted broadcasts that cannot be decrypted instead of exposing ciphertext
-as application content. This option does not grant server authority to player
-messages or confidentiality from the server. Password-protected sessions
-require pinned TLS Boost TCP.
+If encryption is enabled but neither a separate key nor a usable password is
+available, key derivation fails, or encryption fails, the client packet builder
+returns no packet. Receivers reject encrypted broadcasts that cannot be
+decrypted instead of exposing ciphertext as application content. Message
+encryption does not grant server authority to player messages. Without a
+separate key it also provides no confidentiality from the server.
+Password-protected sessions require pinned TLS Boost TCP.
 
 ## Server room storage ownership
 

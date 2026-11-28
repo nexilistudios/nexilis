@@ -128,7 +128,9 @@ Things worth knowing before you go further:
   nonempty application passphrase on both sides. A passwordless local example
   must explicitly call `setTls(false)` on both sides. Other transports do not support TLS.
   Room message encryption is enabled per client with
-  `api.setMessageEncryption(true)`. Read the
+  `api.setMessageEncryption(true)`. Use `api.setBroadcastEncryptionKey(key)` on
+  every client to keep broadcast contents private from the server; the default
+  password-derived key is server-readable. Read the
   [security notes](server_message.md#security-notes) before deploying outside a
   trusted environment.
 - **Authentication modes.** `AuthenticationMode::skip` accepts anyone and logs
