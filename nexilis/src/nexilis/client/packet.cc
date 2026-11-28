@@ -213,15 +213,18 @@ nx_data ClientImpl::room_communicate_broadcast(ClientAPI& api, const std::string
     std::string wireMessage = message;
     if (useEncryption)
     {
+        const auto broadcastKey = api.getBroadcastEncryptionKey();
         const auto password = api.getClientPassword();
-        if (password.empty())
+        const auto key = !broadcastKey.empty()
+                                 ? broadcastKey
+                                 : crypto::deriveMessageKey(password, api.clientRoomId());
+        if (key.empty())
         {
-            Log::error("Cannot encrypt broadcast without a password");
+            Log::error("Cannot encrypt broadcast without an encryption key");
             return {};
         }
-        const auto key = crypto::deriveMessageKey(password, api.clientRoomId());
         std::string sealed;
-        if (key.empty() || !crypto::encrypt(key, message, sealed))
+        if (!crypto::encrypt(key, message, sealed))
         {
             Log::error("Failed to encrypt broadcast");
             return {};

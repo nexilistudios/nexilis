@@ -49,7 +49,10 @@ public:
             std::string payload = m_message;
             if (m_action == "broadcast_encrypted")
             {
-                const auto key = crypto::deriveMessageKey(api.getClientPassword(), m_room_id);
+                const auto broadcastKey = api.getBroadcastEncryptionKey();
+                const auto key = !broadcastKey.empty()
+                                         ? broadcastKey
+                                         : crypto::deriveMessageKey(api.getClientPassword(), m_room_id);
                 const auto sealed = crypto::fromBase64(m_message);
                 if (key.empty() || sealed.empty() || !crypto::decrypt(key, sealed, payload))
                 {

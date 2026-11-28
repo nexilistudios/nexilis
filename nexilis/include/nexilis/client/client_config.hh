@@ -180,6 +180,19 @@ public:
         m_messageEncryption = enabled;
     }
 
+    /// Optional separate key for room broadcast encryption. When set, broadcasts
+    /// are encrypted with this key instead of the connection password, so the
+    /// server cannot decrypt room broadcasts even though it knows the password.
+    /// The key must be shared out-of-band with every client in the room.
+    void setBroadcastEncryptionKey(std::string key)
+    {
+        m_broadcastEncryptionKey = std::move(key);
+    }
+    const std::string& getBroadcastEncryptionKey() const
+    {
+        return m_broadcastEncryptionKey;
+    }
+
     /// Whether Boost TCP uses certificate-based TLS. On by default.
     bool isTlsEnabled() const
     {
@@ -229,6 +242,11 @@ private:
 
     /// Password-derived encryption toggle for room broadcasts.
     bool m_messageEncryption = false;
+
+    /// Optional separate key for room broadcast encryption. When non-empty,
+    /// broadcasts are encrypted with this key instead of the connection
+    /// password, keeping broadcast contents confidential from the server.
+    std::string m_broadcastEncryptionKey;
 
     /// TLS transport encryption toggle for TCP connections.
     bool m_tls = true;

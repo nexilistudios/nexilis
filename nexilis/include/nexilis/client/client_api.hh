@@ -723,6 +723,19 @@ public:
         m_serverData.setMessageEncryption(enabled);
     }
 
+    /// Optional separate key for room broadcast encryption. When set, broadcasts
+    /// are encrypted with this key instead of the connection password, so the
+    /// server cannot decrypt room broadcasts even though it knows the password.
+    /// The key must be shared out-of-band with every client in the room.
+    void setBroadcastEncryptionKey(std::string key)
+    {
+        m_serverData.setBroadcastEncryptionKey(std::move(key));
+    }
+    const std::string& getBroadcastEncryptionKey() const
+    {
+        return m_serverData.getBroadcastEncryptionKey();
+    }
+
     /// Whether the Boost TCP connection uses certificate-based TLS.
     bool isTlsEnabled() const
     {
