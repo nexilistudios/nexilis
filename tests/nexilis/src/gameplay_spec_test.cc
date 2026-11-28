@@ -454,8 +454,6 @@ protected:
     {
         server::RoomStorage::add(server::Room(RoomData(SENDER_ID, "gameplay_room", ROOM_ID)));
         auto room = server::RoomStorage::getRoomById(ROOM_ID);
-        room->setAdmissionHandler([](const server::User&)
-                                  { return true; });
         room->joinRoom(SENDER_ID);
         m_sender->setRoomId(ROOM_ID);
         m_sender->setBoostTCPSend([](const nx_data&) {});
@@ -1906,8 +1904,7 @@ TEST_F(GameplaySpecTest, JoiningPlayerReceivesExistingPlayerYaw)
 {
     server::RoomStorage::add(server::Room(RoomData(SENDER_ID, "gameplay_room", ROOM_ID)));
     auto room = server::RoomStorage::getRoomById(ROOM_ID);
-    room->setAdmissionHandler([](const server::User&)
-                              { return true; });
+    room->addAdmittedUser(TARGET_ID);
     room->joinRoom(SENDER_ID);
     m_sender->setRoomId(ROOM_ID);
     m_sender->setBoostTCPSend([](const nx_data&) {});

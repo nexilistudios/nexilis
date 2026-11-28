@@ -30,6 +30,7 @@
 #include <mutex>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace nexilis::server
@@ -165,10 +166,20 @@ public:
     void joinRoom(uint64_t userId);
     /// Atomically enforce the room capacity and insert a new member.
     bool tryJoinRoom(uint64_t userId);
-    /// A server policy for joining and discovering this room. An unset handler
-    /// makes the room private: only its creator and current members may join or
-    /// discover it. Install an explicitly permissive handler for a public room,
-    /// or a policy handler for invite/permission-based access.
+    /// Explicitly admit a server-known user to this room. Client join and
+    /// discovery requests are denied until the server admits the user here, or
+    /// the user is the room creator or an already joined member. A permissive
+    /// AdmissionHandler alone never makes a room public.
+    void addAdmittedUser(uint64_t userId);
+    /// Revoke a pending admission. Does not evict a user who already joined.
+    void removeAdmittedUser(uint64_t userId);
+    /// Whether the server has explicitly admitted this user.
+    bool isAdmittedUser(uint64_t userId) const;
+    /// An additional server policy for joining and discovering this room. It is
+    /// consulted only for creators, current members, and explicitly admitted
+    /// users. An unset handler accepts those server-approved users; a handler
+    /// may reject them, but cannot admit anyone who was not approved by the
+    /// server first.
     void setAdmissionHandler(AdmissionHandler handler);
     bool allowsUser(const User& user) const;
 
@@ -408,6 +419,7 @@ private:
     std::vector<std::string> m_availableTeams;
     float m_defaultHealth = 100.0f;
     DeathHandler m_deathHandler;
+    std::unordered_set<uint64_t> m_admittedUsers;
     AdmissionHandler m_admissionHandler;
     TeamHandler m_teamHandler;
     ActionHandler m_actionHandler;

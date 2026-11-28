@@ -469,16 +469,19 @@ can install a `RoomStorage::setCreateHandler` callback to configure each new
 room before the server acknowledges creation. Each client may belong to one
 room at a time. A join while already in a room is rejected; the client must
 leave before joining another room.
-Rooms are private by default. Without `Room::setAdmissionHandler`, only the
-creator and users who already joined may discover and join a room. Servers can
-install an admission handler to implement any other policy; the handler
-receives the server-side `User` and returns `true` to allow access. An
-explicitly permissive handler makes a room public. A denied user cannot join or
-see that room in `info_rooms`, `info_general`, or `info_clients`; an exception
-in the handler denies access. Set the admission handler in
-`RoomStorage::setCreateHandler` before room creation is acknowledged. Changing
-the handler later does not evict users who already joined, and handlers are not
-called for server-side `RoomStorage::add` calls.
+Rooms are private by default. A client may discover or join a room only when
+the server has first approved that user: the user must be the room's creator,
+an already joined member, or explicitly admitted with
+`Room::addAdmittedUser`. A permissive `Room::setAdmissionHandler` alone never
+opens a room. The handler is an additional server-side policy applied only to
+server-approved users; it receives the server-side `User` and returns `false`
+to deny one of them. A denied user cannot join or see that room in
+`info_rooms`, `info_general`, or `info_clients`; an exception in the handler
+denies access. Configure admissions in `RoomStorage::setCreateHandler` before
+room creation is acknowledged, or call `Room::addAdmittedUser` from server code
+before the client tries to join. Removing an admission does not evict a user
+who already joined. Handlers are not called for server-side
+`RoomStorage::add` calls.
 
 ## Security notes
 

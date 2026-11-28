@@ -109,17 +109,15 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     settings.setTlsIdentity(identity.certificatePem, identity.privateKeyPem);
 
-    // Rooms are private by default. This demo explicitly allows authenticated
-    // clients to create public chat rooms and accepts non-empty chat messages.
-    // Broadcasts stay player-authored text, never server commands.
+    // Rooms stay private. This demo lets authenticated clients create rooms,
+    // but the server admits each guest before the client may discover or join
+    // the room. Broadcasts stay player-authored text, never server commands.
     nexilis::server::RoomStorage::setClientCreationHandler(
             [](const nexilis::server::User&, const nexilis::RoomData&)
             { return true; });
     nexilis::server::RoomStorage::setCreateHandler(
             [](nexilis::server::Room& room)
             {
-                room.setAdmissionHandler([](const nexilis::server::User&)
-                                         { return true; });
                 room.setBroadcastHandler([](uint64_t, const std::string& message, bool)
                                          { return !message.empty(); });
             });
@@ -173,6 +171,18 @@ int main(int argc, char** argv)
     nexilis::client::ClientAPI bob_api(bob_data);
     auto bob = protocol_manager.createProtocol<nexilis::client::nxboost::TCPClient>(bob_api);
     bob.start();
+
+    // Server-side setup: the room is not visible or joinable until the server
+    // admits Bob's authenticated client ID.
+    if (!waitFor([&]()
+                 { return bob_api.getClientId() != 0; }) ||
+        !nexilis::server::RoomStorage::getRoomById(room_id))
+    {
+        std::cerr << "Bob was not admitted to the chat room" << std::endl;
+        return EXIT_FAILURE;
+    }
+    nexilis::server::RoomStorage::getRoomById(room_id)->addAdmittedUser(
+            bob_api.getClientId());
 
     bob.sendMessage(nexilis::client::Packet::Set::General::username(bob_api, "Bob"));
     bob.sendMessage(nexilis::client::Packet::Get::Info::rooms(bob_api));

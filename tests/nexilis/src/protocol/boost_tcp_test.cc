@@ -48,16 +48,10 @@ protected:
     {
         nexilis::Log::startConsoleDebugging();
 
-        // These integration tests intentionally use public demo rooms.
+        // These integration tests create rooms and join them as their creator.
         nexilis::server::RoomStorage::setClientCreationHandler(
                 [](const nexilis::server::User&, const nexilis::RoomData&)
                 { return true; });
-        nexilis::server::RoomStorage::setCreateHandler(
-                [](nexilis::server::Room& room)
-                {
-                    room.setAdmissionHandler([](const nexilis::server::User&)
-                                             { return true; });
-                });
 
         settings.setMode(nexilis::server::AuthenticationMode::password_protected);
         settings.setPassphrase("salasana");

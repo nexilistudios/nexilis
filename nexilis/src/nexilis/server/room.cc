@@ -43,6 +43,7 @@ Room::Room(Room&& other)
       m_availableTeams(std::move(other.m_availableTeams)),
       m_defaultHealth(other.m_defaultHealth),
       m_deathHandler(std::move(other.m_deathHandler)),
+      m_admittedUsers(std::move(other.m_admittedUsers)),
       m_admissionHandler(std::move(other.m_admissionHandler)),
       m_teamHandler(std::move(other.m_teamHandler)),
       m_actionHandler(std::move(other.m_actionHandler)),
@@ -92,6 +93,7 @@ Room& Room::operator=(Room&& other)
         m_availableTeams = std::move(other.m_availableTeams);
         m_defaultHealth = other.m_defaultHealth;
         m_deathHandler = std::move(other.m_deathHandler);
+        m_admittedUsers = std::move(other.m_admittedUsers);
         m_admissionHandler = std::move(other.m_admissionHandler);
         m_teamHandler = std::move(other.m_teamHandler);
         m_actionHandler = std::move(other.m_actionHandler);
@@ -155,6 +157,24 @@ bool Room::tryJoinRoom(uint64_t userId)
     return true;
 }
 
+void Room::addAdmittedUser(uint64_t userId)
+{
+    std::lock_guard lock(m_admissionMutex);
+    m_admittedUsers.insert(userId);
+}
+
+void Room::removeAdmittedUser(uint64_t userId)
+{
+    std::lock_guard lock(m_admissionMutex);
+    m_admittedUsers.erase(userId);
+}
+
+bool Room::isAdmittedUser(uint64_t userId) const
+{
+    std::lock_guard lock(m_admissionMutex);
+    return m_admittedUsers.count(userId) != 0;
+}
+
 void Room::setAdmissionHandler(AdmissionHandler handler)
 {
     std::lock_guard lock(m_admissionMutex);
@@ -164,17 +184,18 @@ void Room::setAdmissionHandler(AdmissionHandler handler)
 bool Room::allowsUser(const User& user) const
 {
     AdmissionHandler handler;
+    bool explicitlyAdmitted = false;
     {
         std::lock_guard lock(m_admissionMutex);
         handler = m_admissionHandler;
+        explicitlyAdmitted = m_admittedUsers.count(user.getId()) != 0;
     }
+    if (!explicitlyAdmitted && user.getId() != getCreatorId() && !contains(user.getId()))
+        return false;
+    if (!handler)
+        return true;
     try
     {
-        // Without an application policy the room stays private. The creator and
-        // users who already joined can still see and rejoin their own room;
-        // every other client must be admitted by an explicit handler.
-        if (!handler)
-            return user.getId() == getCreatorId() || contains(user.getId());
         return handler(user);
     }
     catch (...)

@@ -79,6 +79,10 @@ nexilis::ProtocolManager protocol_manager;
 nexilis::server::ServerConfig settings;
 settings.setMode(nexilis::server::AuthenticationMode::skip);
 settings.setTls(false); // This local example has no shared passphrase.
+// Client room creation is opt-in and stays server-controlled.
+nexilis::server::RoomStorage::setClientCreationHandler(
+        [](const nexilis::server::User&, const nexilis::RoomData&)
+        { return true; });
 auto server = protocol_manager.createProtocol<nexilis::server::nxboost::TCPServer>(settings);
 server.start();
 

@@ -44,7 +44,8 @@ public:
                     std::size_t maxRoomsPerCreator = std::numeric_limits<std::size_t>::max());
     /// Authorizes a client room creation request. Unset denies all client
     /// creation, so the application must opt in before serving such requests.
-    /// Install this and `Room::setAdmissionHandler` before serving room traffic.
+    /// Install this before serving client room traffic. Each room stays private
+    /// until the server admits users with `Room::addAdmittedUser`.
     using ClientCreationHandler = std::function<bool(const User&, const RoomData&)>;
     static void setClientCreationHandler(ClientCreationHandler handler);
     /// Returns false when no handler is installed or the handler rejects/throws.

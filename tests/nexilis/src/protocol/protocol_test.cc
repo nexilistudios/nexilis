@@ -86,17 +86,10 @@ protected:
     void SetUp() override
     {
         nexilis::Log::startConsoleDebugging();
-        // These integration tests intentionally use public demo rooms. Install
-        // the policies explicitly now that rooms are private by default.
+        // These integration tests create rooms and join them as their creator.
         nexilis::server::RoomStorage::setClientCreationHandler(
                 [](const nexilis::server::User&, const nexilis::RoomData&)
                 { return true; });
-        nexilis::server::RoomStorage::setCreateHandler(
-                [](nexilis::server::Room& room)
-                {
-                    room.setAdmissionHandler([](const nexilis::server::User&)
-                                             { return true; });
-                });
         defaultSetup();
     }
     void TearDown() override
@@ -325,12 +318,30 @@ protected:
         nexilis::server::RoomStorage::add(std::move(room));
         EXPECT_TRUE(nexilis::server::RoomStorage::contains(id));
         EXPECT_TRUE(nexilis::server::RoomStorage::getRoomById(id) != nullptr);
+        defaultRoomId = id;
 
         this->serverStart();
         this->createDefaultServerData();
         this->createClientAPI();
         this->createClient();
     }
+
+    void clientStart()
+    {
+        this->ProtocolTestType::clientStart();
+
+        // The default room is server-created. Admit the authenticated client
+        // before the test asks the server for room information.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (this->api->getClientId() == 0 && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        auto room = nexilis::server::RoomStorage::getRoomById(defaultRoomId);
+        if (room && this->api->getClientId() != 0)
+            room->addAdmittedUser(this->api->getClientId());
+    }
+
+    uint64_t defaultRoomId = 0;
 };
 
 using RoomBoostTCP2DTest = ProtocolRoomTest<BasicBoostTCPTest, nexilis::RoomData::Context::_2D>;

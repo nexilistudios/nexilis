@@ -75,9 +75,7 @@ protected:
 
         server::RoomStorage::add(server::Room(RoomData(SENDER_ID, "history_room", ROOM_ID)));
         server::RoomStorage::getRoomById(ROOM_ID)->setBroadcastHistoryEnabled(true);
-        server::RoomStorage::getRoomById(ROOM_ID)->setAdmissionHandler(
-                [](const server::User&)
-                { return true; });
+        server::RoomStorage::getRoomById(ROOM_ID)->addAdmittedUser(JOINER_ID);
         server::RoomStorage::getRoomById(ROOM_ID)->setBroadcastHandler(
                 [](uint64_t, const std::string&, bool)
                 { return true; });
@@ -384,6 +382,42 @@ TEST_F(RoomHistorySpecTest, RoomsArePrivateWithoutAdmissionHandler)
 
     auto visibleClients = server::ServerJson::getClientData(outsider.get());
     EXPECT_EQ(visibleClients.at("client_amount").as_uint64(), 1);
+}
+
+TEST_F(RoomHistorySpecTest, PermissiveHandlerDoesNotAdmitUnapprovedUser)
+{
+    constexpr uint64_t permissiveRoomId = ROOM_ID + 11;
+    server::RoomStorage::add(server::Room(RoomData(SENDER_ID, "permissive", permissiveRoomId)));
+    auto permissiveRoom = server::RoomStorage::getRoomById(permissiveRoomId);
+    ASSERT_NE(permissiveRoom, nullptr);
+    permissiveRoom->setAdmissionHandler([](const server::User&)
+                                        { return true; });
+
+    auto outsider = user(JOINER_ID);
+    EXPECT_FALSE(permissiveRoom->allowsUser(*outsider));
+    EXPECT_EQ(command.read(joinBytes(permissiveRoomId), *outsider, protocol, 8),
+              server::CommandResult::invalid_input);
+    EXPECT_FALSE(permissiveRoom->contains(JOINER_ID));
+
+    auto visibleRooms = server::ServerJson::getRoomData(outsider.get());
+    EXPECT_EQ(visibleRooms.at("room_amount").as_uint64(), 1);
+}
+
+TEST_F(RoomHistorySpecTest, ServerAdmittedUserCanJoin)
+{
+    ASSERT_TRUE(room()->isAdmittedUser(JOINER_ID));
+    ASSERT_EQ(command.read(joinBytes(), *user(JOINER_ID), protocol, 9),
+              server::CommandResult::success);
+    EXPECT_TRUE(room()->contains(JOINER_ID));
+}
+
+TEST_F(RoomHistorySpecTest, RemovingAdmissionRevokesFutureJoin)
+{
+    room()->removeAdmittedUser(JOINER_ID);
+    EXPECT_FALSE(room()->allowsUser(*user(JOINER_ID)));
+    EXPECT_EQ(command.read(joinBytes(), *user(JOINER_ID), protocol, 10),
+              server::CommandResult::invalid_input);
+    EXPECT_FALSE(room()->contains(JOINER_ID));
 }
 
 TEST_F(RoomHistorySpecTest, AdmissionPolicyHidesRoomAndRejectsJoin)

@@ -33,16 +33,10 @@ int main()
     config.setTlsIdentity(identity.certificatePem, identity.privateKeyPem);
     std::ofstream("tests/lua/build/server.pin") << identity.publicKeySha256;
 
-    // The Lua integration test creates a public room and joins it.
+    // The Lua integration test creates a room and joins it as its creator.
     nexilis::server::RoomStorage::setClientCreationHandler(
             [](const nexilis::server::User&, const nexilis::RoomData&)
             { return true; });
-    nexilis::server::RoomStorage::setCreateHandler(
-            [](nexilis::server::Room& room)
-            {
-                room.setAdmissionHandler([](const nexilis::server::User&)
-                                         { return true; });
-            });
 
     auto server = manager.createProtocol<nexilis::server::nxboost::TCPServer>(config);
     server.start();
