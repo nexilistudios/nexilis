@@ -46,7 +46,8 @@ public:
     /// Deleted copy assignment operator.
     ServerProtocol& operator=(const ServerProtocol&) = delete;
 
-    /// Get the settings for given server protocol.
+    /// Get the live settings for this server. The authentication mode is
+    /// latched at construction and cannot be changed while the server runs.
     ServerConfig& getSettings()
     {
         return m_command.getServerConfig();

@@ -31,6 +31,7 @@
 #include <nexilis/server/message/message.hh>
 #include <nexilis/server/message/message_handler.hh>
 #include <nexilis/server/server_config.hh>
+#include <nexilis/server/server_protocol.hh>
 #include <nexilis/server/user.hh>
 #include <nexilis/util.hh>
 
@@ -197,6 +198,27 @@ TEST(AuthConfig, IsPasswordMatches)
     EXPECT_FALSE(config.isPassword("sec"));
     EXPECT_FALSE(config.isPassword("secretpassword"));
     EXPECT_FALSE(config.isPassword("secrex"));
+}
+
+TEST(AuthConfig, LockedModeCannotBeChanged)
+{
+    AuthConfig config(AuthenticationMode::skip, "");
+    config.lockMode();
+    EXPECT_TRUE(config.isModeLocked());
+
+    config.setMode(AuthenticationMode::password_protected);
+    EXPECT_EQ(config.getMode(), AuthenticationMode::skip);
+}
+
+TEST(ServerAuthMode, LiveConfigIsLocked)
+{
+    server::ServerConfig config{AuthenticationMode::skip, ""};
+    server::ServerProtocol protocol(config);
+    EXPECT_TRUE(protocol.getSettings().isModeLocked());
+    EXPECT_EQ(protocol.getSettings().getMode(), AuthenticationMode::skip);
+
+    protocol.getSettings().setMode(AuthenticationMode::password_protected);
+    EXPECT_EQ(protocol.getSettings().getMode(), AuthenticationMode::skip);
 }
 
 TEST(ServerConfig, IsPassphraseMatches)

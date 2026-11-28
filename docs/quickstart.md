@@ -131,7 +131,8 @@ Things worth knowing before you go further:
   `api.setMessageEncryption(true)`. Read the
   [security notes](server_message.md#security-notes) before deploying outside a
   trusted environment.
-- **Authentication modes.** `AuthenticationMode::skip` accepts anyone;
+- **Authentication modes.** `AuthenticationMode::skip` accepts anyone. Its mode
+  is latched when the server starts and cannot change while it runs.
   `password_protected` requires `setPassphrase` and a
   `setAccountAuthenticator` callback on the server, plus `setPassword` and
   `setAccountCredentials` on each client. See `examples/messaging`.

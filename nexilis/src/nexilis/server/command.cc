@@ -63,6 +63,9 @@ Command::Command(const ServerConfig& settings)
       m_settings(settings),
       m_rootAuthState(std::make_shared<RootAuthState>())
 {
+    // The server uses this copy for every handshake and command. Freeze its
+    // mode so the running server cannot be switched between auth policies.
+    m_settings.lockMode();
 }
 
 Command::Command(Command&& other)

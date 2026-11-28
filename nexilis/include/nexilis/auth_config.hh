@@ -17,6 +17,7 @@
 #ifndef NEXILIS_AUTH_CONFIG_HH
 #define NEXILIS_AUTH_CONFIG_HH
 
+#include <nexilis/logger/log.hh>
 #include <nexilis/server/authentication_mode.hh>
 #include <nexilis/util.hh>
 
@@ -49,7 +50,23 @@ public:
 
     void setMode(AuthenticationMode mode)
     {
+        if (m_modeLocked)
+        {
+            Log::warning("Authentication mode is locked; refusing to change it after server startup");
+            return;
+        }
         m_mode = mode;
+    }
+
+    /// Freeze the authentication mode. A live server latches its copied
+    /// configuration so the mode cannot change while it is running.
+    void lockMode()
+    {
+        m_modeLocked = true;
+    }
+    bool isModeLocked() const
+    {
+        return m_modeLocked;
     }
 
     const std::string& getPassword() const
@@ -74,6 +91,7 @@ public:
 
 private:
     AuthenticationMode m_mode = AuthenticationMode::empty;
+    bool m_modeLocked = false;
     std::string m_password;
 };
 
