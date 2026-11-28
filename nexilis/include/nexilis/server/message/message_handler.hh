@@ -56,8 +56,9 @@ public:
 private:
     Message handlePayload(const nx_data& payload, std::shared_ptr<User> user, const std::string& address);
 
-    /// Recent skip-mode handshake IDs per source address. Independent clients
-    /// on one address have unrelated IDs, so these cannot use a sequence window.
+    /// Recent handshake IDs per source address for both skip-mode and
+    /// password-protected handshakes. Independent clients on one address have
+    /// unrelated IDs, so these cannot use a sequence window.
     struct HandshakeReplayWindow
     {
         struct Attempt
@@ -109,7 +110,7 @@ private:
     bool acceptRegistration(const std::string& address,
                             const std::function<bool()>& publish);
 
-    /// Check a handshake message ID against the per-address replay window.
+    /// Check and record a handshake ID in the per-address replay window.
     /// Returns false for a recently seen ID.
     bool acceptHandshakeMessageId(const std::string& address, uint64_t id);
 };

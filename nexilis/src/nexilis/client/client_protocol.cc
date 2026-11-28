@@ -213,10 +213,14 @@ void ClientProtocol::start(NXProtocol::Type type)
                 return;
             }
             nx_data message(8, 0); // Initial client ID.
-            message.insert(message.end(), {'N', 'X', 'A', 'C',
-                                           static_cast<uint8_t>(password.size()),
-                                           static_cast<uint8_t>(accountId.size()),
-                                           static_cast<uint8_t>(credential.size())});
+            message.insert(message.end(), {'N', 'X', 'A', 'C'});
+            // A fresh handshake ID prevents a captured NXAC frame from being
+            // replayed after the original session disconnects. It is random
+            // rather than monotonic because separate clients can share an IP.
+            _Packet::emplaceAll(message, Util::getRandomUint64());
+            message.emplace_back(static_cast<uint8_t>(password.size()));
+            message.emplace_back(static_cast<uint8_t>(accountId.size()));
+            message.emplace_back(static_cast<uint8_t>(credential.size()));
             message.insert(message.end(), password.begin(), password.end());
             message.insert(message.end(), accountId.begin(), accountId.end());
             message.insert(message.end(), credential.begin(), credential.end());

@@ -142,12 +142,12 @@ TEST(ClientHandshake, SendsAccountCredentialsInInitialBoostTcpFrame)
 
     ASSERT_EQ(protocol.sent.size(), 1u);
     const auto& frame = protocol.sent.front();
-    ASSERT_EQ(frame.size(), 15u + 6 + 5 + 11);
+    ASSERT_EQ(frame.size(), 23u + 6 + 5 + 11);
     EXPECT_TRUE(std::all_of(frame.begin(), frame.begin() + 8,
                             [](uint8_t byte)
                             { return byte == 0; }));
     EXPECT_EQ(std::string(frame.begin() + 8, frame.begin() + 12), "NXAC");
-    EXPECT_EQ(std::string(frame.begin() + 15, frame.end()), "secretalicealice-token");
+    EXPECT_EQ(std::string(frame.begin() + 23, frame.end()), "secretalicealice-token");
 }
 
 TEST(ClientHandshake, PasswordOnlyProtectedClientSendsNoHandshake)
@@ -574,13 +574,17 @@ protected:
 
     nx_data accountPayload(
             const std::string& password, const std::string& account,
-            const std::string& credential)
+            const std::string& credential, uint64_t handshakeId = 0)
     {
+        static std::atomic<uint64_t> nextHandshakeId{1};
+        const auto id = handshakeId == 0 ? nextHandshakeId.fetch_add(1) : handshakeId;
         nx_data payload(8, 0);
-        payload.insert(payload.end(), {'N', 'X', 'A', 'C',
-                                       static_cast<uint8_t>(password.size()),
-                                       static_cast<uint8_t>(account.size()),
-                                       static_cast<uint8_t>(credential.size())});
+        payload.insert(payload.end(), {'N', 'X', 'A', 'C'});
+        const auto idBytes = Util::convertToByteVector(id);
+        payload.insert(payload.end(), idBytes.begin(), idBytes.end());
+        payload.emplace_back(static_cast<uint8_t>(password.size()));
+        payload.emplace_back(static_cast<uint8_t>(account.size()));
+        payload.emplace_back(static_cast<uint8_t>(credential.size()));
         payload.insert(payload.end(), password.begin(), password.end());
         payload.insert(payload.end(), account.begin(), account.end());
         payload.insert(payload.end(), credential.begin(), credential.end());
@@ -624,6 +628,34 @@ TEST_F(MessageHandlerPasswordProtectedTest, AccountModeBindsIdentityAndLimitsSes
     auto next = sendAccount("secret", "alice", "alice-secret");
     ASSERT_NE(next, nullptr);
     EXPECT_EQ(next->getType(), server::BaseMessage::Type::auth_message);
+}
+
+TEST_F(MessageHandlerPasswordProtectedTest, RejectsReplayedAccountHandshake)
+{
+    int authCalls = 0;
+    config.setAccountAuthenticator([&](std::string_view account, std::string_view credential)
+                                   {
+                                       ++authCalls;
+                                       return !account.empty() && credential == std::string(account) + "-secret"; });
+
+    const auto frame = accountPayload("secret", "alice", "alice-secret", 4242);
+    auto first = handler.readMessage("replay-address", frame, &config);
+    ASSERT_NE(first, nullptr);
+    EXPECT_EQ(first->getType(), server::BaseMessage::Type::auth_message);
+    EXPECT_EQ(authCalls, 1);
+
+    EXPECT_EQ(handler.readMessage("replay-address", frame, &config), nullptr);
+    EXPECT_EQ(authCalls, 1);
+    ASSERT_EQ(server::ClientStorage::getClientsByIpAddress("replay-address").size(), 1u);
+
+    // A fresh nonce for the same account is still accepted once the old
+    // session is gone.
+    ASSERT_TRUE(server::ClientStorage::remove(
+            server::ClientStorage::getClientsByIpAddress("replay-address").front()->getId()));
+    auto second = handler.readMessage(
+            "replay-address", accountPayload("secret", "alice", "alice-secret", 4243), &config);
+    ASSERT_NE(second, nullptr);
+    EXPECT_EQ(second->getType(), server::BaseMessage::Type::auth_message);
 }
 
 TEST_F(MessageHandlerPasswordProtectedTest, AccountModeAlsoLimitsSessionsPerAddress)

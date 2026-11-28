@@ -327,22 +327,32 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                 }
 
                 // A distinct private credential identifies each stable account.
-                // The 8-byte zero ID and NXAC marker identify this first frame.
+                // The 8-byte zero ID, NXAC marker, and 8-byte handshake ID
+                // identify this first frame.
                 bool accepted = false;
-                if (payload.size() >= 15 &&
+                if (payload.size() >= 23 &&
                     std::all_of(payload.begin(), payload.begin() + 8,
                                 [](uint8_t byte)
                                 { return byte == 0; }) &&
                     std::equal(payload.begin() + 8, payload.begin() + 12, "NXAC"))
                 {
-                    const std::size_t passwordLength = payload[12];
-                    const std::size_t accountLength = payload[13];
-                    const std::size_t credentialLength = payload[14];
+                    const std::size_t passwordLength = payload[20];
+                    const std::size_t accountLength = payload[21];
+                    const std::size_t credentialLength = payload[22];
                     if (accountLength > 0 && credentialLength > 0 &&
-                        payload.size() == 15 + passwordLength + accountLength + credentialLength)
+                        payload.size() == 23 + passwordLength + accountLength + credentialLength)
                     {
-                        const auto passwordEnd = payload.begin() + 15 + passwordLength;
-                        const nx_data password(payload.begin() + 15, passwordEnd);
+                        // Claim the nonce before credential checks so a replay
+                        // cannot invoke the account authenticator again.
+                        nx_data handshakeIdBytes(payload.begin() + 12, payload.begin() + 20);
+                        if (!acceptHandshakeMessageId(address, Util::uint64FromFront(handshakeIdBytes)))
+                        {
+                            Log::warning(header(), "Rejected replayed password-protected handshake from ", address);
+                            return nullptr;
+                        }
+
+                        const auto passwordEnd = payload.begin() + 23 + passwordLength;
+                        const nx_data password(payload.begin() + 23, passwordEnd);
                         accountId.assign(passwordEnd, passwordEnd + accountLength);
                         const std::string credential(passwordEnd + accountLength, payload.end());
                         if (Util::constantTimeEquals(authentication->getPassphrase(), password))

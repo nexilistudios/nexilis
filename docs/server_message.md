@@ -23,17 +23,22 @@ store. A password-protected Boost TCP server without this callback refuses to
 start, and password-only handshakes are always rejected.
 The callback may run concurrently for separate connections and must be thread-safe.
 Set both fields on `ClientConfig::setAccountCredentials`. The initial TLS
-frame then contains eight zero bytes, `NXAC`, one-byte lengths for the shared
-password, account ID, and credential, followed by those three byte strings in
-that order. Each field is at most 255 bytes; the account ID and credential must
-be nonempty. The server calls the account authenticator only after the shared
+frame then contains eight zero bytes, `NXAC`, an eight-byte random handshake
+ID, one-byte lengths for the shared password, account ID, and credential,
+followed by those three byte strings in that order. Each field is at most 255
+bytes; the account ID and credential must be nonempty. The server records the
+handshake ID in a bounded per-address replay window before credential checks,
+so a captured frame cannot reauthenticate the same account after its original
+session ends. The server calls the account authenticator only after the shared
 password succeeds. It publishes the validated account ID as `User::getAccountId`
 and limits concurrent sessions for that ID to one by default; configure this
 with `ServerConfig::setMaxSessionsPerAccount`. Applications should use the
 stable account ID for bans, permissions, and account quotas, and can reject
 banned or revoked credentials in the authenticator. The numeric client ID and
 session tokens remain ephemeral. Clients without both account fields send no
-protected handshake. `skip` mode remains unauthenticated by design. The server
+protected handshake. The extra handshake ID changes the Boost TCP
+authentication frame, so clients and servers must both use versions that
+include it. `skip` mode remains unauthenticated by design. The server
 logs a warning when a skip-mode protocol is created and whenever it registers a
 new skip-mode client; use it only for local testing. A server latches the
 authentication mode when the protocol is created, so later `setMode` calls on
@@ -119,9 +124,10 @@ Clients issue signed request IDs in increasing order, starting at 1. The server 
 1024-ID window per session across all transports. It accepts a valid signed
 request once, including limited out-of-order delivery, and rejects duplicates
 and IDs outside the window. Skip-mode clients use a random ID for the initial
-handshake; the server remembers the most recent 1024 handshake IDs per source
-address and rejects duplicates. The password-protected `NXAC` handshake has no
-message ID in its current wire format.
+`getting/client_id` handshake, and password-protected clients include a random
+eight-byte ID in the `NXAC` frame. Both handshake IDs share the server's bounded
+per-address replay window; duplicates are rejected before any user is created.
+TLS protects the password-mode handshake ID from modification in transit.
 
 ## Command bytes (std::vector<uint8_t>)
 
