@@ -23,6 +23,7 @@
 #include <nexilis/server/message/message.hh>
 
 #include <chrono>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -54,6 +55,23 @@ public:
 
 private:
     Message handlePayload(const nx_data& payload, std::shared_ptr<User> user, const std::string& address);
+
+    /// Recent skip-mode handshake IDs per source address. Independent clients
+    /// on one address have unrelated IDs, so these cannot use a sequence window.
+    struct HandshakeReplayWindow
+    {
+        struct Attempt
+        {
+            std::deque<uint64_t> order;
+        };
+
+        std::mutex mutex;
+        std::unordered_map<std::string, Attempt> byAddress;
+        std::size_t evictions = 0;
+    };
+
+    std::shared_ptr<HandshakeReplayWindow> m_handshakeReplayWindow =
+            std::make_shared<HandshakeReplayWindow>();
 
     /// Failed passphrase attempts for the initial handshake, tracked per source
     /// address so a client cannot brute-force the shared passphrase. The state is
@@ -90,6 +108,10 @@ private:
 
     bool acceptRegistration(const std::string& address,
                             const std::function<bool()>& publish);
+
+    /// Check a handshake message ID against the per-address replay window.
+    /// Returns false for a recently seen ID.
+    bool acceptHandshakeMessageId(const std::string& address, uint64_t id);
 };
 
 } // namespace nexilis::server

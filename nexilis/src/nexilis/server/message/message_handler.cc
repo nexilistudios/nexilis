@@ -92,6 +92,32 @@ bool MessageHandler::acceptRegistration(const std::string& address,
     return true;
 }
 
+bool MessageHandler::acceptHandshakeMessageId(const std::string& address, uint64_t id)
+{
+    std::lock_guard lock(m_handshakeReplayWindow->mutex);
+    auto& window = m_handshakeReplayWindow->byAddress;
+
+    auto it = window.find(address);
+    if (it == window.end())
+    {
+        if (window.size() >= 4096)
+        {
+            window.erase(window.begin());
+            if (++m_handshakeReplayWindow->evictions % 256 == 1)
+                Log::warning(header(), "Handshake replay window saturated; evicted an entry");
+        }
+        it = window.emplace(address, HandshakeReplayWindow::Attempt{}).first;
+    }
+
+    auto& attempt = it->second;
+    if (std::find(attempt.order.begin(), attempt.order.end(), id) != attempt.order.end())
+        return false;
+    attempt.order.push_back(id);
+    if (attempt.order.size() > 1024)
+        attempt.order.pop_front();
+    return true;
+}
+
 // Payload handled by this class:
 // Client id 8 bytes
 // Message id 8 bytes
@@ -209,6 +235,16 @@ std::unique_ptr<BaseMessage> MessageHandler::readMessage(std::string address, co
                 payload[16] != static_cast<uint8_t>(CommandType::getting) ||
                 payload[17] != 0 || payload[18] != 0)
                 return nullptr;
+
+            // Reject replayed handshake frames: track the message ID in the
+            // per-address handshake replay window so a captured handshake
+            // cannot be used to create duplicate users.
+            nx_data handshakeIdBytes(payload.begin() + 8, payload.begin() + 16);
+            if (!acceptHandshakeMessageId(address, Util::uint64FromFront(handshakeIdBytes)))
+            {
+                Log::warning(header(), "Rejected replayed skip-mode handshake from ", address);
+                return nullptr;
+            }
 
             // Brand new client. Register it so its client id stays stable and
             // hand its id back through the same AuthMessage handshake used by

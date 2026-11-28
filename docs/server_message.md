@@ -111,10 +111,13 @@ The first 8 bytes of the payload identify the client. A value of 0 indicates an 
 ## Message ID (uint64_t)
 
 The unique identifier for the message (8 bytes), used for correlating responses.
-Clients issue IDs in increasing order, starting at 1. The server tracks a
+Clients issue signed request IDs in increasing order, starting at 1. The server tracks a
 1024-ID window per session across all transports. It accepts a valid signed
 request once, including limited out-of-order delivery, and rejects duplicates
-and IDs outside the window. The initial authentication exchange is exempt.
+and IDs outside the window. Skip-mode clients use a random ID for the initial
+handshake; the server remembers the most recent 1024 handshake IDs per source
+address and rejects duplicates. The password-protected `NXAC` handshake has no
+message ID in its current wire format.
 
 ## Command bytes (std::vector<uint8_t>)
 

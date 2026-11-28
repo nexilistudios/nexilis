@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+
 #include <nexilis/auth_config.hh>
 #include <nexilis/client/client_protocol.hh>
 #include <nexilis/command_type.hh>
@@ -738,9 +740,10 @@ protected:
     // the "getting" / "client_id" command bytes.
     std::unique_ptr<server::BaseMessage> sendHandshake(const std::string& address = "test_address")
     {
+        static std::atomic<uint64_t> nextMessageId{100};
         nx_data payload;
         auto clientIdBytes = Util::convertToByteVector(static_cast<uint64_t>(0));
-        auto messageIdBytes = Util::convertToByteVector(static_cast<uint64_t>(100));
+        auto messageIdBytes = Util::convertToByteVector(nextMessageId.fetch_add(1));
         payload.insert(payload.end(), clientIdBytes.begin(), clientIdBytes.end());
         payload.insert(payload.end(), messageIdBytes.begin(), messageIdBytes.end());
         payload.emplace_back(static_cast<uint8_t>(CommandType::getting));
@@ -769,6 +772,26 @@ TEST_F(MessageHandlerSkipTest, RegistrationIsLimitedPerAddress)
         ASSERT_NE(sendHandshake(), nullptr);
     EXPECT_EQ(sendHandshake(), nullptr);
     EXPECT_EQ(server::ClientStorage::getAllClients().size(), 20);
+}
+
+TEST_F(MessageHandlerSkipTest, RejectsReplayedHandshakeButAcceptsAnotherClientAtSameAddress)
+{
+    auto handshake = [](uint64_t messageId)
+    {
+        nx_data payload = Util::convertToByteVector(static_cast<uint64_t>(0));
+        auto idBytes = Util::convertToByteVector(messageId);
+        payload.insert(payload.end(), idBytes.begin(), idBytes.end());
+        payload.emplace_back(static_cast<uint8_t>(CommandType::getting));
+        payload.emplace_back(0);
+        payload.emplace_back(0);
+        return payload;
+    };
+
+    const auto first = handshake(1);
+    EXPECT_NE(handler.readMessage("shared-address", first, &config), nullptr);
+    EXPECT_EQ(handler.readMessage("shared-address", first, &config), nullptr);
+    EXPECT_NE(handler.readMessage("shared-address", handshake(2), &config), nullptr);
+    EXPECT_EQ(server::ClientStorage::getClientsByIpAddress("shared-address").size(), 2u);
 }
 
 TEST_F(MessageHandlerSkipTest, LiveSessionsAreLimitedPerAddressAndRecoverAfterRemoval)

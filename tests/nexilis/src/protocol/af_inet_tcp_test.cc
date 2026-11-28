@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+
 #include <nexilis/client/packet.hh>
 #include <nexilis/command_type.hh>
 #include <nexilis/logger/log.hh>
@@ -210,6 +212,7 @@ public:
 
     std::shared_ptr<nexilis::server::User> authenticate(uint16_t port)
     {
+        static std::atomic<uint64_t> nextMessageId{1};
         sockaddr_in address{};
         address.sin_family = AF_INET;
         address.sin_port = htons(port);
@@ -223,6 +226,8 @@ public:
         nexilis::nx_data frame(sizeof(size));
         std::memcpy(frame.data(), &size, sizeof(size));
         nexilis::nx_data handshake(19, 0);
+        auto messageIdBytes = nexilis::Util::convertToByteVector(nextMessageId.fetch_add(1));
+        std::memcpy(handshake.data() + 8, messageIdBytes.data(), 8);
         handshake[16] = static_cast<uint8_t>(nexilis::CommandType::getting);
         frame.insert(frame.end(), handshake.begin(), handshake.end());
         if (send(fd, frame.data(), frame.size(), MSG_NOSIGNAL) != static_cast<ssize_t>(frame.size()))

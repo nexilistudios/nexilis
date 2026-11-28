@@ -230,8 +230,10 @@ void ClientProtocol::start(NXProtocol::Type type)
             // replies with the assigned client id which initializes the client.
             Log::debug(header(), "Authenticating by skipping authentication");
             nx_data message;
-            _Packet::emplaceAll(message, static_cast<uint64_t>(0));          // client id
-            _Packet::emplaceAll(message, getClientAPI()->getNewMessageId()); // message id
+            _Packet::emplaceAll(message, static_cast<uint64_t>(0)); // client id
+            // A new client on the same source address must have a distinct
+            // handshake ID, even though its session message sequence starts at 1.
+            _Packet::emplaceAll(message, Util::getRandomUint64()); // handshake id
             message.emplace_back(static_cast<uint8_t>(CommandType::getting));
             message.emplace_back(0);
             message.emplace_back(0);
